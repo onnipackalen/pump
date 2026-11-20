@@ -191,6 +191,93 @@ const MIGRATIONS: readonly Migration[] = [
       BEGIN SELECT RAISE(ABORT, 'a stored answer never changes'); END;
     `,
   },
+  {
+    id: 2,
+    name: 'balloon actions, and guards on finished balloons and rounds',
+    sql: `
+      -- Everything that was done to a balloon, in order. With the seeds, this
+      -- is enough to play a finished round again and check every cent.
+      -- A pump stores the draw that decided it. A cash-out stores no draw.
+      -- outcome: survived, saved, popped or top for a pump; cashed (the
+      -- player pressed Cash Out) or abandoned (the 24-hour rule did).
+      CREATE TABLE balloon_actions (
+        round_id      TEXT NOT NULL,
+        balloon_index INTEGER NOT NULL,
+        seq           INTEGER NOT NULL CHECK (seq >= 0),
+        kind          TEXT NOT NULL CHECK (kind IN ('pump', 'cashOut')),
+        patch         INTEGER CHECK (patch IN (0, 1)),
+        draw_index    INTEGER CHECK (draw_index >= 0),
+        den           INTEGER CHECK (den >= 1),
+        num           INTEGER CHECK (num >= 0),
+        roll          INTEGER CHECK (roll >= 0),
+        outcome       TEXT NOT NULL,
+        created_at    TEXT NOT NULL,
+        PRIMARY KEY (round_id, balloon_index, seq),
+        FOREIGN KEY (round_id, balloon_index) REFERENCES balloons(round_id, balloon_index),
+        CHECK (
+          (kind = 'pump'
+            AND patch IS NOT NULL AND draw_index IS NOT NULL
+            AND den IS NOT NULL AND num IS NOT NULL AND roll IS NOT NULL
+            AND roll < den AND num <= den
+            AND outcome IN ('survived', 'saved', 'popped', 'top'))
+          OR
+          (kind = 'cashOut'
+            AND patch IS NULL AND draw_index IS NULL
+            AND den IS NULL AND num IS NULL AND roll IS NULL
+            AND outcome IN ('cashed', 'abandoned'))
+        )
+      ) STRICT, WITHOUT ROWID;
+
+      -- A draw index decides one pump, once. Two pumps sent with the same
+      -- expected draw index can never both be recorded.
+      CREATE UNIQUE INDEX one_pump_per_draw_index
+        ON balloon_actions(round_id, balloon_index, draw_index) WHERE draw_index IS NOT NULL;
+
+      CREATE TRIGGER balloon_actions_no_update BEFORE UPDATE ON balloon_actions
+      BEGIN SELECT RAISE(ABORT, 'balloon actions are append-only'); END;
+
+      CREATE TRIGGER balloon_actions_no_delete BEFORE DELETE ON balloon_actions
+      BEGIN SELECT RAISE(ABORT, 'balloon actions are append-only'); END;
+
+      -- Once a balloon has popped, cashed out or been refunded it is over.
+      -- Nothing can pump it, pay it or change it again.
+      CREATE TRIGGER balloons_finished_is_final BEFORE UPDATE ON balloons
+      WHEN OLD.status <> 'active'
+      BEGIN SELECT RAISE(ABORT, 'a finished balloon never changes'); END;
+
+      CREATE TRIGGER balloons_fixed BEFORE UPDATE ON balloons
+      WHEN NEW.round_id <> OLD.round_id OR NEW.balloon_index <> OLD.balloon_index
+        OR NEW.bet_cents <> OLD.bet_cents OR NEW.top_rung <> OLD.top_rung
+      BEGIN SELECT RAISE(ABORT, 'a balloon keeps its bet and its top rung'); END;
+
+      -- A balloon only moves forward: it uses up draws, climbs, and is
+      -- charged for Patches. None of those ever goes back down.
+      CREATE TRIGGER balloons_only_forward BEFORE UPDATE ON balloons
+      WHEN NEW.draw_index < OLD.draw_index OR NEW.rung < OLD.rung
+        OR NEW.patches_cents < OLD.patches_cents OR NEW.rung > NEW.top_rung
+      BEGIN SELECT RAISE(ABORT, 'a balloon only moves forward, and never past its top rung'); END;
+
+      CREATE TRIGGER balloons_no_delete BEFORE DELETE ON balloons
+      BEGIN SELECT RAISE(ABORT, 'balloons are never deleted'); END;
+
+      -- A finished round is closed for good, and a round keeps the seeds,
+      -- RTP and ladder it started with.
+      CREATE TRIGGER rounds_finished_is_final BEFORE UPDATE ON rounds
+      WHEN OLD.status = 'finished'
+      BEGIN SELECT RAISE(ABORT, 'a finished round never changes'); END;
+
+      CREATE TRIGGER rounds_fixed BEFORE UPDATE ON rounds
+      WHEN NEW.id <> OLD.id OR NEW.player_id <> OLD.player_id
+        OR NEW.difficulty_id <> OLD.difficulty_id OR NEW.rtp_bp <> OLD.rtp_bp
+        OR NEW.ladder <> OLD.ladder OR NEW.server_seed_id <> OLD.server_seed_id
+        OR NEW.client_seed <> OLD.client_seed OR NEW.nonce <> OLD.nonce
+        OR NEW.started_at <> OLD.started_at
+      BEGIN SELECT RAISE(ABORT, 'a round keeps the seeds, RTP and ladder it started with'); END;
+
+      CREATE TRIGGER rounds_no_delete BEFORE DELETE ON rounds
+      BEGIN SELECT RAISE(ABORT, 'rounds are never deleted'); END;
+    `,
+  },
 ];
 
 /** Brings the database up to date. Safe to call on every start. */
