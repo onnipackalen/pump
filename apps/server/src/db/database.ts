@@ -1,0 +1,27 @@
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
+/**
+ * The database handle. It is Node's built-in SQLite, which is synchronous:
+ * a query returns its rows directly, with no `await`. That is what lets a
+ * whole request run as one uninterrupted transaction.
+ */
+export type Db = DatabaseSync;
+
+/**
+ * Opens the database file, creating its folder if needed. Pass ':memory:' for
+ * a throwaway database in tests.
+ */
+export function openDatabase(path: string): Db {
+  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
+  const db = new DatabaseSync(path);
+  // WAL: readers never block the writer, and a crash cannot leave half a commit.
+  db.exec('PRAGMA journal_mode = WAL');
+  // FULL: a commit is on disk before we answer. This is money, so no shortcuts.
+  db.exec('PRAGMA synchronous = FULL');
+  // SQLite only enforces foreign keys when asked to.
+  db.exec('PRAGMA foreign_keys = ON');
+  db.exec('PRAGMA busy_timeout = 5000');
+  return db;
+}
