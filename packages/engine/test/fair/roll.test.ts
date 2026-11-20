@@ -194,6 +194,32 @@ describe('the acceptance rule at S = 2^32', () => {
     );
   });
 
+  // Not numbers at all: the message must name the type, not say "got 101".
+  it.each([
+    ['a numeric string', '101', 'a string'],
+    ['a bigint', 101n, 'a bigint (101n)'],
+    ['an array', [101], 'an array'],
+    ['null', null, 'null'],
+  ])('rejects a den that is %s and names its type', (_label, den, described) => {
+    const message = `Denominator must be a whole number from 1 to 4294967296, got ${described}.`;
+    const bad = den as unknown as number;
+    expect(() => acceptanceLimit(bad)).toThrow(message);
+    expect(() => rollFromWord(0, bad)).toThrow(message);
+    expect(() => sampleRoll(fakeSource([ALL_ZERO]).source, bad)).toThrow(message);
+  });
+
+  it('rejects a word or word space that is not a number, and names its type', () => {
+    expect(() => rollFromWord('7' as unknown as number, 101)).toThrow(
+      'Word must be a whole number from 0 to 4294967295, got a string.',
+    );
+    expect(() => rollFromWord(7n as unknown as number, 101)).toThrow(
+      'Word must be a whole number from 0 to 4294967295, got a bigint (7n).',
+    );
+    expect(() => acceptanceLimit(1, '256' as unknown as number)).toThrow(
+      'Word space must be a whole number from 1 to 2^32, got a string.',
+    );
+  });
+
   it.each([-1, 1.5, Number.NaN, S, S + 1])('rejects the word %d', (word) => {
     expect(() => rollFromWord(word, 101)).toThrow(/^Word must be a whole number from 0 to/);
   });

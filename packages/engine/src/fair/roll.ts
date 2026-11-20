@@ -33,6 +33,7 @@
  * numbers hold every whole number up to 2^53 exactly, and +, -, * and % on
  * them are exact while results stay that small.
  */
+import { describeValue } from './describe';
 
 /** Values a 32-bit unsigned word can take: 2^32 = 4,294,967,296. */
 export const WORD_SPACE = 2 ** 32;
@@ -92,18 +93,26 @@ export function readWords(block: Uint8Array): number[] {
   return words;
 }
 
-/** Throws unless `space` is a whole number from 1 to 2^32. */
+/**
+ * Throws unless `space` is a whole number from 1 to 2^32.
+ *
+ * This and the checks below also reject a value that is not a number at all,
+ * such as a string or a bigint; describeValue names its type in the error, so
+ * "101" and 101n do not show up as "got 101".
+ */
 function assertSpace(space: number): void {
   if (!Number.isSafeInteger(space) || space < 1 || space > WORD_SPACE) {
-    throw new Error(`Word space must be a whole number from 1 to 2^32, got ${String(space)}.`);
+    throw new Error(
+      `Word space must be a whole number from 1 to 2^32, got ${describeValue(space)}.`,
+    );
   }
 }
 
-/** Throws unless `den` is a whole number from 1 to `space`. */
+/** Throws unless `den` is a whole number from 1 to `space` (already checked). */
 function assertDenominator(den: number, space: number): void {
   if (!Number.isSafeInteger(den) || den < 1 || den > space) {
     throw new Error(
-      `Denominator must be a whole number from 1 to ${String(space)}, got ${String(den)}.`,
+      `Denominator must be a whole number from 1 to ${String(space)}, got ${describeValue(den)}.`,
     );
   }
 }
@@ -135,7 +144,7 @@ export function rollFromWord(
   const limit = acceptanceLimit(den, space);
   if (!Number.isSafeInteger(word) || word < 0 || word >= space) {
     throw new Error(
-      `Word must be a whole number from 0 to ${String(space - 1)}, got ${String(word)}.`,
+      `Word must be a whole number from 0 to ${String(space - 1)}, got ${describeValue(word)}.`,
     );
   }
   return word < limit ? word % den : undefined;
