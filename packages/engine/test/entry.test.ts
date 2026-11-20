@@ -12,4 +12,32 @@ describe('@pump/engine package', () => {
     const fair = await import('@pump/engine/fair');
     expect(typeof fair).toBe('object');
   });
+
+  it('exports exactly the fair public API', async () => {
+    const fair = await import('@pump/engine/fair');
+    expect(Object.keys(fair).sort()).toEqual(
+      [
+        'BLOCK_BYTES',
+        'MAX_BLOCKS',
+        'WORDS_PER_BLOCK',
+        'WORD_SPACE',
+        'acceptanceLimit',
+        'asciiBytes',
+        'assertClientSeed',
+        'assertServerSeed',
+        'bytesToHex',
+        'drawMessage',
+        'drawRoll',
+        'drawerFor',
+        'hashServerSeed',
+        'hmacSha256',
+        'isClientSeed',
+        'isServerSeed',
+        'readWords',
+        'rollFromWord',
+        'sampleRoll',
+        'verifyServerSeedHash',
+      ].sort(),
+    );
+  });
 });
