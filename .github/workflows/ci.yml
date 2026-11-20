@@ -24,3 +24,14 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Build the web app
+        run: npm run build
+
+      # The exact RTP check: every rung, every Patch, every legal bet.
+      - name: RTP proof
+        run: npm run rtp
+
+      # Starts a real server, fires overlapping requests, then reconciles the ledger.
+      - name: Hammer
+        run: npm run hammer
