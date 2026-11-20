@@ -31,8 +31,8 @@ All of these run from the repo root.
 | `npm test`          | Runs every test with Vitest                               |
 | `npm run lint`      | ESLint; `any` is an error                                 |
 | `npm run typecheck` | Strict TypeScript over every package                      |
-| `npm run rtp`       | Exact RTP calculation (stub for now, fails on purpose)    |
-| `npm run sim`       | Simulator, 10M rounds per difficulty (stub for now)       |
+| `npm run rtp`       | Exact RTP check: every rung, every Patch, every legal bet |
+| `npm run sim`       | Simulator, 10M rounds per difficulty through the engine   |
 | `npm run hammer`    | Fires overlapping requests at a running server (stub)     |
 
 ## Layout
