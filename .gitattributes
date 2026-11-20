@@ -1,3 +1,7 @@
+# Text files always use LF line endings, on every operating system. One test
+# compares a stored file byte for byte, and Windows' CRLF would fail it.
+* text=auto eol=lf
+
 # Several sessions append to the worklog on separate branches. A union merge
 # keeps every side's lines instead of raising a conflict.
 docs/worklog.md merge=union
