@@ -76,6 +76,17 @@ describe('surviveChance and popChance', () => {
     expect(() => multiplierAt(ladderOf('easy'), 0)).toThrow(RangeError);
   });
 
+  it('refuses a chance whose denominator would not fit one 32-bit roll', () => {
+    // 2^32 + 1 shares no factor with 150, so the fraction cannot be reduced.
+    expect(() => surviveChance(9700, [150, 4_294_967_297], 2)).toThrow(RangeError);
+    // Exactly 2^32 is refused too; one below it is the largest allowed.
+    expect(() => surviveChance(9700, [101, 4_294_967_296], 2)).toThrow(RangeError);
+    expect(surviveChance(9700, [101, 4_294_967_295], 2)).toEqual({
+      num: 101,
+      den: 4_294_967_295,
+    });
+  });
+
   describe.each(DIFFICULTIES)('$id', ({ ladder }) => {
     it.each(RTPS)('every cash-out point returns exactly the RTP at %i', (rtpBp) => {
       // Chance to reach rung k = product of the pump chances. Times m_k it must be R.
@@ -195,6 +206,12 @@ describe('patchPriceCents', () => {
     // value an ordinary number can hold. The exact price is 211,683.947...
     const ladder = [200, 500, 1500, 6000, 30_000, 200_001, 2_000_001, 30_000_000];
     expect(patchPriceCents(9700, ladder, 11, 8)).toBe(211_684);
+    // And one that sits a hair above a whole cent: the exact price is
+    // 691,159,282,954.0000243, so it rounds up to ...955. Ordinary numbers lose
+    // the fraction and give ...954, one cent too cheap.
+    expect(patchPriceCents(9700, [1_000_000_007, 20_000_000_011], 70_571, 2)).toBe(
+      691_159_282_955,
+    );
   });
 
   describe.each(DIFFICULTIES)('$id', ({ ladder }) => {
@@ -344,6 +361,50 @@ describe('boot checks', () => {
     ]);
     expect(ladderProblems(97.5, [150, 300], LIMITS)).toEqual([
       'RTP must be a whole number of basis points',
+    ]);
+  });
+
+  it('check every difficulty, not only the first', () => {
+    const flat = { id: 'flat', label: 'Flat', ladder: [150, 300, 600] };
+    const config = { ...GAME_CONFIG, rtpBp: 9700, difficulties: [...DIFFICULTIES, flat] };
+    expect(configProblems(config)).toEqual(['flat: pump 3 is not riskier than pump 2']);
+    expect(() => assertValidConfig(config)).toThrow(/flat: pump 3/);
+  });
+
+  it('check the last pump, a two-rung ladder, and a pump only as risky as the one before', () => {
+    const notRising = 'pump 2 is not riskier than pump 1 at this RTP';
+    // Pop chances 1/2, 4/7, then 1/2 again: only the last pump is wrong.
+    expect(ladderProblems(9700, [150, 300, 700, 1400], LIMITS)).toEqual([
+      'pump 4 is not riskier than pump 3',
+    ]);
+    // Pump 1 pops 35.3%, pump 2 only 6.25%.
+    expect(ladderProblems(9700, [150, 160], LIMITS)).toEqual([notRising]);
+    // On the ladder [RTP / 10, RTP] both pumps pop exactly 90%. Level is not rising.
+    for (const rtpBp of [9400, 9700, 9900]) {
+      expect(ladderProblems(rtpBp, [rtpBp / 10, rtpBp], LIMITS)).toEqual([notRising]);
+    }
+  });
+
+  it('refuse a pump chance that needs more than one 32-bit roll', () => {
+    // Limits roomy enough that the payout cap does not refuse these ladders first.
+    const roomy = {
+      minBetCents: 10,
+      maxBetCents: 10,
+      maxPayoutCents: 1_000_000_000_000,
+      maxBalloons: 3,
+    };
+    expect(ladderProblems(9700, [4_294_967_297], roomy)).toEqual([
+      'the chance of pump 1 needs a denominator of 2^32 or more',
+    ]);
+    expect(ladderProblems(9700, [150, 4_294_967_297], roomy)).toEqual([
+      'the chance of pump 2 needs a denominator of 2^32 or more',
+    ]);
+  });
+
+  it('allow a top prize worth exactly the cap at the smallest bet, and nothing above', () => {
+    expect(ladderProblems(9700, [150, 300, 100_000_000], LIMITS)).toEqual([]);
+    expect(ladderProblems(9700, [150, 300, 100_000_001], LIMITS)).toEqual([
+      'the top prize is above the payout cap even at the smallest bet',
     ]);
   });
 

@@ -51,13 +51,24 @@ function balloonOf(round: Round, index = 0): Balloon {
   return balloon;
 }
 
+/**
+ * Freezes a round and its balloons. The engine promises to return a new round
+ * and never change the one it was given; on a frozen round, any change made in
+ * place throws. Every helper below freezes the round it passes in.
+ */
+function frozen(round: Round): Round {
+  for (const balloon of round.balloons) Object.freeze(balloon);
+  Object.freeze(round.balloons);
+  return Object.freeze(round);
+}
+
 function start(difficultyId: string, bets: readonly number[], config = CONFIG): Round {
-  return startRound(config, difficultyId, bets, RICH).round;
+  return frozen(startRound(config, difficultyId, bets, RICH).round);
 }
 
 function pumpOnce(round: Round, patch: boolean, draw: PumpDraw, balanceCents = RICH, index = 0) {
   return pump(
-    round,
+    frozen(round),
     {
       balloonIndex: index,
       expectedDrawIndex: balloonOf(round, index).drawIndex,
@@ -78,7 +89,7 @@ function climb(round: Round, times: number, index = 0): Round {
 }
 
 function cashOutNow(round: Round, index = 0) {
-  return cashOut(round, {
+  return cashOut(frozen(round), {
     balloonIndex: index,
     expectedDrawIndex: balloonOf(round, index).drawIndex,
   });
@@ -251,6 +262,19 @@ describe('Patch + pump', () => {
   it('does not look at the balance when no Patch is bought', () => {
     expect(pumpOnce(atRungOne(10_000), false, alwaysSurvive, 0).outcome).toBe('survived');
   });
+
+  // A Patch price is divided by the RTP, so it moves when the RTP does. The
+  // check, the charge and the quote must all use the round's own RTP.
+  it.each([
+    [9400, 968],
+    [9700, 939],
+    [9900, 920],
+  ])('is priced, checked and quoted at the round’s own RTP (%i: %i cents)', (rtpBp, price) => {
+    const round = climb(start('easy', [10_000], at(rtpBp)), 1);
+    expect(refusal(() => pumpOnce(round, true, noDraw, price - 1))).toBe('insufficient_funds');
+    expect(pumpOnce(round, true, alwaysSurvive, price).patchChargedCents).toBe(price);
+    expect(quoteBalloon(round, 0).next?.patchPriceCents).toBe(price);
+  });
 });
 
 describe('the top rung', () => {
@@ -275,6 +299,10 @@ describe('the top rung', () => {
     expect(result.outcome).toBe('top');
     expect(result.payoutCents).toBe(4_749_952);
     expect(balloonOf(result.round)).toMatchObject({ status: 'cashed', rung: 6, drawIndex: 6 });
+    // The Patch bought for the pump that reached the top is charged and recorded
+    // like any other: 999.99 x 20 x 27.5 / 47.5 / 0.97 = $11,936.94.
+    expect(result.patchChargedCents).toBe(1_193_694);
+    expect(balloonOf(result.round).patchesCents).toBe(1_193_694);
   });
 
   it('pays nothing when the last pump pops', () => {
@@ -322,7 +350,7 @@ describe('settleAbandoned', () => {
     round = pumpOnce(round, false, alwaysPop, RICH, 2).round; // balloon 2 pops
     const manual = cashOutNow(round, 0);
 
-    const result = settleAbandoned(round);
+    const result = settleAbandoned(frozen(round));
     expect(result.settled).toEqual([
       { balloonIndex: 0, kind: 'cashed', cents: 1517 },
       { balloonIndex: 1, kind: 'refunded', cents: 500 },
@@ -334,6 +362,17 @@ describe('settleAbandoned', () => {
     expect(balloonOf(result.round, 2)).toBe(balloonOf(round, 2));
     expect(isRoundOver(result.round)).toBe(true);
     expect(settleAbandoned(result.round).settled).toEqual([]);
+  });
+
+  it('returns a new round and leaves the one it was given untouched', () => {
+    const round = climb(start('easy', [1234, 500]), 3, 0);
+    const before = JSON.stringify(round);
+    const result = settleAbandoned(frozen(round));
+    expect(JSON.stringify(round)).toBe(before);
+    expect(result.round).not.toBe(round);
+    expect(result.round.balloons).not.toBe(round.balloons);
+    expect(balloonOf(round, 0).status).toBe('active');
+    expect(balloonOf(round, 1).status).toBe('active');
   });
 });
 
@@ -359,8 +398,27 @@ describe('quoteBalloon', () => {
     expect(quoteBalloon(climb(start('easy', [1234]), 3), 0).cashOutCents).toBe(1517);
   });
 
-  it('quotes exactly what a cash-out pays and a Patch costs', () => {
-    const round = climb(start('hard', [777]), 4);
+  it.each([
+    [9400, { num: 7, den: 101 }],
+    [9700, { num: 4, den: 101 }],
+    [9900, { num: 2, den: 101 }],
+  ] as const)('shows the first pump’s pop chance at the round’s own RTP (%i)', (rtpBp, pop) => {
+    expect(quoteBalloon(start('easy', [10_000], at(rtpBp)), 0).next?.popChance).toEqual(pop);
+  });
+
+  it('quotes the balloon it is asked about', () => {
+    const round = climb(start('easy', [10_000, 200]), 2, 1);
+    expect(quoteBalloon(round, 1)).toEqual({
+      multiplierHundredths: 111,
+      cashOutCents: 222,
+      next: { popChance: { num: 4, den: 41 }, multiplierHundredths: 123, patchPriceCents: 23 },
+    });
+    expect(quoteBalloon(round, 0).multiplierHundredths).toBeNull();
+    expect(refusal(() => quoteBalloon(round, 2))).toBe('invalid_request');
+  });
+
+  it.each(RTPS)('quotes exactly what a cash-out pays and a Patch costs at %i', (rtpBp) => {
+    const round = climb(start('hard', [777], at(rtpBp)), 4);
     const quote = quoteBalloon(round, 0);
     expect(cashOutNow(round).payoutCents).toBe(quote.cashOutCents);
     expect(pumpOnce(round, true, alwaysSurvive).patchChargedCents).toBe(
