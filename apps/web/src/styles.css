@@ -737,23 +737,10 @@ input {
   display: none;
 }
 
-/* Round: the picked balloon's numbers, then its three buttons. */
-
-/* Which balloon the buttons act on, with Pump all beside it. */
-.round-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.round-target {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-weight: 600;
-}
+/*
+ * Round: the picked balloon's numbers, then its buttons. The big one is
+ * Pump with one balloon and Pump all with two or three.
+ */
 
 .readouts {
   display: flex;

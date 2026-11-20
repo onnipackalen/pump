@@ -4,7 +4,10 @@ import { formatCents, formatChance, formatMultiplier } from '../money';
 interface RoundControlsProps {
   /** The balloon the buttons act on, or null if the picked one is over. */
   readonly balloon: BalloonView | null;
-  /** The round has more than one balloon, so the panel names the picked one. */
+  /**
+   * The round has more than one balloon. Each has its own Pump button under
+   * it, so the big button here pumps them all.
+   */
   readonly multi: boolean;
   /** A request for this balloon is on its way. */
   readonly pending: boolean;
@@ -31,10 +34,13 @@ function riskStep({ num, den }: Fraction): 1 | 2 | 3 | 4 {
 
 /**
  * The control panel during a round: the next pump's numbers for the picked
- * balloon, and its three buttons. One set of buttons for the whole round,
- * so they stay large and in the same place however many balloons there are.
- * Each balloon also has its own Pump button under it (BalloonCard), and a
- * round with more than one balloon has Pump all here.
+ * balloon, its Cash out and Patch + Pump, and one big button. One set of
+ * buttons for the whole round, so they stay large and in the same place
+ * however many balloons there are. The picked balloon is marked on the
+ * stage (a soft beam and a bar), not named here.
+ *
+ * Each balloon has its own Pump button under it (BalloonCard). So with one
+ * balloon the big button is Pump, and with two or three it is Pump all.
  */
 export function RoundControls({
   balloon,
@@ -53,31 +59,11 @@ export function RoundControls({
 
   return (
     <section className="round" aria-label="Round controls">
-      {multi && (
-        <div className="round-head">
-          <p className="round-target" aria-live="polite">
-            {balloon ? (
-              <>
-                <span className="dot" data-slot={balloon.index + 1} aria-hidden="true" />
-                Balloon {balloon.index + 1}
-              </>
-            ) : (
-              <span className="muted">Pick a balloon</span>
-            )}
-          </p>
-          <button
-            type="button"
-            className="btn btn-small btn-outline"
-            disabled={pumpableCount === 0}
-            onClick={onPumpAll}
-            title="Pump every balloon still in play (A)"
-          >
-            Pump all
-          </button>
-        </div>
-      )}
-
-      <dl className="readouts">
+      {/* No name on screen; a screen reader still hears which balloon these are. */}
+      <dl
+        className="readouts"
+        aria-label={balloon ? `Balloon ${balloon.index + 1}` : 'No balloon picked'}
+      >
         <div>
           <dt title="The chance that the next pump pops this balloon">Pop chance</dt>
           <dd data-risk={next ? riskStep(next.popChance) : undefined}>
@@ -119,15 +105,27 @@ export function RoundControls({
           <span>Patch + Pump</span>
           <strong>{patchPrice === null ? '—' : formatCents(patchPrice)}</strong>
         </button>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={off}
-          onClick={onPump}
-          title="Pump (Space)"
-        >
-          Pump
-        </button>
+        {multi ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={pumpableCount === 0}
+            onClick={onPumpAll}
+            title="Pump every balloon still in play (A)"
+          >
+            Pump all
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={off}
+            onClick={onPump}
+            title="Pump (Space)"
+          >
+            Pump
+          </button>
+        )}
       </div>
     </section>
   );
