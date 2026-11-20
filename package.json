@@ -13,7 +13,9 @@
   "scripts": {
     "test": "vitest run",
     "lint": "eslint . --max-warnings 0",
-    "typecheck": "tsc -p . && npm run typecheck --workspaces --if-present"
+    "typecheck": "tsc -p . && npm run typecheck --workspaces --if-present",
+    "rtp": "npm run rtp --workspace @pump/engine",
+    "sim": "npm run sim --workspace @pump/engine"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

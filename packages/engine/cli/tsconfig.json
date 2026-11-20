@@ -1,0 +1,8 @@
+{
+  // Command-line tools (npm run rtp, npm run sim). These may use Node.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["."]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@pump/engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fair": "./src/fair/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p . && tsc -p cli && tsc -p test",
+    "rtp": "tsx cli/rtp.ts",
+    "sim": "tsx cli/sim.ts"
+  }
+}

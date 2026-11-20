@@ -1,0 +1,6 @@
+{
+  // src/ is the pure part of the engine. It gets no Node types and no DOM
+  // lib, so console, process, fetch, timers and crypto do not even compile.
+  "extends": "../../tsconfig.base.json",
+  "include": ["src"]
+}

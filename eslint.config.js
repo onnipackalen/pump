@@ -22,4 +22,36 @@ export default defineConfig(
       '@typescript-eslint/no-explicit-any': 'error',
     },
   },
+
+  {
+    // The engine's src/ must stay pure: same input, same output.
+    // Its tsconfig already hides Node and the DOM; these close the gaps that
+    // plain JavaScript leaves open.
+    files: ['packages/engine/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['node:*'],
+              message: 'Engine src must not do I/O. Node built-ins belong in cli/ or the server.',
+            },
+          ],
+        },
+      ],
+      'no-restricted-globals': [
+        'error',
+        { name: 'Date', message: 'Engine src has no clock. Pass time in if you need it.' },
+      ],
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'Math',
+          property: 'random',
+          message: 'Engine src takes randomness as input. Never call Math.random.',
+        },
+      ],
+    },
+  },
 );
