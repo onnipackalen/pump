@@ -54,38 +54,48 @@ export const LIMITS: Limits = {
  * The four ladders. Adding a fifth difficulty means adding one entry here;
  * the engine needs no change.
  *
+ * These numbers are meant to be tuned. Change them here and nowhere else,
+ * then run `npm run rtp`: it checks the new ladders exactly and prints every
+ * rung, chance and worst case. No test pins a number from these ladders.
+ *
  * How they were chosen:
- * - Easy is long with small steps: 24 pumps to reach 25x.
- * - Expert is short and steep: 10 pumps to reach 5,000x.
+ * - Easy is long with small steps. Expert is short and steep.
+ * - Every ladder has rungs on round numbers a player can aim for, such as 2x,
+ *   5x, 10x and 100x.
+ * - Medium, Hard and Expert each have a rung at exactly 100x, so the largest
+ *   bet can win exactly the payout cap.
  * - On every ladder each step is a little riskier than the one before, so the
- *   chance of a pop rises with every pump. That holds for any RTP from 92% up.
+ *   chance of a pop rises with every pump. The game refuses to start if that
+ *   does not hold at the configured RTP.
  */
 export const DIFFICULTIES: readonly Difficulty[] = [
   {
     id: 'easy',
     label: 'Easy',
     ladder: [
-      101, 111, 123, 137, 153, 171, 192, 216, 244, 277, 316, 362, 416, 480, 555, 645, 752, 881,
-      1040, 1230, 1460, 1740, 2080, 2500,
+      101, 109, 118, 128, 139, 151, 165, 181, 200, 222, 247, 275, 307, 345, 389, 440, 500, 571,
+      655, 753, 867, 1000, 1155, 1340, 1560, 1820, 2130, 2500, 2950, 3500, 4175, 5000,
     ],
   },
   {
     id: 'medium',
     label: 'Medium',
     ladder: [
-      106, 125, 148, 178, 218, 271, 342, 440, 575, 765, 1040, 1435, 2020, 2900, 4250, 6350, 9700,
-      15000,
+      104, 117, 132, 150, 172, 200, 235, 279, 335, 407, 500, 621, 781, 1000, 1310, 1770, 2500,
+      3725, 5900, 10000,
     ],
   },
   {
     id: 'hard',
     label: 'Hard',
-    ladder: [120, 163, 228, 330, 490, 755, 1210, 2000, 3450, 6200, 11600, 22800, 47000, 100000],
+    ladder: [
+      120, 154, 200, 264, 357, 500, 730, 1115, 1785, 3005, 5330, 10000, 20000, 43000, 100000,
+    ],
   },
   {
     id: 'expert',
     label: 'Expert',
-    ladder: [150, 255, 465, 920, 2000, 4750, 12500, 37500, 125000, 500000],
+    ladder: [160, 277, 500, 946, 1900, 4130, 10000, 28200, 100000, 500000],
   },
 ];
 
