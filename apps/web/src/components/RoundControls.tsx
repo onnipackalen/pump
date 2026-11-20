@@ -1,4 +1,5 @@
-import type { BalloonView, Fraction } from '../api/contract';
+import type { BalloonView } from '../api/contract';
+import { riskStep } from '../game/risk';
 import { formatCents, formatChance, formatMultiplier } from '../money';
 
 interface RoundControlsProps {
@@ -18,18 +19,6 @@ interface RoundControlsProps {
   readonly pumpableCount: number;
   /** Pumps every balloon still in play, each as its own pump. */
   readonly onPumpAll: () => void;
-}
-
-/**
- * Which of the four risk colours a pop chance gets: under 25%, under 40%,
- * under 60%, and above. The same steps on every difficulty. It reads the
- * chance the player is shown, in whole numbers, never a draw.
- */
-function riskStep({ num, den }: Fraction): 1 | 2 | 3 | 4 {
-  if (num * 100 < den * 25) return 1;
-  if (num * 100 < den * 40) return 2;
-  if (num * 100 < den * 60) return 3;
-  return 4;
 }
 
 /**

@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import type { BalloonView } from '../api/contract';
 import { Balloon, balloonScale, type BalloonBeat } from '../balloon/Balloon';
 import type { Beat } from '../game/useGame';
+import { riskStep } from '../game/risk';
 import { multiplierAt } from '../game/rules';
 import type { WinTier } from '../game/winTier';
 import { formatCents, formatMultiplier } from '../money';
@@ -58,6 +59,36 @@ export function balloonBeat(balloon: BalloonView, beat: Beat): BalloonBeat | und
   if (balloon.status === 'popped') return 'popped';
   if (balloon.status === 'cashed') return 'cashed';
   return undefined;
+}
+
+/**
+ * How much the balloon strains, 0 to 3. It comes only from the published
+ * chance that its next pump pops, never from a draw: the same four steps
+ * that colour the pop chance in the panel.
+ */
+export function balloonStrain(balloon: BalloonView): number | undefined {
+  const next = balloon.next;
+  if (balloon.status !== 'active' || !next) return undefined;
+  return riskStep(next.popChance) - 1;
+}
+
+/**
+ * The Patch sticker for a pump bought with a Patch: it goes on with the
+ * press, then tears off if it stopped a pop (the pump would have popped
+ * the balloon) or peels off if the pump survived anyway.
+ */
+export function balloonPatch(beat: Beat, patched: boolean): 'on' | 'spent' | 'torn' | undefined {
+  if (!patched) return undefined;
+  switch (beat) {
+    case 'press':
+      return 'on';
+    case 'saved':
+      return 'torn';
+    case 'survived':
+      return 'spent';
+    default:
+      return undefined;
+  }
 }
 
 /** The big line under a balloon: its multiplier, or how it ended. */
@@ -195,7 +226,10 @@ export function BalloonCard({
           slot={slot}
           scale={balloonScale(balloon.multiplierHundredths, topMultiplier)}
           beat={balloonBeat(balloon, beat)}
+          strain={balloonStrain(balloon)}
+          patch={balloonPatch(beat, patched)}
           win={win}
+          top={balloon.rung === balloon.topRung}
           value={
             balloon.multiplierHundredths === null ? '' : formatMultiplier(balloon.multiplierHundredths)
           }
