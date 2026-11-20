@@ -473,11 +473,13 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           revealed: [result.revealed, ...s.revealed],
           notice: { tone: 'info', text: 'New server seed. The old one is revealed below.' },
         }));
+        // Rounds on the old seed can be verified now.
+        void refreshHistory();
       } catch (error) {
         handleFailure(error, null);
       }
     })();
-  }, [client, handleFailure]);
+  }, [client, handleFailure, refreshHistory]);
 
   const dismissNotice = useCallback(() => {
     setState((s) => ({ ...s, notice: null }));
