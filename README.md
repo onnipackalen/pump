@@ -3,10 +3,11 @@
 A provably fair balloon game: a pure game engine, a server with a SQLite
 wallet around it, and a React frontend.
 
-Work in progress. Built so far: the engine (game rules and math), the provably
-fair draw code, the game screen (playing against an in-browser demo), and the
-wallet half of the server. Not built yet: the server's game routes, the exact
-RTP proof, the simulator, the hammer test, the verify page and the live site.
+Work in progress. Built so far: the engine (game rules and math), the exact RTP
+check and the simulator, the provably fair draw code, the server (wallet, game
+routes and the hammer test), and the game screen, which still plays against an
+in-browser demo. Not done yet: connecting the screen to the server, the verify
+page and the live site.
 
 ## Run it locally
 
@@ -33,7 +34,7 @@ All of these run from the repo root.
 | `npm run typecheck` | Strict TypeScript over every package                      |
 | `npm run rtp`       | Exact RTP check: every rung, every Patch, every legal bet |
 | `npm run sim`       | Simulator, 10M rounds per difficulty through the engine   |
-| `npm run hammer`    | Fires overlapping requests at a running server (stub)     |
+| `npm run hammer`    | 4,000 overlapping requests at a server, then reconciles   |
 
 ## Layout
 
@@ -55,16 +56,54 @@ apps/web          React + Vite frontend
   src/
 ```
 
-## The server so far
+## The API
+
+All JSON. The exact shapes are TypeScript types in `packages/contract`.
 
 | Address | What it does |
 | --- | --- |
-| `GET /api/session` | Wallet, seeds and the round in progress. A first visit creates the player with $10,000 and sets the cookie. |
+| `GET /api/session` | Wallet, seeds and the round in progress, so a page refresh restores it. A first visit creates the player with $10,000 and sets the cookie. |
 | `GET /api/history?limit=10` | The player's latest finished rounds. |
+| `POST /api/rounds` | Starts a round: `{ difficultyId, betsCents }`, one bet per balloon. Charges the bets. |
+| `POST /api/rounds/:id/pump` | One pump: `{ balloonIndex, expectedDrawIndex, patch }`. With `patch: true` the Patch is bought and the pump made in one step. The answer says `survived`, `saved`, `popped` or `top`. |
+| `POST /api/rounds/:id/cash-out` | Cashes out one balloon: `{ balloonIndex, expectedDrawIndex }`. |
+| `GET /api/rounds/:id/verify` | A finished round with its revealed server seed and every action, to recompute it. 409 until the seed has been rotated. |
 | `PUT /api/fairness/client-seed` | Sets the client seed. Never resets the nonce. |
-| `POST /api/fairness/rotate` | Retires the server seed, reveals it, and starts a new one. |
+| `POST /api/fairness/rotate` | Retires the server seed, reveals it, and starts a new one. Refused during a round. |
 
-Starting a round, pump, Patch and cash-out come next.
+Every request that changes something needs an `Idempotency-Key` header. Errors
+always look like `{ "error": { "code", "message" } }`:
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `invalid_request` | 400 | The request is malformed or breaks a rule (422 if a key is reused for a different request). |
+| `insufficient_funds` | 402 | The balance does not cover the bets or the Patch. Nothing was charged. |
+| `not_found` | 404 | No such round for this player. |
+| `conflict` | 409 | The balloon is not in the state the request expected. The body carries the round as it is now. |
+| `round_active` | 409 | A round is in progress: no second round, no seed changes. |
+| `seed_not_revealed` | 409 | The round cannot be checked until its server seed is rotated. |
+
+**Pump and Cash Out at the same moment.** Each pump and cash-out says which
+state of the balloon it was made from (`expectedDrawIndex`, the number of draws
+made on it so far). The first to arrive changes that number, so the second is
+refused with a 409 and the current round. The rung would not be enough: a pump
+saved by a Patch uses a draw without moving the rung.
+
+**Abandoned rounds.** A round nobody has touched for 24 hours is settled for
+the player: balloons that were pumped cash out at their current multiplier,
+and bets that were never pumped are handed back. Cashing out at any rung
+returns the RTP, and a bet with no draw on it is simply void, so neither
+changes the RTP. The rule is applied before the player's next request and by a
+sweep every ten minutes. We chose this over forfeiting the bets (unfair to a
+player whose connection dropped) and over leaving rounds open for ever (the
+player could never start another).
+
+**The hammer.** `npm run hammer` starts its own server as a separate process
+on a fresh database, has 20 players play at once, and makes every step a burst
+sent at the same moment: the same key twice, Pump with Cash Out, two Pumps, two
+Cash Outs, four round starts. Then it opens the database and reconciles it. To
+aim it at a server you already run:
+`npm run hammer -- --url=http://localhost:3000 --db=data/pump.db`.
 
 How the wallet is kept safe:
 
@@ -90,8 +129,12 @@ How the wallet is kept safe:
   rotates. The code that reads seeds cannot read an active one.
 - **Players are anonymous.** A random token in an httpOnly cookie; the
   database stores only its hash.
-
-Errors always look like `{ "error": { "code", "message" } }`.
+- **Finished means finished.** Triggers stop a popped, cashed or refunded
+  balloon, and a finished round, from ever changing again. A draw index can be
+  recorded for one pump only.
+- **The books can be checked from the data alone.** `reconcile()` compares
+  every balance with its ledger, walks the ledger chain, and checks that every
+  balloon was charged and paid exactly what its round says.
 
 Conventions:
 
