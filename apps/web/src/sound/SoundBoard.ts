@@ -46,17 +46,27 @@ export class SoundBoard {
     }
   }
 
-  /** Call from a click or key handler, so the browser lets sound start. */
+  /**
+   * Call from a tap, click or key handler, so the browser lets sound start.
+   * On phones a tap only counts when the finger lifts (touchend, pointerup,
+   * click), so the app calls this from those too. Safe to call often.
+   */
   unlock(): void {
     const context = this.ensureContext();
-    if (context?.state === 'suspended') void context.resume();
+    this.wake(context);
   }
 
   /** Plays a cue. `height` (0 to 1) is how far up its ladder the balloon is. */
   play(cue: Cue, height = 0): void {
     if (this.mutedNow) return;
     const context = this.ensureContext();
-    if (!context || context.state !== 'running' || !this.master) return;
+    if (!context || !this.master) return;
+    if (context.state !== 'running') {
+      // Suspended by the browser, or interrupted by a phone call on iOS.
+      // Ask to resume and skip this one cue; a late sound would be confusing.
+      this.wake(context);
+      return;
+    }
     const now = context.currentTime + 0.005;
     const out = this.master;
     // Pitch climbs one and a half octaves from the bottom of the ladder to the top.
@@ -90,6 +100,14 @@ export class SoundBoard {
         this.chime(out, now, [880, 1108.7, 1318.5, 1760]);
         break;
     }
+  }
+
+  /** Resumes a context that isn't running. A refusal is expected outside a gesture. */
+  private wake(context: AudioContext | null): void {
+    if (!context || context.state === 'running' || context.state === 'closed') return;
+    context.resume().catch(() => {
+      // Not allowed yet: the next tap or key press tries again.
+    });
   }
 
   private ensureContext(): AudioContext | null {

@@ -60,9 +60,10 @@ h2:first-child {
 
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 4px 0 14px;
 }
 
@@ -598,4 +599,26 @@ th {
 .btn-stop {
   border-color: var(--risk);
   color: var(--risk);
+}
+
+/* While auto-play runs: progress and Stop beside the balloons. */
+
+.auto-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--risk);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font-variant-numeric: tabular-nums;
+}
+
+.auto-progress:empty {
+  display: none;
 }

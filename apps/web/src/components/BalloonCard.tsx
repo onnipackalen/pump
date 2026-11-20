@@ -79,7 +79,8 @@ export function BalloonCard({
         />
       </div>
 
-      <p className="balloon-status" aria-live="polite">
+      {/* Quiet during auto-play, which changes it several times a second. */}
+      <p className="balloon-status" aria-live={locked ? 'off' : 'polite'}>
         {statusText(balloon, beat)}
       </p>
 
