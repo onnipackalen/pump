@@ -22,3 +22,6 @@ coverage/
 
 # OS and editor noise
 .DS_Store
+
+# Local AI tooling: worktrees and launch settings that hold paths on this machine
+.claude/
