@@ -400,3 +400,38 @@ Turned out wrong, and how it was caught:
 Not done yet: the web app still plays against its demo client; the verify
 page; serving the web build from the server; deployment. Findings from the
 independent review of this code are still to come.
+
+## 2026-11-20: ladder redesign, proposed and not applied
+
+- The user asked whether the ladders were tuned for enjoyment. They were
+  not. Easy popped 9% to 17% of the time on every pump after the first, no
+  ladder had round rungs such as 2x, 5x or 10x, and a $1,000 bet stopped at
+  $62,000 on Hard and $47,500 on Expert.
+- Four ladder sets were designed from different angles, each re-checked
+  from scratch with exact whole-number math, scored by three judges, and
+  merged into one proposal (multipliers in hundredths):
+
+  ```
+  easy    101 109 118 128 139 151 165 181 200 222 247 275 307 345 389 440
+          500 571 655 753 867 1000 1155 1340 1560 1820 2130 2500 2950 3500
+          4175 5000
+  medium  104 117 132 150 172 200 235 279 335 407 500 621 781 1000 1310
+          1770 2500 3725 5900 10000
+  hard    120 154 200 264 357 500 730 1115 1785 3005 5330 10000 20000 43000
+          100000
+  expert  160 277 500 946 1900 4130 10000 28200 100000 500000
+  ```
+
+- Against today's ladders at 97%: a balloon that is never cashed out lasts
+  9.9 pumps on Easy, not 8.2, and 6.3 on Medium, not 4.8. Easy has rungs at
+  2x, 5x, 10x, 25x and 50x. A $1,000 bet reaches exactly $100,000 on
+  Medium, Hard and Expert.
+- What it costs: the pop chance keeps rising only from an RTP of 93.59%
+  (today 91.91%), so 94% still starts but 93% would not. Medium's top prize
+  drops from 150x to 100x and Easy's rises from 25x to 50x. Some in-between
+  bets end further below the cap than today.
+- Status: it passes the exact ladder checks at 9400, 9700 and 9900. The
+  last step, three reviewers trying to break it, was stopped when every
+  chat was asked to wrap up. `config.ts` is unchanged. Applying it is a
+  config-only change (the four arrays, plus the tests and spec values that
+  quote the old ones) and needs the user's yes.
