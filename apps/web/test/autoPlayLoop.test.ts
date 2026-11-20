@@ -193,3 +193,31 @@ function alwaysSurvives(): GameActions {
     },
   };
 }
+
+describe('DemoClient keeps the server rules under same-moment requests', () => {
+  it('never lets two starts at the same moment both charge', async () => {
+    const { client, balance } = await newDemo();
+    const request = { difficultyId: 'easy', betsCents: [100] };
+    const results = await Promise.allSettled([
+      client.startRound(request, crypto.randomUUID()),
+      client.startRound(request, crypto.randomUUID()),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect((await client.getSession()).wallet.balanceCents).toBe(balance - 100);
+  });
+
+  it('never reveals a seed with the wrong hash when two rotations race', async () => {
+    const { client } = await newDemo();
+    const results = await Promise.allSettled([
+      client.rotateSeed(crypto.randomUUID()),
+      client.rotateSeed(crypto.randomUUID()),
+    ]);
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue;
+      const { serverSeed, serverSeedHash } = result.value.revealed;
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serverSeed));
+      const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+      expect(hex).toBe(serverSeedHash);
+    }
+  });
+});

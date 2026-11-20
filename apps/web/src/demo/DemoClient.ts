@@ -137,6 +137,11 @@ export class DemoClient implements GameClient {
   startRound(request: StartRoundRequest, key: string): Promise<ActionResult> {
     return this.once(key, async () => {
       await sleep(this.latencyMs);
+      // Every await comes before the checks, so checking, charging and
+      // creating the round happen in one go, like the server's transaction.
+      const seedBefore = this.serverSeed;
+      const serverSeedHash = await this.serverSeedHash;
+      this.assertSeedUnchanged(seedBefore);
       if (this.round) fail({ code: 'round_active', message: 'Finish the current round first.' });
       const clientSeed = this.clientSeed;
       if (clientSeed === null) {
@@ -166,7 +171,7 @@ export class DemoClient implements GameClient {
         id: crypto.randomUUID(),
         difficulty,
         rtpBp: this.config.rtpBp,
-        serverSeedHash: await this.serverSeedHash,
+        serverSeedHash,
         clientSeed,
         nonce: this.nonce,
         startedAt: new Date().toISOString(),
@@ -260,10 +265,13 @@ export class DemoClient implements GameClient {
   rotateSeed(key: string): Promise<RotateResult> {
     return this.once(key, async () => {
       await sleep(this.latencyMs);
+      const seedBefore = this.serverSeed;
+      const serverSeedHash = await this.serverSeedHash;
+      this.assertSeedUnchanged(seedBefore);
       if (this.round) fail({ code: 'round_active', message: 'Seeds are locked during a round.' });
       const revealed = {
         serverSeed: this.serverSeed,
-        serverSeedHash: await this.serverSeedHash,
+        serverSeedHash,
         roundsPlayed: this.nonce,
       };
       this.serverSeed = randomHex(32);
@@ -271,6 +279,17 @@ export class DemoClient implements GameClient {
       this.nonce = 0;
       return { revealed, fairness: await this.fairness() };
     });
+  }
+
+  /**
+   * Fails if the server seed was rotated while an action waited for its
+   * hash. Call it right before the action changes anything, with no await
+   * in between, so a seed and its hash always match.
+   */
+  private assertSeedUnchanged(seedBefore: string): void {
+    if (this.serverSeed !== seedBefore) {
+      fail({ code: 'conflict', message: 'The server seed just changed. Please try again.' });
+    }
   }
 
   /** Runs an action once per key; a repeat gets the first answer back. */
