@@ -56,8 +56,11 @@ export class SoundBoard {
     this.wake(context);
   }
 
-  /** Plays a cue. `height` (0 to 1) is how far up its ladder the balloon is. */
-  play(cue: Cue, height = 0): void {
+  /**
+   * Plays a cue. `height` (0 to 1) is how far up its ladder the balloon is;
+   * `delay` is in seconds.
+   */
+  play(cue: Cue, height = 0, delay = 0): void {
     if (this.mutedNow) return;
     const context = this.ensureContext();
     if (!context || !this.master) return;
@@ -67,7 +70,7 @@ export class SoundBoard {
       this.wake(context);
       return;
     }
-    const now = context.currentTime + 0.005;
+    const now = context.currentTime + 0.005 + Math.max(0, delay);
     const out = this.master;
     // Pitch climbs one and a half octaves from the bottom of the ladder to the top.
     const climb = 2 ** (1.5 * Math.min(1, Math.max(0, height)));
@@ -96,7 +99,7 @@ export class SoundBoard {
       case 'win':
         this.chime(out, now, [880, 1318.5]);
         break;
-      case 'top-win':
+      case 'big-win':
         this.chime(out, now, [880, 1108.7, 1318.5, 1760]);
         break;
     }

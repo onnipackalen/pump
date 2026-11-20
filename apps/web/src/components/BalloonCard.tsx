@@ -3,12 +3,20 @@ import type { BalloonView } from '../api/contract';
 import { Balloon, balloonScale, type BalloonBeat } from '../balloon/Balloon';
 import type { Beat } from '../game/useGame';
 import { multiplierAt } from '../game/rules';
+import type { WinTier } from '../game/winTier';
 import { formatCents, formatMultiplier } from '../money';
 
 interface BalloonCardProps {
   readonly balloon: BalloonView;
   readonly ladder: readonly number[];
   readonly beat: Beat;
+  /** Its last pump was bought with a Patch. */
+  readonly patched: boolean;
+  /**
+   * The round's win tier once it is over, or null. A round is one game, so
+   * win effects are judged over all its balloons (UK RTS 14F).
+   */
+  readonly roundWin: WinTier | null;
   /** Auto-play is running: don't read every change out loud. */
   readonly quiet: boolean;
   /** The round has more than one balloon and the player may pick this one. */
@@ -54,8 +62,12 @@ function mainText(balloon: BalloonView): string {
   return formatMultiplier(balloon.multiplierHundredths);
 }
 
-/** The small line under it: the money that goes with the big line. */
-function subText(balloon: BalloonView, beat: Beat): string {
+/**
+ * The small line under it: the money that goes with the big line. A Patch is
+ * shown as plain words, not an animation: "Patch on" while that pump is on
+ * its way, then what it did.
+ */
+function subText(balloon: BalloonView, beat: Beat, patched: boolean): string {
   switch (balloon.status) {
     case 'popped':
       return formatCents(-(balloon.betCents + balloon.patchesCents));
@@ -64,7 +76,9 @@ function subText(balloon: BalloonView, beat: Beat): string {
     case 'cashed':
       return `Paid ${formatCents(balloon.payoutCents)}`;
     case 'active':
-      if (beat === 'saved') return 'Patch saved it';
+      if (beat === 'press' && patched) return 'Patch on';
+      if (beat === 'saved') return 'Patch used';
+      if (beat === 'survived' && patched) return 'Patch not needed';
       if (balloon.cashOutCents === null) return `Bet ${formatCents(balloon.betCents)}`;
       return formatCents(balloon.cashOutCents);
   }
@@ -104,6 +118,8 @@ export function BalloonCard({
   balloon,
   ladder,
   beat,
+  patched,
+  roundWin,
   quiet,
   selectable,
   selected,
@@ -111,9 +127,9 @@ export function BalloonCard({
 }: BalloonCardProps) {
   const slot = balloon.index + 1;
   const topMultiplier = multiplierAt(ladder, balloon.topRung);
-  const spent = balloon.betCents + balloon.patchesCents;
-  // Only a real gain is celebrated: never a payout at or under what was spent.
-  const won = balloon.status === 'cashed' && balloon.payoutCents > spent;
+  // Only a real gain is celebrated, judged over the whole round: never a
+  // round that paid back no more than its bets and Patches.
+  const win = balloon.status === 'cashed' && roundWin !== null ? roundWin : undefined;
 
   return (
     <article
@@ -130,9 +146,18 @@ export function BalloonCard({
           slot={slot}
           scale={balloonScale(balloon.multiplierHundredths, topMultiplier)}
           beat={balloonBeat(balloon, beat)}
+          win={win}
+          value={
+            balloon.multiplierHundredths === null ? '' : formatMultiplier(balloon.multiplierHundredths)
+          }
         />
       </div>
-      <SlotLabel main={mainText(balloon)} sub={subText(balloon, beat)} won={won} live={!quiet} />
+      <SlotLabel
+        main={mainText(balloon)}
+        sub={subText(balloon, beat, patched)}
+        won={win !== undefined}
+        live={!quiet}
+      />
     </article>
   );
 }

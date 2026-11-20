@@ -70,6 +70,10 @@ export function RoundControls({
           <dd>{next ? formatMultiplier(next.multiplierHundredths) : '—'}</dd>
         </div>
         <div>
+          <dt title="This balloon's bet plus any Patches bought for it">Total bet</dt>
+          <dd>{balloon ? formatCents(balloon.betCents + balloon.patchesCents) : '—'}</dd>
+        </div>
+        <div>
           <dt title="Pumps survived, out of the most this bet can reach">Rung</dt>
           <dd>{balloon ? `${balloon.rung}/${balloon.topRung}` : '—'}</dd>
         </div>

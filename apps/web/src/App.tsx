@@ -15,9 +15,12 @@ import type { AutoPlaySettings } from './game/autoPlay';
 import { checkBets, type BetSetup } from './game/betSetup';
 import { useAutoPlay } from './game/useAutoPlay';
 import { useGame, type GameEvent } from './game/useGame';
+import { useSessionClock } from './game/useSessionClock';
+import { roundWinTier } from './game/winTier';
 import { market } from './market';
-import { formatCents, formatSignedCents, parseDollarsToCents } from './money';
-import { cueFor } from './sound/cues';
+import { formatCents, formatElapsed, formatSignedCents, parseDollarsToCents } from './money';
+import { useMotionSetting } from './motion';
+import { cuesFor } from './sound/cues';
 import { soundBoard } from './sound/SoundBoard';
 
 const config = GAME_CONFIG;
@@ -25,10 +28,9 @@ const config = GAME_CONFIG;
 /** How the next round is played: by hand, or by auto-play. */
 type Mode = 'manual' | 'auto';
 
-/** Every game event goes to the speaker; cueFor decides what it sounds like. */
+/** Every game event goes to the speaker; cuesFor decides what it sounds like. */
 function playEventSound(event: GameEvent): void {
-  const toPlay = cueFor(event);
-  if (toPlay) soundBoard.play(toPlay.cue, toPlay.height);
+  for (const toPlay of cuesFor(event)) soundBoard.play(toPlay.cue, toPlay.height, toPlay.delay);
 }
 
 /**
@@ -85,9 +87,18 @@ export function App() {
   const [chosen, setChosen] = useState(0);
   const [muted, setMuted] = useState(soundBoard.muted);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const motion = useMotionSetting();
+  const sessionMs = useSessionClock(state.session?.startedAt ?? null);
 
   const round = state.round;
   const roundActive = round?.status === 'active';
+  const roundWin = round ? roundWinTier(round) : null;
+  // Net position since this visit began (UK RTS 2E). No deposits happen
+  // here, so it is the change in balance.
+  const sessionNet =
+    state.wallet && state.session
+      ? state.wallet.balanceCents - state.session.startBalanceCents
+      : null;
   const autoRunning = autoPlay.status.running;
   const balance = state.wallet?.balanceCents ?? 0;
   const check = checkBets(setup, config.limits, balance);
@@ -207,20 +218,44 @@ export function App() {
           )}
         </div>
         <div className="topbar-right">
-          {/* Quiet during auto-play, which changes it every round; the
-              auto-play status line reports the net instead. */}
-          <strong
-            className="balance"
-            aria-label="Balance"
-            title="Balance"
-            aria-live={autoRunning ? 'off' : 'polite'}
-          >
-            {state.wallet ? formatCents(state.wallet.balanceCents) : '—'}
-          </strong>
+          <div className="hud">
+            {/* Quiet during auto-play, which changes it every round; the
+                auto-play status line reports the net instead. */}
+            <strong
+              className="balance"
+              aria-label="Balance"
+              title="Balance"
+              aria-live={autoRunning ? 'off' : 'polite'}
+            >
+              {state.wallet ? formatCents(state.wallet.balanceCents) : '—'}
+            </strong>
+            {/* Session net and time played, always on screen (UK RTS 2E, 13C). */}
+            <span className="session" aria-label="This session">
+              <span title="Net result this session">
+                {sessionNet === null ? '—' : formatSignedCents(sessionNet)}
+              </span>
+              {' · '}
+              <span title="Time played this session">{formatElapsed(sessionMs)}</span>
+            </span>
+          </div>
           <SettingsMenu open={settingsOpen} onOpenChange={setSettingsOpen}>
             <div className="card settings-row">
               <span>Sound</span>
               <SoundToggle muted={muted} onToggle={toggleSound} />
+            </div>
+            <div className="card settings-row">
+              <span id="animations-label">Animations</span>
+              {/* Off removes movement but keeps the same timing, so results
+                  never show sooner (UK RTS 14E). */}
+              <button
+                type="button"
+                className="btn btn-small"
+                aria-labelledby="animations-label"
+                aria-pressed={motion.animationsOn}
+                onClick={motion.toggle}
+              >
+                {motion.animationsOn ? 'On' : 'Off'}
+              </button>
             </div>
             {state.fairness && (
               <FairnessPanel
@@ -262,6 +297,8 @@ export function App() {
                       balloon={balloon}
                       ladder={round.ladder}
                       beat={state.beats[balloon.index] ?? 'idle'}
+                      patched={state.patched[balloon.index] ?? false}
+                      roundWin={roundWin}
                       quiet={autoRunning}
                       selectable={
                         panel === 'round' &&

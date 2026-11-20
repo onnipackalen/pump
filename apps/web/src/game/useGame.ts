@@ -37,8 +37,15 @@ export interface GameState {
   readonly beats: readonly Beat[];
   /** Per balloon index: a request for this balloon is in flight. */
   readonly pending: readonly boolean[];
+  /** Per balloon index: its last pump was bought with a Patch. */
+  readonly patched: readonly boolean[];
   readonly starting: boolean;
   readonly notice: Notice | null;
+  /**
+   * When this visit's session started and the balance then, for the
+   * session net result and time played (UK RTS 2E and 13C).
+   */
+  readonly session: { readonly startedAt: number; readonly startBalanceCents: number } | null;
 }
 
 /**
@@ -48,8 +55,13 @@ export interface GameState {
 export type GameEvent =
   | { readonly kind: 'round-start'; readonly round: RoundView }
   | { readonly kind: 'press'; readonly balloon: BalloonView }
-  | { readonly kind: 'pump'; readonly outcome: PumpOutcome; readonly balloon: BalloonView }
-  | { readonly kind: 'cash-out'; readonly balloon: BalloonView };
+  | {
+      readonly kind: 'pump';
+      readonly outcome: PumpOutcome;
+      readonly balloon: BalloonView;
+      readonly round: RoundView;
+    }
+  | { readonly kind: 'cash-out'; readonly balloon: BalloonView; readonly round: RoundView };
 
 export type GameListener = (event: GameEvent) => void;
 
@@ -104,8 +116,10 @@ const initialState: GameState = {
   revealed: [],
   beats: [],
   pending: [],
+  patched: [],
   starting: false,
   notice: null,
+  session: null,
 };
 
 function sleep(ms: number): Promise<void> {
@@ -187,11 +201,13 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           ...s,
           phase: 'ready',
           wallet: session.wallet,
+          session: { startedAt: Date.now(), startBalanceCents: session.wallet.balanceCents },
           fairness,
           round,
           history,
           beats: round ? round.balloons.map(() => 'idle') : [],
           pending: round ? round.balloons.map(() => false) : [],
+          patched: round ? round.balloons.map(() => false) : [],
         }));
       } catch (error) {
         if (cancelled) return;
@@ -238,6 +254,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           fairness: session.fairness,
           round,
           beats: sameRound ? s.beats : (round?.balloons.map(() => 'idle' as const) ?? []),
+          patched: sameRound ? s.patched : (round?.balloons.map(() => false) ?? []),
           pending: round?.balloons.map((b) => inFlight.current.has(String(b.index))) ?? [],
         };
       });
@@ -297,6 +314,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           wallet: result.wallet,
           beats: result.round.balloons.map(() => 'idle'),
           pending: result.round.balloons.map(() => false),
+          patched: result.round.balloons.map(() => false),
         }));
         emit({ kind: 'round-start', round: result.round });
         return result;
@@ -325,6 +343,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         notice: null,
         beats: replaceAt(s.beats, balloonIndex, 'press'),
         pending: replaceAt(s.pending, balloonIndex, true),
+        patched: replaceAt(s.patched, balloonIndex, patch),
       }));
       emit({ kind: 'press', balloon });
       try {
@@ -341,7 +360,9 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         }));
         apply(result);
         const after = result.round.balloons[balloonIndex];
-        if (after) emit({ kind: 'pump', outcome: result.outcome, balloon: after });
+        if (after) {
+          emit({ kind: 'pump', outcome: result.outcome, balloon: after, round: result.round });
+        }
         return result;
       } catch (error) {
         handleFailure(error, balloonIndex);
@@ -378,7 +399,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         }));
         apply(result);
         const after = result.round.balloons[balloonIndex];
-        if (after) emit({ kind: 'cash-out', balloon: after });
+        if (after) emit({ kind: 'cash-out', balloon: after, round: result.round });
         return result;
       } catch (error) {
         handleFailure(error, balloonIndex);
