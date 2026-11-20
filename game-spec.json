@@ -69,7 +69,7 @@
     "ladder[0] > 100 and strictly increasing",
     "pop chance rises from pump 1 to pump 2: rtpBp * ladder[1] > 100 * ladder[0]^2 (integers)",
     "pop chance rises on every later pump: ladder[k-1] * ladder[k+1] > ladder[k]^2 for every interior k (integers)",
-    "refuse to boot if rtpBp >= 100 * ladder[0], or if either rising test fails at the configured RTP",
+    "refuse to boot if rtpBp >= 10000 (an RTP of 100% or more; 9999 is the highest that runs), if rtpBp >= 100 * ladder[0], or if either rising test fails at the configured RTP",
     "ladder[last] * minCents <= maxPayoutCents * 100, so the top prize is payable at some bet",
     "every reduced pump denominator is below 2^32"
   ],
