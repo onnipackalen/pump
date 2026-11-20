@@ -75,3 +75,55 @@ Turned out wrong, and how it was caught:
 Not done yet: the real HTTP client (needs the server), swapping
 `placeholderMath.ts` for the engine, auto-play, sound, the verify page, the
 pop and cash-out graphics, and a session time and net result display.
+
+## 2026-11-20: provably fair draws
+
+Built:
+
+- `CLAUDE.md` now locks the formats that change every roll. The HMAC key
+  and the shown hash both use the server seed's 64-character text. Words
+  are read big-endian. Fractions are reduced first. Each round keeps its
+  own RTP and ladder. The browser makes the first client seed. HMAC comes
+  from @noble/hashes. (7e79187)
+- `docs/fairness.md`: the recipe for players, with a worked example and a
+  worked round that includes a Patch save.
+- `packages/engine/src/fair`, in four commits: seed and message rules
+  (877a347), HMAC and SHA-256 from @noble/hashes 2.4.0, cross-checked
+  against Node's crypto and RFC 4231 (5da1e0f), bytes to an exactly uniform
+  roll (45bee52), and the draw function plus a single-use drawer for the
+  engine (a3abd19).
+- An independent Python reference written only from the docs, and
+  `vectors.json` with 393 draws, including 9 that need block 1 or 2
+  (355d713). A test checks that the TypeScript code matches it on every
+  vector (7e2091d). They agreed the first time.
+- Proof that the roll is uniform: the same acceptance function, run over
+  every word for every den in 8-bit and 12-bit word spaces, gives each roll
+  exactly the same number of times.
+- Mutation check: 18 deliberate bugs (byte order, `<=` limit, block
+  starting at 1, wrong separator, hex-decoded key, and so on). The existing
+  tests caught every one.
+
+Turned out wrong, and how it was caught:
+
+- The verify recipe didn't say that pump k means the rung the balloon
+  climbs to, not the number of presses. After a Patch save, a player
+  counting presses would use the wrong fraction and conclude an honest round
+  was rigged. Caught by a reviewer who recomputed a Patch-saved round in
+  Python, then confirmed by a second agent. Fixed with a worked Patch round
+  in the docs and tests (614c74a).
+- Nothing stopped `PumpEngine.ts` from importing HMAC or seed functions
+  from `src/fair` or `@noble`. The lint rules only ban `node:*`. Caught
+  separately by two reviewers, by linting a made-up engine file through
+  stdin. `test/fair/boundary.test.ts` now fails on any non-type import
+  (95df4b9).
+- Error messages showed a string "5" or a bigint 5n as "got 5", which reads
+  as if a valid value was refused. Caught by the integration reviewer
+  (f7c7964).
+- The Python reference's first run had one draw in it twice. Caught by its
+  own duplicate check before commit.
+- The docs said to keep reading blocks forever, but the code stops at 1024.
+  Caught in review. The docs now say so.
+
+Not done yet: the server side (seed storage, nonce, rotation, the unique
+index), the per-round copy of RTP and ladder, and the verify page. These
+need the engine and the server first.

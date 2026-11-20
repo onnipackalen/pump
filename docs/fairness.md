@@ -45,6 +45,9 @@ Then you can recompute every pump you played with it.
      `roll = that number mod den`.
    - If all 8 are at or above `limit` (this almost never happens), build the
      message again with block 1, then block 2, and so on, and keep going.
+     (The game's code stops with an error after 1024 blocks, treating that
+     as broken input. Real HMAC output never gets there: the chance is
+     below 2^-8192.)
 5. **Decide.** The balloon survives if `roll < num`. Otherwise it pops
    (unless a Patch covered this pump: see step 4 of "Checking a whole
    round").
