@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiFailure, NetworkFailure, type GameClient } from '../api/client';
 import type {
   ActionResult,
+  BalloonView,
   FairnessView,
   PumpOutcome,
+  PumpResult,
   RevealedSeed,
   RoundSummary,
   RoundView,
@@ -38,8 +40,44 @@ export interface GameState {
   readonly notice: Notice | null;
 }
 
+/**
+ * Something the player should hear or feel. Sent after the server has
+ * answered, except "press", which is sent as a pump goes out.
+ */
+export type GameEvent =
+  | { readonly kind: 'round-start'; readonly round: RoundView }
+  | { readonly kind: 'press'; readonly balloon: BalloonView }
+  | { readonly kind: 'pump'; readonly outcome: PumpOutcome; readonly balloon: BalloonView }
+  | { readonly kind: 'cash-out'; readonly balloon: BalloonView };
+
+export type GameListener = (event: GameEvent) => void;
+
+/**
+ * The player actions as promises, for auto-play. Each takes the round the
+ * caller last saw and resolves with the server's answer, or null if the
+ * action was refused or failed (the screen has already said why).
+ *
+ * These never read React state, so they are safe to call from a loop that
+ * outlives the render it started in.
+ */
+export interface GameActions {
+  readonly startRound: (
+    difficultyId: string,
+    betsCents: readonly number[],
+  ) => Promise<ActionResult | null>;
+  readonly pump: (
+    round: RoundView,
+    balloonIndex: number,
+    patch: boolean,
+  ) => Promise<PumpResult | null>;
+  readonly cashOut: (round: RoundView, balloonIndex: number) => Promise<ActionResult | null>;
+}
+
 export interface Game {
   readonly state: GameState;
+  /** Stable from render to render. */
+  readonly actions: GameActions;
+  /** Button and key handlers: act on the round currently on screen. */
   readonly startRound: (difficultyId: string, betsCents: readonly number[]) => void;
   readonly pump: (balloonIndex: number, patch: boolean) => void;
   readonly cashOut: (balloonIndex: number) => void;
@@ -98,13 +136,33 @@ function describeFailure(error: unknown): string {
   return 'Something went wrong. Please try again.';
 }
 
-/** All game state and actions for the screen. Talks to the server through `client`. */
-export function useGame(client: GameClient): Game {
+/**
+ * All game state and actions for the screen. Talks to the server through
+ * `client`. `listener` hears game events (for sound); it may change between
+ * renders.
+ */
+export function useGame(client: GameClient, listener?: GameListener): Game {
   const [state, setState] = useState<GameState>(initialState);
 
+  // Actions in flight, by "start" or balloon index. A ref, not state, so a
+  // second click in the same moment sees the first one at once.
+  const inFlight = useRef<Set<string>>(new Set());
+
+  const listenerRef = useRef(listener);
+  useEffect(() => {
+    listenerRef.current = listener;
+  });
+  const emit = useCallback((event: GameEvent) => {
+    listenerRef.current?.(event);
+  }, []);
+
   const refreshHistory = useCallback(async () => {
-    const history = await client.getHistory(HISTORY_SIZE);
-    setState((s) => ({ ...s, history }));
+    try {
+      const history = await client.getHistory(HISTORY_SIZE);
+      setState((s) => ({ ...s, history }));
+    } catch {
+      // The list is a convenience; the next finished round tries again.
+    }
   }, [client]);
 
   // Load the session once. If a round was in progress, this restores it.
@@ -158,65 +216,65 @@ export function useGame(client: GameClient): Game {
     [refreshHistory],
   );
 
-  /** On a 409 the server sends the state as it is now; show that. */
-  const handleFailure = useCallback(
-    (error: unknown, balloonIndex: number | null) => {
-      setState((s) => {
-        let next: GameState = {
-          ...s,
-          notice: { tone: 'error', text: describeFailure(error) },
+  /** Shows what went wrong. On a 409 the server sends the state as it is now; show that. */
+  const handleFailure = useCallback((error: unknown, balloonIndex: number | null) => {
+    setState((s) => {
+      let next: GameState = {
+        ...s,
+        notice: { tone: 'error', text: describeFailure(error) },
+      };
+      if (balloonIndex !== null) {
+        next = {
+          ...next,
+          beats: replaceAt(next.beats, balloonIndex, 'idle'),
+          pending: replaceAt(next.pending, balloonIndex, false),
         };
-        if (balloonIndex !== null) {
-          next = {
-            ...next,
-            beats: replaceAt(next.beats, balloonIndex, 'idle'),
-            pending: replaceAt(next.pending, balloonIndex, false),
-          };
-        }
-        if (error instanceof ApiFailure) {
-          const { round, wallet } = error.body;
-          if (round) next = { ...next, round };
-          if (wallet) next = { ...next, wallet };
-        }
-        return next;
-      });
-    },
-    [],
-  );
+      }
+      if (error instanceof ApiFailure) {
+        const { round, wallet } = error.body;
+        if (round) next = { ...next, round };
+        if (wallet) next = { ...next, wallet };
+      }
+      return next;
+    });
+  }, []);
 
-  const startRound = useCallback(
-    (difficultyId: string, betsCents: readonly number[]) => {
-      if (state.starting) return;
+  const startRoundAction = useCallback(
+    async (difficultyId: string, betsCents: readonly number[]): Promise<ActionResult | null> => {
+      if (inFlight.current.has('start')) return null;
+      inFlight.current.add('start');
       setState((s) => ({ ...s, starting: true, notice: null }));
-      void (async () => {
-        try {
-          const result = await send((key) =>
-            client.startRound({ difficultyId, betsCents }, key),
-          );
-          setState((s) => ({
-            ...s,
-            starting: false,
-            round: result.round,
-            wallet: result.wallet,
-            beats: result.round.balloons.map(() => 'idle'),
-            pending: result.round.balloons.map(() => false),
-          }));
-        } catch (error) {
-          setState((s) => ({ ...s, starting: false }));
-          handleFailure(error, null);
-        }
-      })();
+      try {
+        const result = await send((key) => client.startRound({ difficultyId, betsCents }, key));
+        setState((s) => ({
+          ...s,
+          starting: false,
+          round: result.round,
+          wallet: result.wallet,
+          beats: result.round.balloons.map(() => 'idle'),
+          pending: result.round.balloons.map(() => false),
+        }));
+        emit({ kind: 'round-start', round: result.round });
+        return result;
+      } catch (error) {
+        setState((s) => ({ ...s, starting: false }));
+        handleFailure(error, null);
+        return null;
+      } finally {
+        inFlight.current.delete('start');
+      }
     },
-    [client, handleFailure, state.starting],
+    [client, emit, handleFailure],
   );
 
-  const pump = useCallback(
-    (balloonIndex: number, patch: boolean) => {
-      const round = state.round;
-      const balloon = round?.balloons[balloonIndex];
-      if (!round || !balloon || balloon.status !== 'active') return;
-      if (state.pending[balloonIndex]) return;
-      if (patch && balloon.next?.patchPriceCents == null) return;
+  const pumpAction = useCallback(
+    async (round: RoundView, balloonIndex: number, patch: boolean): Promise<PumpResult | null> => {
+      const balloon = round.balloons[balloonIndex];
+      if (round.status !== 'active' || !balloon || balloon.status !== 'active') return null;
+      if (patch && balloon.next?.patchPriceCents == null) return null;
+      const tag = String(balloonIndex);
+      if (inFlight.current.has(tag)) return null;
+      inFlight.current.add(tag);
 
       setState((s) => ({
         ...s,
@@ -224,65 +282,96 @@ export function useGame(client: GameClient): Game {
         beats: replaceAt(s.beats, balloonIndex, 'press'),
         pending: replaceAt(s.pending, balloonIndex, true),
       }));
-      void (async () => {
-        try {
-          const [result] = await Promise.all([
-            send((key) =>
-              client.pump(
-                round.id,
-                { balloonIndex, expectedDrawIndex: balloon.drawIndex, patch },
-                key,
-              ),
-            ),
-            sleep(MIN_PRESS_MS),
-          ]);
-          setState((s) => ({
-            ...s,
-            beats: replaceAt(s.beats, balloonIndex, result.outcome),
-            pending: replaceAt(s.pending, balloonIndex, false),
-          }));
-          apply(result);
-        } catch (error) {
-          handleFailure(error, balloonIndex);
-        }
-      })();
+      emit({ kind: 'press', balloon });
+      try {
+        const [result] = await Promise.all([
+          send((key) =>
+            client.pump(round.id, { balloonIndex, expectedDrawIndex: balloon.drawIndex, patch }, key),
+          ),
+          sleep(MIN_PRESS_MS),
+        ]);
+        setState((s) => ({
+          ...s,
+          beats: replaceAt(s.beats, balloonIndex, result.outcome),
+          pending: replaceAt(s.pending, balloonIndex, false),
+        }));
+        apply(result);
+        const after = result.round.balloons[balloonIndex];
+        if (after) emit({ kind: 'pump', outcome: result.outcome, balloon: after });
+        return result;
+      } catch (error) {
+        handleFailure(error, balloonIndex);
+        return null;
+      } finally {
+        inFlight.current.delete(tag);
+      }
     },
-    [apply, client, handleFailure, state.pending, state.round],
+    [apply, client, emit, handleFailure],
   );
 
-  const cashOut = useCallback(
-    (balloonIndex: number) => {
-      const round = state.round;
-      const balloon = round?.balloons[balloonIndex];
-      if (!round || !balloon || balloon.status !== 'active' || balloon.rung === 0) return;
-      if (state.pending[balloonIndex]) return;
+  const cashOutAction = useCallback(
+    async (round: RoundView, balloonIndex: number): Promise<ActionResult | null> => {
+      const balloon = round.balloons[balloonIndex];
+      if (round.status !== 'active' || !balloon || balloon.status !== 'active') return null;
+      if (balloon.rung === 0) return null;
+      const tag = String(balloonIndex);
+      if (inFlight.current.has(tag)) return null;
+      inFlight.current.add(tag);
 
       setState((s) => ({
         ...s,
         notice: null,
         pending: replaceAt(s.pending, balloonIndex, true),
       }));
-      void (async () => {
-        try {
-          const result = await send((key) =>
-            client.cashOut(
-              round.id,
-              { balloonIndex, expectedDrawIndex: balloon.drawIndex },
-              key,
-            ),
-          );
-          setState((s) => ({
-            ...s,
-            beats: replaceAt(s.beats, balloonIndex, 'cashed'),
-            pending: replaceAt(s.pending, balloonIndex, false),
-          }));
-          apply(result);
-        } catch (error) {
-          handleFailure(error, balloonIndex);
-        }
-      })();
+      try {
+        const result = await send((key) =>
+          client.cashOut(round.id, { balloonIndex, expectedDrawIndex: balloon.drawIndex }, key),
+        );
+        setState((s) => ({
+          ...s,
+          beats: replaceAt(s.beats, balloonIndex, 'cashed'),
+          pending: replaceAt(s.pending, balloonIndex, false),
+        }));
+        apply(result);
+        const after = result.round.balloons[balloonIndex];
+        if (after) emit({ kind: 'cash-out', balloon: after });
+        return result;
+      } catch (error) {
+        handleFailure(error, balloonIndex);
+        return null;
+      } finally {
+        inFlight.current.delete(tag);
+      }
     },
-    [apply, client, handleFailure, state.pending, state.round],
+    [apply, client, emit, handleFailure],
+  );
+
+  const actions = useMemo<GameActions>(
+    () => ({ startRound: startRoundAction, pump: pumpAction, cashOut: cashOutAction }),
+    [startRoundAction, pumpAction, cashOutAction],
+  );
+
+  const round = state.round;
+
+  const startRound = useCallback(
+    (difficultyId: string, betsCents: readonly number[]) => {
+      void startRoundAction(difficultyId, betsCents);
+    },
+    [startRoundAction],
+  );
+
+  const pump = useCallback(
+    (balloonIndex: number, patch: boolean) => {
+      if (round) void pumpAction(round, balloonIndex, patch);
+    },
+    [pumpAction, round],
+  );
+
+  const cashOut = useCallback(
+    (balloonIndex: number) => {
+      if (round) void cashOutAction(round, balloonIndex);
+    },
+    [cashOutAction, round],
   );
 
   const setClientSeed = useCallback(
@@ -323,5 +412,14 @@ export function useGame(client: GameClient): Game {
     setState((s) => ({ ...s, notice: null }));
   }, []);
 
-  return { state, startRound, pump, cashOut, setClientSeed, rotateSeed, dismissNotice };
+  return {
+    state,
+    actions,
+    startRound,
+    pump,
+    cashOut,
+    setClientSeed,
+    rotateSeed,
+    dismissNotice,
+  };
 }
