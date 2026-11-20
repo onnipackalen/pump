@@ -1,0 +1,330 @@
+/* Copied from graphics/balloon/balloon.css on 2026-11-20. Re-copy it when the
+ * graphics change; do not edit it here. App-side additions live in
+ * balloon-states.css. */
+
+/*
+ * Pump balloon: colours, layer pivots and size.
+ * Import this file once. Every balloon svg element gets class="pump-balloon",
+ * a data-slot of 1, 2 or 3, and a --balloon-scale between 0.45 and 1.
+ * balloon.svg carries a copy of these rules so it can be opened on its own.
+ */
+
+.pump-balloon {
+  /* Slot 1 (pearl) is the default. */
+  --balloon-base: #ece6da;
+  --balloon-deep: #b8ac98;
+  /* 1 = top reachable rung, 0.45 = before the first pump. See README. */
+  --balloon-scale: 1;
+  overflow: visible; /* lets the balloon float out of its box on cash-out */
+}
+
+.pump-balloon[data-slot="2"] {
+  /* azure */
+  --balloon-base: #55a6f0;
+  --balloon-deep: #2f6fb8;
+}
+
+.pump-balloon[data-slot="3"] {
+  /* violet */
+  --balloon-base: #7b4fd6;
+  --balloon-deep: #5a34a8;
+}
+
+/*
+ * Layer pivots. Every moving layer turns and scales around the bottom
+ * centre of its own box, which is the knot. Safari needs both lines.
+ */
+.pump-balloon .pb-float,
+.pump-balloon .pb-grow,
+.pump-balloon .pb-wobble,
+.pump-balloon .pb-squash {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+/* The string and tag hang from the knot, so they pivot at their top. */
+.pump-balloon .pb-swing {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+}
+
+/* Size for the current rung. Only this layer changes size. */
+.pump-balloon .pb-grow {
+  transform: scale(var(--balloon-scale));
+}
+
+/* Balloon skin */
+.pump-balloon .pb-body {
+  fill: var(--balloon-base);
+}
+.pump-balloon .pb-knot {
+  fill: var(--balloon-deep);
+}
+.pump-balloon .pb-shade-a {
+  stop-color: #fff;
+  stop-opacity: 0.32;
+}
+.pump-balloon .pb-shade-b {
+  stop-color: #fff;
+  stop-opacity: 0;
+}
+.pump-balloon .pb-shade-c {
+  stop-color: #000;
+  stop-opacity: 0;
+}
+.pump-balloon .pb-shade-d {
+  stop-color: #000;
+  stop-opacity: 0.3;
+}
+.pump-balloon .pb-rim {
+  fill: #fff;
+  opacity: 0.16;
+}
+.pump-balloon .pb-shine {
+  fill: #fff;
+  opacity: 0.42;
+}
+.pump-balloon .pb-glint {
+  fill: #fff;
+  opacity: 0.6;
+}
+
+/* String and number tag */
+.pump-balloon .pb-string {
+  fill: none;
+  stroke: #c3c9d6;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  opacity: 0.8;
+}
+.pump-balloon .pb-tag-card {
+  fill: #f4f2ee;
+  stroke: var(--balloon-base);
+  stroke-width: 3;
+}
+.pump-balloon .pb-tag-text {
+  fill: #0e1424;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-anchor: middle;
+}
+
+/* Soft shadow on the floor. It stays put when the balloon floats away. */
+.pump-balloon .pb-shadow {
+  fill: #000;
+  opacity: 0.35;
+}
+
+/* ---------------------------------------------------------------------
+ * Pump beat (item 2)
+ *
+ * Your code sets data-beat on the balloon svg element:
+ *   "press"    on tap, the same for every outcome. Keep it until the
+ *              server has answered AND at least 300 ms have passed
+ *              since the tap.
+ *   "survive"  when the pump survived. Set the new --balloon-scale in
+ *              the same update. It can stay set afterwards; every
+ *              animation ends at rest.
+ *   "pop"      when the pump popped (see the Pop section below).
+ * Never grow the balloon before the answer is in.
+ * ------------------------------------------------------------------- */
+
+.pump-balloon {
+  --pb-press-ms: 90ms;
+  --pb-spring-ms: 320ms;
+  --pb-grow-ms: 240ms;
+  --pb-swing-ms: 460ms;
+}
+
+/* Tap: squeeze 4.5% wider and shorter, then hold that pose. */
+.pump-balloon[data-beat="press"] .pb-squash {
+  animation: pb-press var(--pb-press-ms) cubic-bezier(0.3, 0.7, 0.4, 1) forwards;
+}
+
+/* Survive: grow to the new size, spring out of the squeeze,
+ * and let the string swing a moment later. */
+.pump-balloon[data-beat="survive"] .pb-grow {
+  transition: transform var(--pb-grow-ms) cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.pump-balloon[data-beat="survive"] .pb-squash {
+  animation: pb-spring var(--pb-spring-ms) ease-out;
+}
+.pump-balloon[data-beat="survive"] .pb-swing {
+  animation: pb-swing var(--pb-swing-ms) ease-in-out 60ms;
+}
+
+@keyframes pb-press {
+  from {
+    transform: scale(1, 1);
+  }
+  to {
+    transform: scale(1.045, 0.955);
+  }
+}
+
+/* Stretches 5% taller past rest, then settles. */
+@keyframes pb-spring {
+  0% {
+    transform: scale(1.045, 0.955);
+  }
+  35% {
+    transform: scale(0.97, 1.05);
+  }
+  65% {
+    transform: scale(1.015, 0.985);
+  }
+  100% {
+    transform: scale(1, 1);
+  }
+}
+
+@keyframes pb-swing {
+  0% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(4deg);
+  }
+  55% {
+    transform: rotate(-2.5deg);
+  }
+  80% {
+    transform: rotate(1deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * Pop (item 3)
+ *
+ * After the same press and 300 ms hold, your code sets data-beat to:
+ *   "pop"     when the pump popped. The body vanishes at once, 8 pieces
+ *             fly out and fall, and a faint grey outline fades in.
+ *   "popped"  the same end picture with no movement. Use it when a
+ *             round is restored after a page refresh, so the pop does
+ *             not play again.
+ * Quiet on purpose: no flash, no shake, no slow motion, no "so close".
+ * ------------------------------------------------------------------- */
+
+.pump-balloon {
+  --pb-popped: #6f7789; /* neutral grey for what is left after a pop */
+  --pb-shard-ms: 480ms;
+  --pb-ghost-ms: 300ms;
+}
+
+/* Hidden until a pop. */
+.pump-balloon :is(.pb-ghost, .pb-remnant, .pb-shard) {
+  opacity: 0;
+}
+.pump-balloon .pb-ghost {
+  fill: var(--pb-popped);
+  fill-opacity: 0.1;
+  stroke: var(--pb-popped);
+  stroke-width: 2;
+  stroke-dasharray: 6 7;
+}
+.pump-balloon .pb-remnant {
+  fill: var(--pb-popped);
+}
+.pump-balloon .pb-shard {
+  fill: var(--balloon-base);
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+/* Where each piece flies before gravity takes it, and how far it turns.
+ * Units are the balloon's own drawing units, so they scale with it. */
+.pump-balloon .pb-shard-1 { --dx: -46px; --dy: -38px; --r: -140deg; }
+.pump-balloon .pb-shard-2 { --dx: 40px; --dy: -46px; --r: 120deg; }
+.pump-balloon .pb-shard-3 { --dx: -60px; --dy: -6px; --r: -200deg; }
+.pump-balloon .pb-shard-4 { --dx: 58px; --dy: -12px; --r: 180deg; }
+.pump-balloon .pb-shard-5 { --dx: -40px; --dy: 26px; --r: 90deg; }
+.pump-balloon .pb-shard-6 { --dx: 44px; --dy: 22px; --r: -110deg; }
+.pump-balloon .pb-shard-7 { --dx: 6px; --dy: -58px; --r: 160deg; }
+.pump-balloon .pb-shard-8 { --dx: -8px; --dy: 30px; --r: -70deg; }
+
+/* The popped end picture, with or without the burst. */
+.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-wobble {
+  opacity: 0;
+}
+.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-remnant {
+  opacity: 1;
+}
+.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-knot {
+  fill: var(--pb-popped);
+}
+.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-tag {
+  opacity: 0.6;
+}
+.pump-balloon[data-beat="popped"] .pb-ghost {
+  opacity: 1;
+}
+
+/* The burst. */
+.pump-balloon[data-beat="pop"] .pb-ghost {
+  animation: pb-fade-in var(--pb-ghost-ms) ease-out 200ms both;
+}
+.pump-balloon[data-beat="pop"] .pb-shard {
+  animation: pb-shard-fly var(--pb-shard-ms) linear;
+}
+
+@keyframes pb-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Fast out, then falls and fades. */
+@keyframes pb-shard-fly {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1);
+  }
+  30% {
+    opacity: 1;
+    transform: translate(calc(var(--dx) * 0.8), calc(var(--dy) * 0.8)) rotate(calc(var(--r) * 0.4));
+    animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), calc(var(--dy) + 70px)) rotate(var(--r));
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * Reduced motion
+ *
+ * Follows the phone or computer setting, unless the page root
+ * (the html element) has data-motion="full" (player turned motion on)
+ * or data-motion="reduce" (player turned motion off).
+ * The beat keeps exactly the same timing. Only the movement goes:
+ * no squeeze, no swing, no flying pieces, and the balloon snaps to its
+ * new size. A pop becomes a short fade to the popped picture.
+ * ------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .pump-balloon :is(.pb-squash, .pb-swing, .pb-shard) {
+    animation: none !important;
+  }
+  :root:not([data-motion="full"]) .pump-balloon .pb-grow {
+    transition: none !important;
+  }
+}
+
+:root[data-motion="reduce"] .pump-balloon :is(.pb-squash, .pb-swing, .pb-shard) {
+  animation: none !important;
+}
+:root[data-motion="reduce"] .pump-balloon .pb-grow {
+  transition: none !important;
+}
