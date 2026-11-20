@@ -50,6 +50,37 @@ export default defineConfig(
       'no-restricted-globals': [
         'error',
         { name: 'Date', message: 'Engine src has no clock. Pass time in if you need it.' },
+        // The global object is a back door to everything the tsconfig hides:
+        // a cast like (globalThis as { crypto: ... }) would compile.
+        ...['globalThis', 'window', 'self', 'global'].map((name) => ({
+          name,
+          message: 'Engine src must not reach for the global object.',
+        })),
+        ...[
+          'console',
+          'crypto',
+          'document',
+          'fetch',
+          'localStorage',
+          'navigator',
+          'performance',
+          'process',
+          'setInterval',
+          'setTimeout',
+        ].map((name) => ({ name, message: 'Engine src must not do I/O.' })),
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportExpression',
+          message: 'Engine src must not load code at run time. Use a normal import.',
+        },
+      ],
+      // A `/// <reference lib="dom" />` in one file would bring browser types
+      // into the whole engine and switch the compile-time guard off.
+      '@typescript-eslint/triple-slash-reference': [
+        'error',
+        { lib: 'never', path: 'never', types: 'never' },
       ],
       'no-restricted-properties': [
         'error',
