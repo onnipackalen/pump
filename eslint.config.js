@@ -4,7 +4,8 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
-  { ignores: ['**/node_modules/**', '**/dist/**', '**/coverage/**'] },
+  // .claude/ holds local worktrees of this same repo; each lints itself.
+  { ignores: ['**/node_modules/**', '**/dist/**', '**/coverage/**', '.claude/**'] },
 
   js.configs.recommended,
 
