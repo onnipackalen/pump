@@ -68,6 +68,9 @@ export default defineConfig(
           'setInterval',
           'setTimeout',
         ].map((name) => ({ name, message: 'Engine src must not do I/O.' })),
+        // Two more ways to a clock or to the global object.
+        { name: 'eval', message: 'Engine src must not run code from text.' },
+        { name: 'Intl', message: 'Engine src has no clock or locale. Format on the outside.' },
       ],
       'no-restricted-syntax': [
         'error',
