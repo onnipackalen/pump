@@ -1,0 +1,69 @@
+/*
+ * The game's background.
+ *
+ * A quiet dusk scene: no picture file to load, sharp at every size, and
+ * nothing that moves. Four parts, back to front:
+ *
+ *   1. the page:  deep navy, a little lighter at the top;
+ *   2. the glow:  the last light along the horizon, wide and even, so it
+ *                 never picks out one balloon over another;
+ *   3. the hills: two low, dark outlines far away on the horizon;
+ *   4. the floor: a thin horizon line that fades at both ends, and a pool
+ *                 of light where the balloons stand.
+ *
+ * The balloons' shadows and their numbers sit on the floor, so --floor is
+ * the height of the number block under a balloon plus a little room for
+ * the shadow.
+ *
+ * The scene is centred on the stage but drawn a full screen wider on each
+ * side, so it runs edge to edge behind the control panel with no seam,
+ * wherever the stage sits. Its widths are in screen units (vw) for the
+ * same reason. The app clips what falls outside the screen.
+ *
+ * It carries no information: nothing here changes with the round, the risk
+ * or the result.
+ */
+
+body {
+  background:
+    radial-gradient(120% 70% at 50% -10%, #17203c 0%, rgba(23, 32, 60, 0) 70%),
+    var(--stage);
+}
+
+.stage {
+  --floor: calc(var(--label-h) + 8px);
+}
+
+/* The sky above the horizon: hills in front of the glow. */
+.stage::before {
+  content: '';
+  position: absolute;
+  inset: 0 -100vw var(--floor);
+  pointer-events: none;
+  background:
+    /* The hills repeat sideways; both ends of the drawing are level, so the joins don't show. */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath fill='%23151e3b' d='M0 120V60C120 60 240 30 380 34C520 38 600 80 760 70C900 62 1000 30 1100 40C1150 45 1160 60 1200 60V120Z'/%3E%3Cpath fill='%23101830' d='M0 120V96C100 96 200 74 360 80C520 86 640 106 820 98C960 92 1040 84 1120 88C1160 90 1170 96 1200 96V120Z'/%3E%3C/svg%3E")
+      center bottom / max(900px, 110vw) clamp(36px, 16%, 104px) repeat-x,
+    radial-gradient(70vw 62% at 50% 100%, rgba(78, 108, 214, 0.34) 0%, rgba(78, 108, 214, 0) 72%);
+}
+
+/* The floor: horizon line, then light pooled under the balloons. */
+.stage::after {
+  content: '';
+  position: absolute;
+  right: -100vw;
+  bottom: 0;
+  left: -100vw;
+  height: var(--floor);
+  pointer-events: none;
+  background:
+    linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) calc(50% - 60vw),
+        rgba(255, 255, 255, 0.16) calc(50% - 28vw),
+        rgba(255, 255, 255, 0.16) calc(50% + 28vw),
+        rgba(255, 255, 255, 0) calc(50% + 60vw)
+      )
+      top / 100% 1px no-repeat,
+    radial-gradient(52vw 130% at 50% 0%, rgba(86, 116, 220, 0.16) 0%, rgba(86, 116, 220, 0) 72%);
+}
