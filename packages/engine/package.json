@@ -11,5 +11,8 @@
     "typecheck": "tsc -p . && tsc -p cli && tsc -p test",
     "rtp": "tsx cli/rtp.ts",
     "sim": "tsx cli/sim.ts"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.4.0"
   }
 }
