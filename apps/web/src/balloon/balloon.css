@@ -1,12 +1,11 @@
-/* Copied from graphics/balloon/balloon.css on 2026-11-20. Re-copy it when the
- * graphics change; do not edit it here. App-side additions live in
- * balloon-states.css. */
+/* Copied from graphics/balloon/balloon.css on 2026-11-20 (snapshot after the
+ * pump-and-hose update). Re-copy it when the graphics change; do not edit it
+ * here. */
 
 /*
  * Pump balloon: colours, layer pivots and size.
  * Import this file once. Every balloon svg element gets class="pump-balloon",
  * a data-slot of 1, 2 or 3, and a --balloon-scale between 0.45 and 1.
- * balloon.svg carries a copy of these rules so it can be opened on its own.
  */
 
 .pump-balloon {
@@ -42,10 +41,10 @@
   transform-origin: 50% 100%;
 }
 
-/* The string and tag hang from the knot, so they pivot at their top. */
-.pump-balloon .pb-swing {
+/* The hose shrinks back towards the pump's nozzle. */
+.pump-balloon .pb-hose {
   transform-box: fill-box;
-  transform-origin: 50% 0%;
+  transform-origin: 100% 95%;
 }
 
 /* Size for the current rung. Only this layer changes size. */
@@ -89,14 +88,47 @@
   opacity: 0.6;
 }
 
-/* String and number tag */
-.pump-balloon .pb-string {
+/* Pump and hose: quiet slate greys, so the balloon stays the hero. */
+.pump-balloon .pb-pump-base {
+  fill: #2c3550;
+}
+.pump-balloon .pb-pump-barrel {
+  fill: #3d4866;
+}
+.pump-balloon :is(.pb-pump-cap, .pb-pump-nozzle, .pb-hose-end) {
+  fill: #56627e;
+}
+.pump-balloon .pb-pump-shine {
+  fill: #fff;
+  opacity: 0.12;
+}
+.pump-balloon .pb-pump-rod {
+  fill: #8a92a6;
+}
+.pump-balloon .pb-pump-grip {
+  fill: #c3c9d6;
+}
+.pump-balloon .pb-hose-tube {
+  fill: none;
+  stroke: #56627e;
+  stroke-width: 6;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.pump-balloon .pb-hose-shine {
   fill: none;
   stroke: #c3c9d6;
-  stroke-width: 1.5;
+  stroke-width: 1.4;
   stroke-linecap: round;
-  opacity: 0.8;
+  opacity: 0.3;
+  vector-effect: non-scaling-stroke;
 }
+.pump-balloon .pb-air {
+  fill: #ece6da;
+  opacity: 0;
+}
+
+/* Number plate on the pump */
 .pump-balloon .pb-tag-card {
   fill: #f4f2ee;
   stroke: var(--balloon-base);
@@ -105,25 +137,26 @@
 .pump-balloon .pb-tag-text {
   fill: #0e1424;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-anchor: middle;
 }
 
-/* Soft shadow on the floor. It stays put when the balloon floats away. */
+/* Soft shadow on the floor, under the pump. */
 .pump-balloon .pb-shadow {
   fill: #000;
   opacity: 0.35;
 }
 
 /* ---------------------------------------------------------------------
- * Pump beat (item 2)
+ * Pump beat
  *
  * Your code sets data-beat on the balloon svg element:
- *   "press"    on tap, the same for every outcome. Keep it until the
- *              server has answered AND at least 300 ms have passed
- *              since the tap.
+ *   "press"    on tap, the same for every outcome. The pump handle
+ *              pushes down and a puff of air runs up the hose into the
+ *              knot. Keep it until the server has answered AND at least
+ *              300 ms have passed since the tap.
  *   "survive"  when the pump survived. Set the new --balloon-scale in
  *              the same update. It can stay set afterwards; every
  *              animation ends at rest.
@@ -132,74 +165,132 @@
  * ------------------------------------------------------------------- */
 
 .pump-balloon {
-  --pb-press-ms: 90ms;
-  --pb-spring-ms: 320ms;
-  --pb-grow-ms: 240ms;
-  --pb-swing-ms: 460ms;
+  --pb-stroke-ms: 280ms;
+  --pb-return-ms: 380ms;
+  --pb-press-ms: 300ms;
+  --pb-grow-ms: 460ms;
+  --pb-spring-ms: 520ms;
 }
 
-/* Tap: squeeze 4.5% wider and shorter, then hold that pose. */
+/* Tap: the handle pushes down and air runs up the hose. The balloon only
+ * braces a little as the air arrives (2%). It never grows yet. */
+.pump-balloon[data-beat="press"] .pb-handle {
+  animation: pb-stroke-down var(--pb-stroke-ms) cubic-bezier(0.45, 0, 0.2, 1) forwards;
+}
+.pump-balloon[data-beat="press"] .pb-air {
+  animation: pb-air var(--pb-press-ms) linear forwards;
+}
 .pump-balloon[data-beat="press"] .pb-squash {
-  animation: pb-press var(--pb-press-ms) cubic-bezier(0.3, 0.7, 0.4, 1) forwards;
+  animation: pb-press var(--pb-press-ms) ease-in-out forwards;
 }
 
-/* Survive: grow to the new size, spring out of the squeeze,
- * and let the string swing a moment later. */
+/* The answer: the handle comes back up. */
+.pump-balloon:is([data-beat="survive"], [data-beat="blocked"], [data-beat="pop"]) .pb-handle {
+  animation: pb-stroke-up var(--pb-return-ms) cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+/* Survive: the balloon fills smoothly to its new size and settles. */
 .pump-balloon[data-beat="survive"] .pb-grow {
-  transition: transform var(--pb-grow-ms) cubic-bezier(0.2, 0.8, 0.3, 1);
+  transition: transform var(--pb-grow-ms) cubic-bezier(0.22, 0.9, 0.32, 1);
 }
 .pump-balloon[data-beat="survive"] .pb-squash {
-  animation: pb-spring var(--pb-spring-ms) ease-out;
+  animation: pb-spring var(--pb-spring-ms) ease-in-out;
 }
-.pump-balloon[data-beat="survive"] .pb-swing {
-  animation: pb-swing var(--pb-swing-ms) ease-in-out 60ms;
+
+@keyframes pb-stroke-down {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(12px);
+  }
+}
+
+@keyframes pb-stroke-up {
+  from {
+    transform: translateY(12px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* The puff follows the hose from the pump to the knot. */
+@keyframes pb-air {
+  0% {
+    opacity: 0;
+    transform: translate(116.0px, 295.0px);
+  }
+  12.0% {
+    opacity: 0.95;
+    transform: translate(116.0px, 295.0px);
+  }
+  21.5% {
+    opacity: 0.95;
+    transform: translate(106.3px, 293.1px);
+  }
+  31.0% {
+    opacity: 0.95;
+    transform: translate(99.8px, 286.0px);
+  }
+  40.5% {
+    opacity: 0.95;
+    transform: translate(97.6px, 276.3px);
+  }
+  50.0% {
+    opacity: 0.95;
+    transform: translate(97.5px, 266.5px);
+  }
+  59.5% {
+    opacity: 0.95;
+    transform: translate(98.2px, 256.4px);
+  }
+  69.0% {
+    opacity: 0.95;
+    transform: translate(99.1px, 246.5px);
+  }
+  78.5% {
+    opacity: 0.95;
+    transform: translate(99.7px, 236.6px);
+  }
+  88.0% {
+    opacity: 0.95;
+    transform: translate(100.0px, 227.0px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(100.0px, 223.0px);
+  }
 }
 
 @keyframes pb-press {
-  from {
+  0%,
+  65% {
     transform: scale(1, 1);
   }
-  to {
-    transform: scale(1.045, 0.955);
+  100% {
+    transform: scale(1.02, 0.98);
   }
 }
 
-/* Stretches 5% taller past rest, then settles. */
+/* A soft settle: 1.5% taller past rest, then still. */
 @keyframes pb-spring {
   0% {
-    transform: scale(1.045, 0.955);
+    transform: scale(1.02, 0.98);
   }
-  35% {
-    transform: scale(0.97, 1.05);
+  45% {
+    transform: scale(0.99, 1.015);
   }
-  65% {
-    transform: scale(1.015, 0.985);
+  75% {
+    transform: scale(1.004, 0.997);
   }
   100% {
     transform: scale(1, 1);
-  }
-}
-
-@keyframes pb-swing {
-  0% {
-    transform: rotate(0deg);
-  }
-  25% {
-    transform: rotate(4deg);
-  }
-  55% {
-    transform: rotate(-2.5deg);
-  }
-  80% {
-    transform: rotate(1deg);
-  }
-  100% {
-    transform: rotate(0deg);
   }
 }
 
 /* ---------------------------------------------------------------------
- * Pop (item 3)
+ * Pop
  *
  * After the same press and 300 ms hold, your code sets data-beat to:
  *   "pop"     when the pump popped. The body vanishes at once, 8 pieces
@@ -309,12 +400,13 @@
  * (the html element) has data-motion="full" (player turned motion on)
  * or data-motion="reduce" (player turned motion off).
  * The beat keeps exactly the same timing. Only the movement goes:
- * no squeeze, no swing, no flying pieces, and the balloon snaps to its
- * new size. A pop becomes a short fade to the popped picture.
+ * no squeeze, no pump stroke, no air puff, no flying pieces, and the
+ * balloon snaps to its new size. A pop becomes a short fade to the
+ * popped picture.
  * ------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion="full"]) .pump-balloon :is(.pb-squash, .pb-swing, .pb-shard) {
+  :root:not([data-motion="full"]) .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-shard) {
     animation: none !important;
   }
   :root:not([data-motion="full"]) .pump-balloon .pb-grow {
@@ -322,9 +414,850 @@
   }
 }
 
-:root[data-motion="reduce"] .pump-balloon :is(.pb-squash, .pb-swing, .pb-shard) {
+:root[data-motion="reduce"] .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-shard) {
   animation: none !important;
 }
 :root[data-motion="reduce"] .pump-balloon .pb-grow {
   transition: none !important;
+}
+
+/* =====================================================================
+ * Cashout
+ * =================================================================== */
+
+/* ---------------------------------------------------------------------
+ * Cash-out
+ *
+ * Your code sets data-beat on the balloon svg element:
+ *   "cashout"  when the SERVER CONFIRMS the cash-out (not on tap).
+ *              The balloon dips, then floats up and fades. The pump
+ *              stays, its hose shrinks back, and its number gets a tick.
+ *   "cashed"   the same end picture with no movement. Use it when a
+ *              round is restored after a page refresh.
+ * The look is neutral and the same for every cash-out, profit or not.
+ * Win effects come only from data-win (win tiers), and only when
+ * payoutCents > betCents + patchCents.
+ * ------------------------------------------------------------------- */
+
+.pump-balloon {
+  --pb-float-ms: 420ms;
+  --pb-tick-ms: 200ms;
+  --pb-tick-delay: 150ms;
+}
+
+/* Tick badge: hidden until a cash-out. Neutral colours, never mint. */
+.pump-balloon .pb-tick {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+.pump-balloon .pb-tick-badge {
+  fill: #0e1424;
+  stroke: #f4f2ee;
+  stroke-width: 2;
+}
+.pump-balloon .pb-tick-mark {
+  fill: none;
+  stroke: #f4f2ee;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The cashed end picture, with or without the float-away. */
+.pump-balloon[data-beat="cashed"] .pb-float {
+  opacity: 0;
+}
+.pump-balloon[data-beat="cashed"] .pb-hose {
+  transform: scale(0.5);
+}
+.pump-balloon[data-beat="cashed"] .pb-tick {
+  opacity: 1;
+}
+
+/* The release. */
+.pump-balloon[data-beat="cashout"] .pb-float {
+  animation: pb-float-away var(--pb-float-ms) linear forwards;
+}
+.pump-balloon[data-beat="cashout"] .pb-hose {
+  animation: pb-hose-back 300ms cubic-bezier(0.2, 0.8, 0.3, 1) 40ms forwards;
+}
+.pump-balloon[data-beat="cashout"] .pb-tick {
+  animation: pb-tick-in var(--pb-tick-ms) ease-out var(--pb-tick-delay) both;
+}
+
+/* A small dip first (about 60 ms), then up and away, faster and faster.
+ * It stays fully visible until halfway, then fades. */
+@keyframes pb-float-away {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1, 1);
+    animation-timing-function: ease-out;
+  }
+  14% {
+    opacity: 1;
+    transform: translateY(4px) scale(1.02, 0.97);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-240px) scale(1, 1);
+  }
+}
+
+@keyframes pb-hose-back {
+  to {
+    transform: scale(0.5);
+  }
+}
+
+@keyframes pb-tick-in {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Reduced motion: the same timing, no movement. The balloon fades out
+ * where it is, and the tick fades in without growing. */
+@keyframes pb-float-fade {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes pb-tick-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .pump-balloon[data-beat="cashout"] .pb-float {
+    animation-name: pb-float-fade;
+  }
+  :root:not([data-motion="full"]) .pump-balloon[data-beat="cashout"] .pb-tick {
+    animation-name: pb-tick-fade;
+  }
+}
+
+:root[data-motion="reduce"] .pump-balloon[data-beat="cashout"] .pb-float {
+  animation-name: pb-float-fade;
+}
+:root[data-motion="reduce"] .pump-balloon[data-beat="cashout"] .pb-tick {
+  animation-name: pb-tick-fade;
+}
+
+/* =====================================================================
+ * Patch
+ * =================================================================== */
+
+/* ---------------------------------------------------------------------
+ * Patch
+ *
+ * Your code sets data-patch on the balloon svg element:
+ *   "on"     on the tap of a patched pump, in the same update as
+ *            data-beat="press". The patch slaps on.
+ *   "spent"  the pump survived anyway, so the patch was not needed.
+ *            Set it with data-beat="survive" and the new size.
+ *            The patch quietly peels off.
+ *   "torn"   the patch blocked a pop. Set it with data-beat="blocked".
+ *            Do NOT change --balloon-scale: the balloon stays the same
+ *            size. One short flash, a small squash, the patch tears off.
+ * The patch is a paid repair, never a win: no win colour, no big
+ * "SAVED!" moment.
+ * ------------------------------------------------------------------- */
+
+.pump-balloon {
+  --pb-patch-on-ms: 180ms;
+  --pb-patch-peel-ms: 280ms;
+  --pb-patch-peel-delay: 80ms;
+  --pb-patch-flash-ms: 160ms;
+  --pb-patch-tear-ms: 420ms;
+  --pb-patch-tear-delay: 110ms;
+  --pb-blocked-ms: 360ms;
+}
+
+/* Look: off-white tape with grey stitches, a thin grey edge and a soft
+ * shadow, so it reads on pearl, azure and violet alike. */
+.pump-balloon .pb-patch-tape {
+  fill: #f4f2ee;
+}
+.pump-balloon .pb-patch-stitch {
+  fill: none;
+  stroke: #8a8f9a;
+  stroke-width: 1.4;
+  stroke-dasharray: 2.6 2.4;
+  stroke-linecap: round;
+}
+.pump-balloon .pb-patch-edge {
+  fill: #f4f2ee;
+  stroke: #9aa0ad;
+  stroke-width: 2;
+}
+.pump-balloon .pb-patch-shadow {
+  fill: #000;
+  fill-opacity: 0.22;
+}
+.pump-balloon .pb-patch-flash {
+  fill: #fff;
+  opacity: 0;
+}
+
+/* Hidden until a patched pump. Every moving part pivots on its own box. */
+.pump-balloon .pb-patch-piece {
+  opacity: 0;
+}
+.pump-balloon :is(.pb-patch-piece, .pb-patch-half) {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+/* Applied: slaps on with the tap and stays while the squeeze is held. */
+.pump-balloon[data-patch="on"] .pb-patch-piece {
+  animation: pb-patch-on var(--pb-patch-on-ms) cubic-bezier(0.3, 0.7, 0.4, 1) both;
+}
+
+/* Not needed: peels off from one corner and fades. */
+.pump-balloon[data-patch="spent"] .pb-patch-piece {
+  transform-origin: 100% 0%;
+  animation: pb-patch-peel var(--pb-patch-peel-ms) ease-in var(--pb-patch-peel-delay) both;
+}
+
+/* Blocked a pop: one flash, then the two halves tear apart and fall. */
+.pump-balloon[data-patch="torn"] .pb-patch-piece {
+  opacity: 1;
+}
+.pump-balloon[data-patch="torn"] .pb-patch-flash {
+  animation: pb-patch-flash var(--pb-patch-flash-ms) ease-out;
+}
+.pump-balloon[data-patch="torn"] :is(.pb-patch-shadow, .pb-patch-edge) {
+  animation: pb-patch-fade-out 100ms linear var(--pb-patch-tear-delay) both;
+}
+.pump-balloon[data-patch="torn"] .pb-patch-left {
+  animation: pb-patch-tear-left var(--pb-patch-tear-ms) linear var(--pb-patch-tear-delay) both;
+}
+.pump-balloon[data-patch="torn"] .pb-patch-right {
+  animation: pb-patch-tear-right var(--pb-patch-tear-ms) linear var(--pb-patch-tear-delay) both;
+}
+
+/* The balloon takes the hit: a small squash, no growth. */
+.pump-balloon[data-beat="blocked"] .pb-squash {
+  animation: pb-blocked var(--pb-blocked-ms) ease-out;
+}
+
+@keyframes pb-patch-on {
+  0% {
+    opacity: 1;
+    transform: scale(0);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pb-patch-peel {
+  0% {
+    opacity: 1;
+    transform: rotate(0deg) translate(0, 0);
+  }
+  40% {
+    opacity: 1;
+    transform: rotate(-18deg) translate(2px, -4px);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(-34deg) translate(6px, -14px);
+  }
+}
+
+/* One flash only: well under the limit of 3 flashes a second. */
+@keyframes pb-patch-flash {
+  0% {
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes pb-patch-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pb-patch-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Each half jumps away from the tear, then falls and fades. */
+@keyframes pb-patch-tear-left {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(-7px, -3px) rotate(-16deg);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-12px, 26px) rotate(-40deg);
+  }
+}
+
+@keyframes pb-patch-tear-right {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(7px, -4px) rotate(18deg);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(13px, 24px) rotate(44deg);
+  }
+}
+
+/* Starts from the held squeeze, squashes a bit more, settles at the
+ * same size. */
+@keyframes pb-blocked {
+  0% {
+    transform: scale(1.02, 0.98);
+  }
+  25% {
+    transform: scale(1.05, 0.955);
+  }
+  60% {
+    transform: scale(0.985, 1.02);
+  }
+  100% {
+    transform: scale(1, 1);
+  }
+}
+
+/* Reduced motion: the patch only fades in and out, at the same times.
+ * No slap, no peel, no tear, no flash. The squash is already switched
+ * off by the reduced-motion rules in balloon.css (.pb-squash). */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .pump-balloon[data-patch="on"] .pb-patch-piece {
+    animation: pb-patch-fade-in var(--pb-patch-on-ms) linear both !important;
+  }
+  :root:not([data-motion="full"]) .pump-balloon[data-patch="spent"] .pb-patch-piece {
+    animation: pb-patch-fade-out var(--pb-patch-peel-ms) linear var(--pb-patch-peel-delay) both !important;
+  }
+  :root:not([data-motion="full"]) .pump-balloon[data-patch="torn"] .pb-patch-piece {
+    animation: pb-patch-fade-out var(--pb-patch-tear-ms) linear var(--pb-patch-tear-delay) both !important;
+  }
+  :root:not([data-motion="full"]) .pump-balloon[data-patch="torn"] :is(.pb-patch-half, .pb-patch-flash) {
+    animation: none !important;
+  }
+}
+
+:root[data-motion="reduce"] .pump-balloon[data-patch="on"] .pb-patch-piece {
+  animation: pb-patch-fade-in var(--pb-patch-on-ms) linear both !important;
+}
+:root[data-motion="reduce"] .pump-balloon[data-patch="spent"] .pb-patch-piece {
+  animation: pb-patch-fade-out var(--pb-patch-peel-ms) linear var(--pb-patch-peel-delay) both !important;
+}
+:root[data-motion="reduce"] .pump-balloon[data-patch="torn"] .pb-patch-piece {
+  animation: pb-patch-fade-out var(--pb-patch-tear-ms) linear var(--pb-patch-tear-delay) both !important;
+}
+:root[data-motion="reduce"] .pump-balloon[data-patch="torn"] :is(.pb-patch-half, .pb-patch-flash) {
+  animation: none !important;
+}
+
+/* =====================================================================
+ * Strain
+ * =================================================================== */
+
+/* ---------------------------------------------------------------------
+ * Strain cues
+ *
+ * Your code sets data-strain on the balloon svg element, from "0" to "3".
+ * The level comes ONLY from the published chance that the NEXT pump
+ * pops (the engine's exact fraction). Suggested mapping:
+ *   below 25%  -> "0"     25% to 40% -> "1"
+ *   40% to 60% -> "2"     60% and up -> "3"
+ * Never use the hidden draw, and never react to how close a draw was.
+ *
+ * Higher level = wider, faster sway; a little taller; brighter, wider
+ * highlight; a pale "thin spot" fades in. Only transform and opacity.
+ * The sway uses the separate rotate and scale properties, so it never
+ * fights the beat (.pb-squash) or the size (.pb-grow).
+ * ------------------------------------------------------------------- */
+
+.pump-balloon {
+  /* One full sway, per level. Tune in playtests. */
+  --pb-sway-0-ms: 3600ms;
+  --pb-sway-1-ms: 2800ms;
+  --pb-sway-2-ms: 2100ms;
+  --pb-sway-3-ms: 1500ms;
+}
+
+/* Thin spot gradient: pale centre, soft darker edge (black and white only). */
+.pump-balloon .pb-thin-a {
+  stop-color: #fff;
+  stop-opacity: 0.6;
+}
+.pump-balloon .pb-thin-b {
+  stop-color: #fff;
+  stop-opacity: 0.2;
+}
+.pump-balloon .pb-thin-c {
+  stop-color: #000;
+  stop-opacity: 0.08;
+}
+.pump-balloon .pb-thin-d {
+  stop-color: #000;
+  stop-opacity: 0;
+}
+
+/* Hidden at rest; fades in by level. */
+.pump-balloon .pb-strain {
+  opacity: 0;
+  transition: opacity 300ms ease-out;
+}
+
+/* Highlight and glint grow from their own centre. */
+.pump-balloon :is(.pb-shine, .pb-glint) {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  transition:
+    opacity 300ms ease-out,
+    transform 300ms ease-out;
+}
+
+/* ---------- Level 0: gentle breathing only ---------- */
+.pump-balloon[data-strain="0"] .pb-wobble {
+  scale: 1 1;
+  animation:
+    pb-sway-0 var(--pb-sway-0-ms) linear infinite,
+    pb-breathe-0 var(--pb-sway-0-ms) ease-in-out infinite;
+}
+
+/* ---------- Level 1 ---------- */
+.pump-balloon[data-strain="1"] .pb-wobble {
+  scale: 1 1.008;
+  animation:
+    pb-sway-1 var(--pb-sway-1-ms) linear infinite,
+    pb-breathe-1 var(--pb-sway-1-ms) ease-in-out infinite;
+}
+.pump-balloon[data-strain="1"] .pb-strain {
+  opacity: 0.35;
+}
+.pump-balloon[data-strain="1"] .pb-shine {
+  opacity: 0.48;
+  transform: scale(1.03, 1.02);
+}
+.pump-balloon[data-strain="1"] .pb-glint {
+  opacity: 0.68;
+}
+
+/* ---------- Level 2 ---------- */
+.pump-balloon[data-strain="2"] .pb-wobble {
+  scale: 1 1.017;
+  animation:
+    pb-sway-2 var(--pb-sway-2-ms) linear infinite,
+    pb-breathe-2 var(--pb-sway-2-ms) ease-in-out infinite;
+}
+.pump-balloon[data-strain="2"] .pb-strain {
+  opacity: 0.65;
+}
+.pump-balloon[data-strain="2"] .pb-shine {
+  opacity: 0.55;
+  transform: scale(1.06, 1.04);
+}
+.pump-balloon[data-strain="2"] .pb-glint {
+  opacity: 0.78;
+  transform: scale(1.08);
+}
+
+/* ---------- Level 3 ---------- */
+.pump-balloon[data-strain="3"] .pb-wobble {
+  scale: 1 1.028;
+  animation:
+    pb-sway-3 var(--pb-sway-3-ms) linear infinite,
+    pb-breathe-3 var(--pb-sway-3-ms) ease-in-out infinite;
+}
+.pump-balloon[data-strain="3"] .pb-strain {
+  opacity: 1;
+  animation: pb-thin-pulse var(--pb-sway-3-ms) ease-in-out infinite;
+}
+.pump-balloon[data-strain="3"] .pb-shine {
+  opacity: 0.62;
+  transform: scale(1.1, 1.06);
+}
+.pump-balloon[data-strain="3"] .pb-glint {
+  opacity: 0.9;
+  transform: scale(1.15);
+}
+
+/* Nothing sways once the balloon has popped or been cashed out. */
+.pump-balloon:is([data-beat="pop"], [data-beat="popped"], [data-beat="cashed"]) .pb-wobble,
+.pump-balloon:is([data-beat="pop"], [data-beat="popped"], [data-beat="cashed"]) .pb-strain {
+  animation: none;
+}
+
+/*
+ * Sway: starts and ends at the centre, fastest through the centre and
+ * slowest at each side, like a pendulum. Starting at the centre keeps a
+ * level change smooth.
+ */
+@keyframes pb-sway-0 {
+  0% { rotate: 0deg; animation-timing-function: cubic-bezier(0.33, 0.67, 0.67, 1); }
+  25% { rotate: 0.5deg; animation-timing-function: cubic-bezier(0.33, 0, 0.67, 1); }
+  75% { rotate: -0.5deg; animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0.33); }
+  100% { rotate: 0deg; }
+}
+@keyframes pb-sway-1 {
+  0% { rotate: 0deg; animation-timing-function: cubic-bezier(0.33, 0.67, 0.67, 1); }
+  25% { rotate: 1deg; animation-timing-function: cubic-bezier(0.33, 0, 0.67, 1); }
+  75% { rotate: -1deg; animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0.33); }
+  100% { rotate: 0deg; }
+}
+@keyframes pb-sway-2 {
+  0% { rotate: 0deg; animation-timing-function: cubic-bezier(0.33, 0.67, 0.67, 1); }
+  25% { rotate: 1.8deg; animation-timing-function: cubic-bezier(0.33, 0, 0.67, 1); }
+  75% { rotate: -1.8deg; animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0.33); }
+  100% { rotate: 0deg; }
+}
+@keyframes pb-sway-3 {
+  0% { rotate: 0deg; animation-timing-function: cubic-bezier(0.33, 0.67, 0.67, 1); }
+  25% { rotate: 3deg; animation-timing-function: cubic-bezier(0.33, 0, 0.67, 1); }
+  75% { rotate: -3deg; animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0.33); }
+  100% { rotate: 0deg; }
+}
+
+/* Breathing: a tiny squeeze in and out, on top of the level's stretch. */
+@keyframes pb-breathe-0 {
+  0%, 100% { scale: 1 1; }
+  50% { scale: 0.997 1.003; }
+}
+@keyframes pb-breathe-1 {
+  0%, 100% { scale: 1 1.008; }
+  50% { scale: 0.995 1.013; }
+}
+@keyframes pb-breathe-2 {
+  0%, 100% { scale: 1 1.017; }
+  50% { scale: 0.993 1.024; }
+}
+@keyframes pb-breathe-3 {
+  0%, 100% { scale: 1 1.028; }
+  50% { scale: 0.991 1.037; }
+}
+
+/* At level 3 the thin spot pulses gently with the sway. */
+@keyframes pb-thin-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+
+/* ---------------------------------------------------------------------
+ * Reduced motion: no sway, no breathing, no pulse, and the highlight
+ * changes without growing. The STILL cues stay: the level's stretch,
+ * the thin spot and the brighter highlight, so the risk cue is kept.
+ * ------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .pump-balloon :is(.pb-wobble, .pb-strain) {
+    animation: none !important;
+  }
+  :root:not([data-motion="full"]) .pump-balloon :is(.pb-shine, .pb-glint) {
+    transition-property: opacity !important;
+  }
+}
+
+:root[data-motion="reduce"] .pump-balloon :is(.pb-wobble, .pb-strain) {
+  animation: none !important;
+}
+:root[data-motion="reduce"] .pump-balloon :is(.pb-shine, .pb-glint) {
+  transition-property: opacity !important;
+}
+
+/* =====================================================================
+ * Wins
+ * =================================================================== */
+
+/* ---------------------------------------------------------------------
+ * Win tiers
+ *
+ * Your code sets data-win on the balloon svg element, ONLY when the
+ * cents rule says the player made a real profit:
+ *     payoutCents > betCents + patchCents
+ * judged over the whole round when there are 2 or 3 balloons.
+ * No data-win = tier 0 = the neutral cash-out only.
+ *   "1"  small win:  one soft mint glow behind the balloon
+ *   "2"  medium win: glow + 10 sparks
+ *   "3"  big win:    stronger glow + 16 sparks that fly further + 2 rings
+ * data-top="true" adds the top marker when the balloon reached its top
+ * reachable rung. Set it only together with a data-win.
+ * Effects only play while data-beat is "cashout" or "cashed".
+ * data-win is one-shot: never set it when restoring a round.
+ * ------------------------------------------------------------------- */
+
+.pump-balloon {
+  --pb-win: #4fe0a8;        /* mint: real wins only */
+  --pb-win-pale: #f4f2ee;
+  --pb-glow-ms: 420ms;
+  --pb-spark-ms: 620ms;
+  --pb-spark-delay: 60ms;   /* sparks leave as the balloon is let go */
+  --pb-ring-ms: 520ms;
+  --pb-top-ms: 280ms;
+  --pb-glow-peak: 0.75;
+  --pb-spark-reach: 1;
+}
+.pump-balloon[data-win="2"] {
+  --pb-glow-peak: 0.9;
+}
+.pump-balloon[data-win="3"] {
+  --pb-glow-peak: 1;
+  --pb-spark-reach: 1.25;
+}
+
+/* Hidden until a real win. */
+.pump-balloon :is(.pb-glow-disc, .pb-ring, .pb-spark, .pb-top-mark) {
+  opacity: 0;
+}
+
+/* Glow */
+.pump-balloon .pb-win-glow-a { stop-color: #4fe0a8; stop-opacity: 0.55; }
+.pump-balloon .pb-win-glow-b { stop-color: #4fe0a8; stop-opacity: 0.5; }
+.pump-balloon .pb-win-glow-c { stop-color: #4fe0a8; stop-opacity: 0.22; }
+.pump-balloon .pb-win-glow-d { stop-color: #4fe0a8; stop-opacity: 0; }
+.pump-balloon .pb-glow-disc {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+/* Burst: stays in place while the balloon floats away, and matches the
+ * balloon's size by scaling around the knot like .pb-grow does. */
+.pump-balloon .pb-burst {
+  transform-box: fill-box;
+  transform-origin: 50% 50%; /* the knot: centre of the anchor frame */
+  transform: scale(var(--balloon-scale));
+  pointer-events: none;
+}
+.pump-balloon .pb-burst-anchor {
+  fill: none;
+  stroke: none;
+}
+.pump-balloon .pb-ring {
+  fill: none;
+  stroke: var(--pb-win);
+  stroke-width: 3;
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+.pump-balloon .pb-ring-2 {
+  stroke: var(--pb-win-pale);
+  stroke-width: 2;
+}
+.pump-balloon .pb-spark {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+.pump-balloon .pb-spark-mint { fill: var(--pb-win); }
+.pump-balloon .pb-spark-pale { fill: var(--pb-win-pale); }
+
+/* Where each spark flies, and how far it turns. */
+.pump-balloon .pb-spark-1 { --dx: -34.6px; --dy: 20.0px; --r: 52deg; }
+.pump-balloon .pb-spark-2 { --dx: -39.9px; --dy: 2.1px; --r: -31deg; }
+.pump-balloon .pb-spark-3 { --dx: -42.3px; --dy: -18.0px; --r: 46deg; }
+.pump-balloon .pb-spark-4 { --dx: -36.0px; --dy: -42.9px; --r: -37deg; }
+.pump-balloon .pb-spark-5 { --dx: -13.5px; --dy: -58.5px; --r: 60deg; }
+.pump-balloon .pb-spark-6 { --dx: 13.5px; --dy: -58.5px; --r: -43deg; }
+.pump-balloon .pb-spark-7 { --dx: 36.0px; --dy: -42.9px; --r: 54deg; }
+.pump-balloon .pb-spark-8 { --dx: 42.3px; --dy: -18.0px; --r: -29deg; }
+.pump-balloon .pb-spark-9 { --dx: 39.9px; --dy: 2.1px; --r: 48deg; }
+.pump-balloon .pb-spark-10 { --dx: 34.6px; --dy: 20.0px; --r: -35deg; }
+.pump-balloon .pb-spark-11 { --dx: -32.7px; --dy: 9.4px; --r: 62deg; }
+.pump-balloon .pb-spark-12 { --dx: -33.5px; --dy: -25.3px; --r: -41deg; }
+.pump-balloon .pb-spark-13 { --dx: -22.7px; --dy: -44.6px; --r: 56deg; }
+.pump-balloon .pb-spark-14 { --dx: 22.7px; --dy: -44.6px; --r: -27deg; }
+.pump-balloon .pb-spark-15 { --dx: 33.5px; --dy: -25.3px; --r: 50deg; }
+.pump-balloon .pb-spark-16 { --dx: 32.7px; --dy: 9.4px; --r: -33deg; }
+
+/* Top marker */
+.pump-balloon .pb-top-mark {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+.pump-balloon .pb-top-disc { fill: #0e1424; }
+.pump-balloon .pb-top-ring { fill: none; stroke: var(--pb-win); stroke-width: 2.5; }
+.pump-balloon .pb-top-star { fill: var(--pb-win-pale); }
+
+/* --- Playing the tiers. Only on a cashed-out balloon. --- */
+
+/* Tier 1 and up: one soft pulse of the glow. It sits inside the balloon,
+ * so it floats away with it. */
+.pump-balloon:is([data-beat="cashout"], [data-beat="cashed"]):is([data-win="1"], [data-win="2"], [data-win="3"]) .pb-glow-disc {
+  animation: pb-win-glow var(--pb-glow-ms) ease-out forwards;
+}
+
+/* Tier 2 and up: sparks. Tier 2 uses the 10 main ones. */
+.pump-balloon:is([data-beat="cashout"], [data-beat="cashed"]):is([data-win="2"], [data-win="3"]) .pb-spark:not(.pb-spark-extra) {
+  animation: pb-spark-fly var(--pb-spark-ms) cubic-bezier(0.15, 0.7, 0.3, 1) var(--pb-spark-delay) both;
+}
+
+/* Tier 3: the 6 extra sparks and two rings. */
+.pump-balloon:is([data-beat="cashout"], [data-beat="cashed"])[data-win="3"] .pb-spark-extra {
+  animation: pb-spark-fly var(--pb-spark-ms) cubic-bezier(0.15, 0.7, 0.3, 1) calc(var(--pb-spark-delay) + 40ms) both;
+}
+.pump-balloon:is([data-beat="cashout"], [data-beat="cashed"])[data-win="3"] .pb-ring-1 {
+  animation: pb-ring var(--pb-ring-ms) ease-out var(--pb-spark-delay) both;
+}
+.pump-balloon:is([data-beat="cashout"], [data-beat="cashed"])[data-win="3"] .pb-ring-2 {
+  animation: pb-ring var(--pb-ring-ms) ease-out calc(var(--pb-spark-delay) + 90ms) both;
+}
+
+/* Top reached: the marker pops in on top of the balloon. */
+.pump-balloon[data-top="true"] .pb-top-mark {
+  animation: pb-top-in var(--pb-top-ms) cubic-bezier(0.3, 0.7, 0.4, 1) both;
+}
+
+@keyframes pb-win-glow {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  35% {
+    opacity: var(--pb-glow-peak);
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: calc(var(--pb-glow-peak) * 0.6);
+    transform: scale(1);
+  }
+}
+
+@keyframes pb-spark-fly {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(0deg) scale(0.4);
+  }
+  15% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(var(--dx) * var(--pb-spark-reach)), calc(var(--dy) * var(--pb-spark-reach))) rotate(var(--r)) scale(0.7);
+  }
+}
+
+@keyframes pb-ring {
+  0% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  15% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+}
+
+@keyframes pb-top-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pb-win-fade {
+  0% {
+    opacity: 0;
+  }
+  35% {
+    opacity: var(--pb-glow-peak);
+  }
+  100% {
+    opacity: calc(var(--pb-glow-peak) * 0.6);
+  }
+}
+
+@keyframes pb-top-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* --- Reduced motion: no sparks, no rings, no scaling. The glow and the
+ * top marker only fade, with the same timing. --- */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .pump-balloon :is(.pb-spark, .pb-ring) {
+    animation: none !important;
+  }
+  :root:not([data-motion="full"]) .pump-balloon .pb-glow-disc {
+    animation-name: pb-win-fade !important;
+  }
+  :root:not([data-motion="full"]) .pump-balloon .pb-top-mark {
+    animation-name: pb-top-fade !important;
+  }
+}
+:root[data-motion="reduce"] .pump-balloon :is(.pb-spark, .pb-ring) {
+  animation: none !important;
+}
+:root[data-motion="reduce"] .pump-balloon .pb-glow-disc {
+  animation-name: pb-win-fade !important;
+}
+:root[data-motion="reduce"] .pump-balloon .pb-top-mark {
+  animation-name: pb-top-fade !important;
 }

@@ -79,8 +79,11 @@ pop and cash-out graphics, and a session time and net result display.
 ## 2026-11-20: one screen, background and settings (branch `one-screen-layout`)
 
 Built in `apps/web/src`, on the branch `one-screen-layout`, in its own
-worktree. Not merged into main: another chat was fixing review bugs in the
-same files at the same time, and the look has not been approved yet.
+worktree, because another chat was fixing review bugs in the same files at
+the same time. Merged after the user approved the look: main's review fixes
+and new balloon art were merged into the branch first (four files by hand:
+`App.tsx`, `AutoPlayPanel.tsx`, `BalloonCard.tsx`, `styles.css`), checked
+again, and only then was main moved forward.
 
 - The game is one screen that never scrolls. The page is a fixed, clipped
   box: top bar, balloons, one control panel. The balloons take the room the
@@ -102,12 +105,17 @@ same files at the same time, and the look has not been approved yet.
 - The Cash out button lost its mint border. Mint is only for a real win.
 
 Checked in the browser with a script that measures every element and also
-tries to scroll the page by code. Bet screen (3 balloons, every bet
-capped), Auto tab, a live round and a finished round, at 1920x1080,
-1440x900, 1366x768, 1280x720, 1024x768, 1024x600, 768x1024, 430x932,
-412x915, 390x844, 375x667, 360x640, 320x568, and sideways at 932x430,
-844x390, 667x375 and 640x360. Nothing off screen, no clipped text, no
-scrolling.
+tries to scroll the page by code. Seven states, all with 3 balloons: the
+bet screen with every bet capped, the Auto tab, a live round, a finished
+round, auto-play running, auto-play done, and settings open. Run again on
+the merged code at 1920x1080, 1440x900, 1366x768, 1280x720, 1024x768,
+1024x600, 768x1024, 430x932, 412x915, 390x844, 375x667, 360x640, 320x568,
+and sideways at 932x430, 844x390, 667x375 and 640x360. Nothing off screen,
+no clipped text, no scrolling.
+
+From the merge: the per-balloon Stop bar from the review fixes is left out,
+because the panel shows only progress and Stop while auto-play runs and is
+always on screen. Everything else from those fixes is kept.
 
 Turned out wrong, and how it was caught:
 
@@ -128,6 +136,12 @@ Turned out wrong, and how it was caught:
   at 375x667 with three balloons. Caught by running auto-play and measuring
   again. The result now takes the place of the ladder line.
 
+- After the merge, the result line of an auto-play run made the panel
+  scroll inside itself at 320x568 with three balloons. Caught by adding two
+  states to the size check (auto-play running and done) and running it on
+  the merged code. On very small upright phones the result now floats over
+  the top of the stage.
+
 Known limits:
 
 - A phone held sideways and narrower than 640px (568x320) with three
@@ -137,3 +151,54 @@ Known limits:
 - On sideways phones the half and double buttons are left out to make room.
 - Checked in Chromium only. `overflow: clip` and container units need
   Safari 16 or newer. Not tried in Safari or on a real phone.
+## 2026-11-20: provably fair draws
+
+Built:
+
+- `CLAUDE.md` now locks the formats that change every roll. The HMAC key
+  and the shown hash both use the server seed's 64-character text. Words
+  are read big-endian. Fractions are reduced first. Each round keeps its
+  own RTP and ladder. The browser makes the first client seed. HMAC comes
+  from @noble/hashes. (7e79187)
+- `docs/fairness.md`: the recipe for players, with a worked example and a
+  worked round that includes a Patch save.
+- `packages/engine/src/fair`, in four commits: seed and message rules
+  (877a347), HMAC and SHA-256 from @noble/hashes 2.4.0, cross-checked
+  against Node's crypto and RFC 4231 (5da1e0f), bytes to an exactly uniform
+  roll (45bee52), and the draw function plus a single-use drawer for the
+  engine (a3abd19).
+- An independent Python reference written only from the docs, and
+  `vectors.json` with 393 draws, including 9 that need block 1 or 2
+  (355d713). A test checks that the TypeScript code matches it on every
+  vector (7e2091d). They agreed the first time.
+- Proof that the roll is uniform: the same acceptance function, run over
+  every word for every den in 8-bit and 12-bit word spaces, gives each roll
+  exactly the same number of times.
+- Mutation check: 18 deliberate bugs (byte order, `<=` limit, block
+  starting at 1, wrong separator, hex-decoded key, and so on). The existing
+  tests caught every one.
+
+Turned out wrong, and how it was caught:
+
+- The verify recipe didn't say that pump k means the rung the balloon
+  climbs to, not the number of presses. After a Patch save, a player
+  counting presses would use the wrong fraction and conclude an honest round
+  was rigged. Caught by a reviewer who recomputed a Patch-saved round in
+  Python, then confirmed by a second agent. Fixed with a worked Patch round
+  in the docs and tests (614c74a).
+- Nothing stopped `PumpEngine.ts` from importing HMAC or seed functions
+  from `src/fair` or `@noble`. The lint rules only ban `node:*`. Caught
+  separately by two reviewers, by linting a made-up engine file through
+  stdin. `test/fair/boundary.test.ts` now fails on any non-type import
+  (95df4b9).
+- Error messages showed a string "5" or a bigint 5n as "got 5", which reads
+  as if a valid value was refused. Caught by the integration reviewer
+  (f7c7964).
+- The Python reference's first run had one draw in it twice. Caught by its
+  own duplicate check before commit.
+- The docs said to keep reading blocks forever, but the code stops at 1024.
+  Caught in review. The docs now say so.
+
+Not done yet: the server side (seed storage, nonce, rotation, the unique
+index), the per-round copy of RTP and ladder, and the verify page. These
+need the engine and the server first.

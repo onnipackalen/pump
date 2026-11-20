@@ -17,6 +17,7 @@
  *   It is always present and starts at 0; see roll.ts for when block 1 and
  *   later are needed.
  */
+import { describeValue } from './describe';
 import { assertClientSeed } from './seeds';
 
 /** The five parts of one draw message. */
@@ -42,10 +43,15 @@ export interface DrawMessageParts {
  *
  * -0 passes, and String(-0) is "0". That is deliberate: -0 and 0 are the same
  * number for every purpose here, and they produce the same message.
+ *
+ * A value that is not a number at all (a string or bigint from an unchecked
+ * boundary) is rejected too, and the error names its type (see describe.ts).
  */
 export function assertCounter(name: string, value: number): void {
   if (!Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`${name} must be a whole number from 0 to 2^53 - 1, got ${String(value)}.`);
+    throw new Error(
+      `${name} must be a whole number from 0 to 2^53 - 1, got ${describeValue(value)}.`,
+    );
   }
 }
 

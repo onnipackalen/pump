@@ -28,6 +28,7 @@ import argparse
 import hashlib
 import hmac
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -265,6 +266,85 @@ def check_docs_example() -> None:
         raise AssertionError(f"docs example: roll gave {got}, docs say {want}")
     if not DOCS_ROLL < 97:
         raise AssertionError("docs example: the balloon should survive")
+
+
+def survive_fraction(rtp_bp: int, ladder: list, target_rung: int) -> tuple:
+    """num / den in lowest terms for a pump trying to reach target_rung.
+
+    This is step 3 of "Checking a whole round" in docs/fairness.md. The rung
+    is how many ladder steps the balloon has climbed, so target_rung is the
+    rung just before the pump plus 1, not how many times pump was pressed.
+    ladder[0] is h_1, the first step in hundredths.
+
+        target rung 1:      RTP_BP / (100 * h_1)
+        target rung k >= 2: h_(k-1) / h_k
+    """
+    if target_rung == 1:
+        num, den = rtp_bp, 100 * ladder[0]
+    else:
+        num, den = ladder[target_rung - 2], ladder[target_rung - 1]
+    common = math.gcd(num, den)
+    return num // common, den // common
+
+
+# The round with a Patch save in docs/fairness.md, copied number for number.
+# Each press: (rung just before it, Patch used, message, HMAC block 0 hex,
+# first word, roll, what happened). The fractions are not copied: they are
+# worked out from the round's RTP and ladder by survive_fraction.
+DOCS_ROUND_NONCE = 3
+DOCS_ROUND_RTP_BP = 9700
+DOCS_ROUND_LADDER = [101, 111, 123]  # the round's first three Easy steps
+DOCS_ROUND_PRESSES = [
+    (0, False, "myseed:3:0:0:0",
+     "0d996f9b5485bb7ee9fd02bbc7b611e6c4bba56d68d49e6fe48b16a77d78bc38", 228159387, 84, "survive"),
+    (1, True, "myseed:3:0:1:0",
+     "250c6ed4e5f5c47f46865d9c4bc3689f2adab0170490d8fb7c6f2f008b3bb63a", 621571796, 101, "saved"),
+    (1, False, "myseed:3:0:2:0",
+     "1db1b8b7c3af1cb03d2652fe2af62df8769465f6ad259803f7328bfec0f2e3da", 498186423, 108, "pop"),
+]
+
+
+def check_docs_round() -> None:
+    """Stop if this script disagrees with the Patch-save round in the docs.
+
+    It plays the round forward from rung 0. A pump that survives moves the
+    balloon up one rung. A pump that would pop but has a Patch leaves it on
+    the same rung, so the next press tries for the same rung with the same
+    fraction, and only the draw index moves on.
+    """
+    rung = 0
+    for draw, press in enumerate(DOCS_ROUND_PRESSES):
+        rung_before, patched, msg_want, hex_want, word_want, roll_want, outcome = press
+        where = f"docs round, press {draw + 1}"
+        if rung != rung_before:
+            raise AssertionError(f"{where}: balloon is on rung {rung}, docs say {rung_before}")
+        num, den = survive_fraction(DOCS_ROUND_RTP_BP, DOCS_ROUND_LADDER, rung + 1)
+        msg = message(DOCS_CLIENT_SEED, DOCS_ROUND_NONCE, DOCS_BALLOON, draw, 0)
+        if msg != msg_want:
+            raise AssertionError(f"{where}: message {msg!r}, docs say {msg_want!r}")
+        if block_bytes(DOCS_SERVER_SEED, msg).hex() != hex_want:
+            raise AssertionError(f"{where}: block 0 HMAC does not match")
+        got = roll(DOCS_SERVER_SEED, DOCS_CLIENT_SEED, DOCS_ROUND_NONCE, DOCS_BALLOON, draw, den)
+        want = {"roll": roll_want, "block": 0, "wordIndex": 0, "word": word_want}
+        if got != want:
+            raise AssertionError(f"{where}: roll gave {got}, docs say {want}")
+        if roll_want < num:
+            happened = "survive"
+            rung += 1
+        elif patched:
+            happened = "saved"
+        else:
+            happened = "pop"
+        if happened != outcome:
+            raise AssertionError(f"{where}: {happened}, docs say {outcome}")
+    if survive_fraction(DOCS_ROUND_RTP_BP, DOCS_ROUND_LADDER, 1) != (97, 101):
+        raise AssertionError("docs round: the first pump's chance should be 97/101")
+    # The mistake the docs warn about: counting presses, so press 3 would use
+    # the rung 3 chance 111/123 = 37/41 and roll 15.
+    wrong = survive_fraction(DOCS_ROUND_RTP_BP, DOCS_ROUND_LADDER, 3)
+    wrong_roll = roll(DOCS_SERVER_SEED, DOCS_CLIENT_SEED, DOCS_ROUND_NONCE, DOCS_BALLOON, 2, wrong[1])
+    if wrong != (37, 41) or wrong_roll["roll"] != 15:
+        raise AssertionError("docs round: the counted-presses mistake should give 37/41 and roll 15")
 
 
 def _expect_refused(what: str, fn, *args) -> None:
@@ -594,6 +674,7 @@ def main(argv: list) -> int:
     args = parser.parse_args(argv)
 
     check_docs_example()
+    check_docs_round()
     check_input_rules()
     doc = build_vectors()
     check_coverage(doc)

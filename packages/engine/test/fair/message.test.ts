@@ -84,6 +84,30 @@ describe('drawMessage', () => {
       );
     });
 
+    // Values that are not numbers at all, as they could arrive from a request
+    // body or a database driver. The message must name the type, not read
+    // "got 5" as if a valid number had been refused.
+    it.each([
+      ['a numeric string', '5', 'a string'],
+      ['an empty string', '', 'a string'],
+      ['a bigint', 5n, 'a bigint (5n)'],
+      ['an array', [5], 'an array'],
+      ['null', null, 'null'],
+      ['undefined', undefined, 'undefined'],
+      ['a boolean', true, 'a boolean'],
+      ['an object', { value: 5 }, 'an object'],
+    ])('rejects %s and names its type', (_label, value, described) => {
+      expect(() =>
+        drawMessage({ ...DOCS_PARTS, [name]: value as unknown as number }),
+      ).toThrow(`${name} must be a whole number from 0 to 2^53 - 1, got ${described}.`);
+    });
+
+    it('still prints a bad number as itself', () => {
+      expect(() => drawMessage({ ...DOCS_PARTS, [name]: 1.5 })).toThrow(
+        `${name} must be a whole number from 0 to 2^53 - 1, got 1.5.`,
+      );
+    });
+
     it('accepts 0 and 2^53 - 1', () => {
       expect(() => drawMessage({ ...DOCS_PARTS, [name]: 0 })).not.toThrow();
       expect(() => drawMessage({ ...DOCS_PARTS, [name]: 2 ** 53 - 1 })).not.toThrow();

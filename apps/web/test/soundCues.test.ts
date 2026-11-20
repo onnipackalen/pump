@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { cueFor, heightOf, isRealWin } from '../src/sound/cues';
 import { marketFor } from '../src/market';
 import { balloon } from './fixtures';
@@ -56,10 +56,23 @@ describe('heightOf and isRealWin', () => {
 });
 
 describe('marketFor', () => {
-  it('turns auto-play off for Great Britain and on elsewhere', () => {
-    expect(marketFor('gb').autoPlay).toBe(false);
+  it('turns auto-play off for Great Britain, however it is written', () => {
+    for (const id of ['gb', 'GB', ' gb ', 'uk', 'UK']) {
+      expect(marketFor(id).autoPlay).toBe(false);
+    }
+  });
+
+  it('keeps auto-play on for the default market', () => {
     expect(marketFor('default').autoPlay).toBe(true);
     expect(marketFor(undefined).autoPlay).toBe(true);
-    expect(marketFor('nowhere').autoPlay).toBe(true);
+    expect(marketFor('').autoPlay).toBe(true);
+  });
+
+  it('fails closed for a market it does not know', () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(marketFor('nowhere').autoPlay).toBe(false);
+    expect(marketFor('toString').autoPlay).toBe(false);
+    expect(quiet).toHaveBeenCalledTimes(2);
+    quiet.mockRestore();
   });
 });

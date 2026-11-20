@@ -50,6 +50,23 @@ function isTyping(target: EventTarget | null): boolean {
   );
 }
 
+/** A focused control handles Space and Enter itself: they press it. */
+function isControl(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest('button, summary, a[href], [role="button"], [role="radio"], [role="switch"]') !==
+      null
+  );
+}
+
+/** True when nothing on the page has focus, so Enter can mean "bet". */
+function nothingFocused(target: EventTarget | null): boolean {
+  return target === document.body || target === document.documentElement;
+}
+
+/** Taps unlock sound when the finger lifts; mouse and keys unlock it at once. */
+const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'] as const;
+
 /**
  * The whole game on one screen that never scrolls: a top bar, the balloons,
  * and one control panel. The panel shows only what the next tap needs: the
@@ -90,7 +107,7 @@ export function App() {
   };
 
   const startAutoPlay = (settings: AutoPlaySettings): void => {
-    if (!check.betsCents || roundActive || autoRunning) return;
+    if (!check.betsCents || roundActive || autoRunning || state.starting) return;
     setChosen(0);
     autoPlay.start({
       settings,
@@ -105,14 +122,13 @@ export function App() {
     setMuted(!muted);
   };
 
-  // Browsers only allow sound after a click or key press, so the first one unlocks it.
+  // Browsers only allow sound after a gesture. Listen in the capture phase so
+  // this runs before any button's own handler.
   useEffect(() => {
     const unlock = (): void => soundBoard.unlock();
-    window.addEventListener('pointerdown', unlock);
-    window.addEventListener('keydown', unlock);
+    for (const name of UNLOCK_EVENTS) window.addEventListener(name, unlock, true);
     return () => {
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
+      for (const name of UNLOCK_EVENTS) window.removeEventListener(name, unlock, true);
     };
   }, []);
 
@@ -131,6 +147,9 @@ export function App() {
         if (!event.repeat) toggleSound();
         return;
       }
+      // Space and Enter on a focused button press that button (Stop, Sound,
+      // Cash out...), never something else.
+      if ((event.key === ' ' || event.key === 'Enter') && isControl(event.target)) return;
       if (autoRunning) {
         if (event.key === ' ') event.preventDefault();
         return;
@@ -151,11 +170,17 @@ export function App() {
         case '1':
         case '2':
         case '3':
+          // Drop focus from any button (say, Cash out, just clicked for
+          // another balloon), so the next Space acts on the balloon just picked.
+          if (document.activeElement instanceof HTMLElement && isControl(document.activeElement)) {
+            document.activeElement.blur();
+          }
           setChosen(Number(event.key) - 1);
           break;
         case 'Enter':
-          // A focused button already handles Enter itself.
-          if (event.target instanceof HTMLButtonElement) return;
+          // Only with nothing focused, so a stray Enter after using a form or
+          // a panel never places a bet.
+          if (!nothingFocused(event.target)) return;
           // Enter bets by hand. It never starts auto-play.
           if (!event.repeat && !roundActive && mode === 'manual' && state.phase === 'ready') {
             start();
@@ -182,7 +207,14 @@ export function App() {
           )}
         </div>
         <div className="topbar-right">
-          <strong className="balance" aria-label="Balance" title="Balance" aria-live="polite">
+          {/* Quiet during auto-play, which changes it every round; the
+              auto-play status line reports the net instead. */}
+          <strong
+            className="balance"
+            aria-label="Balance"
+            title="Balance"
+            aria-live={autoRunning ? 'off' : 'polite'}
+          >
             {state.wallet ? formatCents(state.wallet.balanceCents) : '—'}
           </strong>
           <SettingsMenu open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -230,6 +262,7 @@ export function App() {
                       balloon={balloon}
                       ladder={round.ladder}
                       beat={state.beats[balloon.index] ?? 'idle'}
+                      quiet={autoRunning}
                       selectable={
                         panel === 'round' &&
                         round.balloons.length > 1 &&
@@ -316,6 +349,7 @@ export function App() {
                   roundBetCents={check.totalCents}
                   betsValid={check.betsCents !== null}
                   roundActive={roundActive && !autoRunning}
+                  starting={state.starting && !autoRunning}
                   status={autoPlay.status}
                   onStart={startAutoPlay}
                   onStop={autoPlay.stop}
