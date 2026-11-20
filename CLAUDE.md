@@ -17,7 +17,7 @@ They will change RTP to 94% and 99% and rerun everything, then send bugs for a 4
     survive pump 1 with probability     R / m_1          = RTP_BP / (100 * h_1)
     survive pump k >= 2 with probability m_(k-1) / m_k    = h_(k-1) / h_k
   The whole house edge sits in pump 1 and later pumps are fair. Changing RTP only changes pump 1.
-- Pop chance must rise strictly with every pump. Test p_1 < p_2 < ... at 9400, 9700 and 9900. Refuse to boot if R / m_1 >= 1, or if the pop chance fails to rise at the configured RTP. In integers that is RTP_BP * h_2 > 100 * h_1^2, and h_(k-1) * h_(k+1) > h_k^2 for every k >= 2.
+- Pop chance must rise strictly with every pump. Test p_1 < p_2 < ... at 9400, 9700 and 9900. Refuse to boot if R / m_1 >= 1, if RTP_BP is 10000 or more (an RTP of 100% or more gives the players the edge, so it can only be a config mistake), or if the pop chance fails to rise at the configured RTP. In integers that is RTP_BP * h_2 > 100 * h_1^2, and h_(k-1) * h_(k+1) > h_k^2 for every k >= 2.
 - Probabilities are exact fractions. A pump is resolved by comparing a uniform integer in [0, denominator) with the numerator. The integer comes from unbiased rejection sampling. No floating point in any outcome or money path.
 - No cash-out before the first pump: every cash-out point must return R, and a balloon that has not been pumped has no multiplier yet.
 - Patch: available before any pump after the first. It covers exactly that one pump and is spent whether or not the pump pops. If the pump would have popped, the balloon survives at its current rung and the next pump is a fresh draw. Price for pump k on bet B, in cents:
