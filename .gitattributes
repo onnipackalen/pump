@@ -1,0 +1,3 @@
+# Several sessions append to the worklog on separate branches. A union merge
+# keeps every side's lines instead of raising a conflict.
+docs/worklog.md merge=union
