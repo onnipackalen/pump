@@ -29,6 +29,11 @@ function lessOrEqual(a: [bigint, bigint], c: [bigint, bigint]): boolean {
   return a[0] * c[1] <= c[0] * a[1];
 }
 
+/** a/b < c/d, strictly. */
+function less(a: [bigint, bigint], c: [bigint, bigint]): boolean {
+  return a[0] * c[1] < c[0] * a[1];
+}
+
 function gcd(a: bigint, b: bigint): bigint {
   return b === 0n ? a : gcd(b, a % b);
 }
@@ -103,11 +108,13 @@ describe.each(DIFFICULTIES)('$id ladder', ({ ladder }) => {
       expect(rtpBp).toBeLessThan((ladder[0] ?? 0) * 100);
     });
 
-    it('never lets the pop chance fall from one pump to the next', () => {
+    it('raises the pop chance with every pump, strictly', () => {
+      // The brief says each pump "raises the chance that it pops", so staying
+      // level is not good enough.
       for (let pump = 2; pump <= ladder.length; pump++) {
         const before = popChance(rtpBp, ladder, pump - 1);
         const now = popChance(rtpBp, ladder, pump);
-        expect(lessOrEqual(before, now), `pump ${pump - 1} -> ${pump}`).toBe(true);
+        expect(less(before, now), `pump ${pump - 1} -> ${pump}`).toBe(true);
       }
     });
 
