@@ -16,6 +16,10 @@ export interface RouteContext {
  * the opening balance, and the cookie is set on this response.
  *
  * The cookie is httpOnly, so scripts on the page cannot read it.
+ *
+ * This is also where the 24-hour rule is applied "on the player's next
+ * request": a round they left idle that long is settled first, as a change of
+ * its own, before the request itself is looked at.
  */
 export function identify(
   context: RouteContext,
@@ -32,6 +36,7 @@ export function identify(
       maxAge: PLAYER_COOKIE_MAX_AGE_SECONDS,
     });
   }
+  context.services.game.settleIfAbandoned(player.id);
   return player;
 }
 

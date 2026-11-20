@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { SessionView } from '@pump/contract';
+import { GAME_CONFIG, type GameConfig } from '@pump/engine';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 import { openDatabase, type Db } from '../src/db/database';
@@ -18,7 +19,7 @@ export interface TestRuntime extends Runtime {
  * A runtime on a fresh in-memory database, with a clock that only moves when
  * told to and "random" values that are the same on every run.
  */
-export function testRuntime(): TestRuntime {
+export function testRuntime(config: GameConfig = GAME_CONFIG): TestRuntime {
   const db = openDatabase(':memory:');
   migrate(db);
   let time = Date.parse('2026-01-01T00:00:00.000Z');
@@ -29,6 +30,7 @@ export function testRuntime(): TestRuntime {
       .digest();
   return {
     db,
+    config,
     now: () => new Date(time),
     newId: () => `id-${String(counter++)}`,
     newToken: () => bytes('token').toString('base64url'),
@@ -46,8 +48,8 @@ export interface TestWorld {
   readonly app: FastifyInstance;
 }
 
-export function testWorld(): TestWorld {
-  const runtime = testRuntime();
+export function testWorld(config: GameConfig = GAME_CONFIG): TestWorld {
+  const runtime = testRuntime(config);
   return {
     runtime,
     db: runtime.db,

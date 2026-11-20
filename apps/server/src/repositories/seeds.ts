@@ -50,7 +50,46 @@ export function seedsRepository(db: Db) {
     WHERE id = :id AND revealed_at IS NOT NULL
   `);
 
+  const takeNonce = db.prepare(`
+    UPDATE server_seeds SET next_nonce = next_nonce + 1
+    WHERE id = :id AND revealed_at IS NULL
+    RETURNING next_nonce - 1 AS nonce
+  `);
+  const selectForDrawing = db.prepare(
+    'SELECT seed FROM server_seeds WHERE id = :id AND revealed_at IS NULL',
+  );
+  const selectRevealedById = db.prepare(
+    'SELECT seed FROM server_seeds WHERE id = :id AND revealed_at IS NOT NULL',
+  );
+
   return {
+    /**
+     * Hands out the seed's next nonce and moves the counter on, in one
+     * statement, so no two rounds can ever get the same one.
+     */
+    takeNonce(id: number): number {
+      const row = takeNonce.get({ id });
+      if (!row) throw new Error('Seed is not active');
+      return int(row, 'nonce');
+    },
+
+    /**
+     * The active seed itself. For one purpose only: computing a pump's draw
+     * on the server. What this returns must never be sent, stored in an
+     * answer, or logged.
+     */
+    secretForDrawing(id: number): string {
+      const row = selectForDrawing.get({ id });
+      if (!row) throw new Error('Seed is not active');
+      return text(row, 'seed');
+    },
+
+    /** A seed that has been revealed, or null if it is still secret. */
+    revealedSeed(id: number): string | null {
+      const row = selectRevealedById.get({ id });
+      return row ? text(row, 'seed') : null;
+    },
+
     /** Stores a new active seed, with its nonce at 0. */
     insert(seed: { playerId: string; seed: string; seedHash: string; at: string }): void {
       insert.run({

@@ -20,6 +20,36 @@ export const clientSeedBody = z.strictObject({
   }),
 });
 
+/**
+ * The game requests. Only their shape is checked here: the right fields of
+ * the right types. Whether a bet is allowed, how many balloons a round may
+ * have, or whether a balloon exists are rules, and rules are the engine's.
+ */
+
+/** The :roundId in an address. */
+export const roundParams = z.object({
+  roundId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, { message: 'That is not a round id.' }),
+});
+
+/** POST /api/rounds */
+export const startRoundBody = z.strictObject({
+  difficultyId: z.string().min(1).max(64),
+  betsCents: z.array(z.int()).min(1).max(16),
+});
+
+/** POST /api/rounds/:roundId/pump */
+export const pumpBody = z.strictObject({
+  balloonIndex: z.int().min(0),
+  expectedDrawIndex: z.int().min(0),
+  patch: z.boolean(),
+});
+
+/** POST /api/rounds/:roundId/cash-out */
+export const cashOutBody = z.strictObject({
+  balloonIndex: z.int().min(0),
+  expectedDrawIndex: z.int().min(0),
+});
+
 /** A request that carries no data: no body at all, or an empty object. */
 export const noBody = z.union([z.undefined(), z.null(), z.strictObject({})]);
 

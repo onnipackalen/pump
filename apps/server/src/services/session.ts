@@ -1,6 +1,7 @@
 import type { HistoryResponse, SessionView } from '@pump/contract';
 import type { RoundsRepository } from '../repositories/rounds';
 import type { FairnessService } from './fairness';
+import type { GameService } from './game';
 import type { WalletService } from './wallet';
 
 export type SessionService = ReturnType<typeof sessionService>;
@@ -9,6 +10,7 @@ export type SessionService = ReturnType<typeof sessionService>;
 export function sessionService(
   wallet: WalletService,
   fairness: FairnessService,
+  game: GameService,
   rounds: RoundsRepository,
 ) {
   return {
@@ -16,9 +18,8 @@ export function sessionService(
       return {
         wallet: { balanceCents: wallet.balanceOf(playerId) },
         fairness: fairness.view(playerId),
-        // Rounds cannot be started yet: that arrives with the game service,
-        // which will fill this in so a page refresh can restore a round.
-        activeRound: null,
+        // The round in progress, so a page refresh picks up where it was.
+        activeRound: game.activeView(playerId),
       };
     },
 
@@ -35,6 +36,7 @@ export function sessionService(
           serverSeedHash: round.serverSeedHash,
           nonce: round.nonce,
           finishedAt: round.finishedAt,
+          seedRevealed: round.seedRevealed,
         })),
       };
     },

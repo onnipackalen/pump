@@ -12,6 +12,7 @@ const STATUS: Readonly<Record<ApiErrorCode, number>> = {
   not_found: 404,
   conflict: 409,
   round_active: 409,
+  seed_not_revealed: 409,
   internal_error: 500,
 };
 

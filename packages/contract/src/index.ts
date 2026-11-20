@@ -25,14 +25,17 @@
  *   POST /api/rounds/:roundId/cash-out    CashOutBody       -> ActionResult
  *   PUT  /api/fairness/client-seed        { clientSeed }    -> FairnessView
  *   POST /api/fairness/rotate                               -> RotateResult
+ *   GET  /api/rounds/:roundId/verify                        -> VerifiableRound
+ *        A finished round with everything needed to recompute it, once its
+ *        server seed is revealed. 409 "seed_not_revealed" before that.
  *
  * Errors come back as { error: ApiErrorBody }. A 409 "conflict" means the
  * balloon was not in the state the request expected; the body carries the
  * current state so the screen can catch up.
  *
  * Status codes: invalid_request 400 (422 for a reused idempotency key),
- * insufficient_funds 402, not_found 404, conflict and round_active 409,
- * internal_error 500.
+ * insufficient_funds 402, not_found 404, conflict, round_active and
+ * seed_not_revealed 409, internal_error 500.
  */
 
 /** An exact chance: num out of den. */
@@ -120,6 +123,8 @@ export interface RoundSummary {
   readonly nonce: number;
   /** ISO 8601. */
   readonly finishedAt: string;
+  /** The round's server seed has been revealed, so it can be verified now. */
+  readonly seedRevealed: boolean;
 }
 
 export interface FairnessView {
@@ -196,8 +201,52 @@ export type ApiErrorCode =
   | 'insufficient_funds'
   | 'invalid_request'
   | 'round_active'
+  | 'seed_not_revealed'
   | 'not_found'
   | 'internal_error';
+
+/** One thing done to a balloon, in the order it was done. */
+export type BalloonAction =
+  | { readonly kind: 'pump'; readonly patch: boolean }
+  | { readonly kind: 'cashOut' };
+
+/** One balloon of a finished round: what was done to it, and how it ended. */
+export interface VerifiableBalloon {
+  readonly betCents: number;
+  /** Its top rung as fixed when the round started (after the payout cap). */
+  readonly topRung: number;
+  /**
+   * Every action, in order. A balloon settled because its round was
+   * abandoned ends with a 'cashOut' if it had been pumped; a refunded one
+   * has no actions.
+   */
+  readonly actions: readonly BalloonAction[];
+  /** How it ended, as recorded and paid. The verify page checks these. */
+  readonly status: BalloonStatus;
+  readonly rung: number;
+  readonly drawIndex: number;
+  readonly patchesCents: number;
+  readonly payoutCents: number;
+}
+
+/**
+ * Everything needed to recompute a finished round in the browser: its
+ * revealed server seed, its client seed and nonce, the RTP and ladder it
+ * was played with, and each balloon's actions and recorded end state.
+ */
+export interface VerifiableRound {
+  readonly id: string;
+  readonly difficultyId: string;
+  readonly rtpBp: number;
+  readonly ladder: readonly number[];
+  readonly serverSeed: string;
+  readonly serverSeedHash: string;
+  readonly clientSeed: string;
+  readonly nonce: number;
+  /** ISO 8601. */
+  readonly finishedAt: string;
+  readonly balloons: readonly VerifiableBalloon[];
+}
 
 /** The shape of every error response. */
 export interface ApiErrorResponse {

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { ApiError } from './errors';
 import type { RouteContext } from './routes/context';
 import { fairnessRoutes } from './routes/fairness';
+import { roundRoutes } from './routes/rounds';
 import { sessionRoutes } from './routes/session';
 import type { Runtime } from './runtime';
 import { buildServices } from './services';
@@ -78,6 +79,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
   app.get('/api/health', (_request, reply) => reply.send({ status: 'ok' }));
   sessionRoutes(app, context);
   fairnessRoutes(app, context);
+  roundRoutes(app, context);
 
   return app;
 }

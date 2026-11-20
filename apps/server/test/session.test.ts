@@ -141,6 +141,7 @@ describe('GET /api/history', () => {
           serverSeedHash: session.fairness.serverSeedHash,
           nonce: 0,
           finishedAt: '2026-01-01T00:05:00.000Z',
+          seedRevealed: false,
         },
       ],
     });
