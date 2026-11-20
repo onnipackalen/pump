@@ -556,3 +556,46 @@ th {
 .num {
   text-align: right;
 }
+
+/* Sound button and the top bar's right side */
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  padding: 0;
+}
+
+.icon-btn[aria-pressed='false'] {
+  color: var(--muted);
+}
+
+/* Auto-play */
+
+.auto-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.auto-field {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+
+.auto-progress {
+  margin: 10px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn-stop {
+  border-color: var(--risk);
+  color: var(--risk);
+}

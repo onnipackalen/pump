@@ -9,6 +9,8 @@ interface BalloonCardProps {
   readonly ladder: readonly number[];
   readonly beat: Beat;
   readonly pending: boolean;
+  /** Buttons are off while auto-play is running. */
+  readonly locked: boolean;
   readonly selected: boolean;
   readonly onSelect: () => void;
   readonly onPump: () => void;
@@ -40,6 +42,7 @@ export function BalloonCard({
   ladder,
   beat,
   pending,
+  locked,
   selected,
   onSelect,
   onPump,
@@ -55,6 +58,7 @@ export function BalloonCard({
   const spent = balloon.betCents + balloon.patchesCents;
   // Only a real gain is celebrated: never a payout at or under what was spent.
   const won = balloon.status === 'cashed' && balloon.payoutCents > spent;
+  const busy = pending || locked;
 
   return (
     <article
@@ -139,13 +143,13 @@ export function BalloonCard({
 
       {isActive && (
         <div className="actions">
-          <button type="button" className="btn btn-pump" disabled={pending} onClick={onPump}>
+          <button type="button" className="btn btn-pump" disabled={busy} onClick={onPump}>
             Pump
           </button>
           <button
             type="button"
             className="btn"
-            disabled={pending || patchPrice === null}
+            disabled={busy || patchPrice === null}
             onClick={onPatchPump}
             title="Buy a Patch for this pump, then pump. If it would pop, the Patch is used up and the balloon stays."
           >
@@ -154,7 +158,7 @@ export function BalloonCard({
           <button
             type="button"
             className="btn btn-cash"
-            disabled={pending || balloon.cashOutCents === null}
+            disabled={busy || balloon.cashOutCents === null}
             onClick={onCashOut}
           >
             Cash out{balloon.cashOutCents === null ? '' : ` ${formatCents(balloon.cashOutCents)}`}
