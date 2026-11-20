@@ -1124,3 +1124,195 @@ th {
     grid-column: auto;
   }
 }
+
+/* ------------------------------------------------------------ Verify page */
+
+/* Text for screen readers only. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * The game screen never scrolls, but the verify page is for reading: it
+ * scrolls inside its own box, under the top bar.
+ */
+.verify {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.verify-inner {
+  display: grid;
+  /* minmax(0, 1fr) and min-width: 0 below let every card shrink to the
+     screen, so only a wide table scrolls sideways, inside its own box. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--gap);
+  max-width: 880px;
+  margin: 0 auto;
+  padding-block: 4px 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+.verify-inner > * {
+  min-width: 0;
+}
+
+.verify h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.verify-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.verify-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.verify-rounds {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.verify-rounds li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 4px 4px 10px;
+  border-radius: 8px;
+  background: var(--stage);
+}
+
+.verify-rounds li[data-current='true'] {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.verify-rotate {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.verify-id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.verify-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 8px 12px;
+}
+
+.verify-balloon {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.verify-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.verify input {
+  height: var(--tap);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--stage);
+}
+
+.verify-id input {
+  flex: 1 1 200px;
+  width: auto;
+}
+
+.verify input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.verify code,
+.verify .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.verify-verdict {
+  border-width: 2px;
+}
+
+.verify-verdict[data-verdict='match'] {
+  border-color: var(--accent);
+}
+
+.verify-verdict[data-verdict='mismatch'],
+.verify-verdict[data-verdict='cannot-check'] {
+  border-color: var(--error);
+}
+
+.verify-verdict ul,
+.verify-diff {
+  margin: 6px 0 0;
+  padding-left: 1.2em;
+}
+
+.verify-line {
+  margin: 8px 0 0;
+}
+
+.verify [data-ok='false'],
+.verify-diff {
+  color: var(--error);
+}
+
+.verify-table th,
+.verify-table td {
+  white-space: nowrap;
+}
+
+.verify-bytes {
+  margin-top: 8px;
+}
+
+.verify-bytes summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.verify-bytes ol {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 1.6em;
+  font-size: 12px;
+}

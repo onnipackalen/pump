@@ -11,6 +11,7 @@ import { History } from './components/History';
 import { RoundControls } from './components/RoundControls';
 import { SettingsMenu } from './components/SettingsMenu';
 import { SoundToggle } from './components/SoundToggle';
+import { VerifyPage } from './components/VerifyPage';
 import type { AutoPlaySettings } from './game/autoPlay';
 import { checkBets, type BetSetup } from './game/betSetup';
 import { useAutoPlay } from './game/useAutoPlay';
@@ -27,6 +28,13 @@ const config = GAME_CONFIG;
 
 /** How the next round is played: by hand, or by auto-play. */
 type Mode = 'manual' | 'auto';
+
+/** Which screen is showing. The verify page lives at #verify. */
+type View = 'game' | 'verify';
+
+function viewFromHash(): View {
+  return window.location.hash === '#verify' ? 'verify' : 'game';
+}
 
 /** Every game event goes to the speaker; cuesFor decides what it sounds like. */
 function playEventSound(event: GameEvent): void {
@@ -87,6 +95,8 @@ export function App() {
   const [chosen, setChosen] = useState(0);
   const [muted, setMuted] = useState(soundBoard.muted);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [view, setView] = useState<View>(viewFromHash);
+  const [verifyRoundId, setVerifyRoundId] = useState<string | null>(null);
   const motion = useMotionSetting();
   const sessionMs = useSessionClock(state.session?.startedAt ?? null);
 
@@ -128,6 +138,23 @@ export function App() {
     });
   };
 
+  /** Opens the verify page, on a round if one is given. Back returns to the game. */
+  const openVerify = (roundId: string | null): void => {
+    setVerifyRoundId(roundId);
+    setSettingsOpen(false);
+    window.location.hash = 'verify';
+  };
+  const closeVerify = (): void => {
+    window.location.hash = '';
+  };
+
+  // The browser's own Back and Forward move between the game and #verify.
+  useEffect(() => {
+    const onHashChange = (): void => setView(viewFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
   const toggleSound = (): void => {
     soundBoard.setMuted(!muted);
     setMuted(!muted);
@@ -154,6 +181,8 @@ export function App() {
         if (autoRunning) autoPlay.stop();
         return;
       }
+      // The verify page is for reading: no key there plays the game.
+      if (view === 'verify') return;
       if (event.key === 'm' || event.key === 'M') {
         if (!event.repeat) toggleSound();
         return;
@@ -266,12 +295,29 @@ export function App() {
                 onRotate={game.rotateSeed}
               />
             )}
-            <History config={config} rounds={state.history} />
+            <div className="card settings-row">
+              <span>Check a round</span>
+              <button type="button" className="btn btn-small" onClick={() => openVerify(null)}>
+                Verify
+              </button>
+            </div>
+            <History config={config} rounds={state.history} onVerify={openVerify} />
             <GameInfo config={config} autoPlay={market.autoPlay} />
           </SettingsMenu>
         </div>
       </header>
 
+      {view === 'verify' ? (
+        <VerifyPage
+          client={gameClient}
+          config={config}
+          rounds={state.history}
+          initialRoundId={verifyRoundId}
+          canRotate={!roundActive && !autoRunning && state.phase === 'ready'}
+          onRotate={game.rotateSeed}
+          onBack={closeVerify}
+        />
+      ) : (
       <main className="layout">
         <section className="stage" aria-label="Balloons">
           <div className="stage-top">
@@ -396,6 +442,7 @@ export function App() {
           </aside>
         )}
       </main>
+      )}
     </div>
   );
 }
