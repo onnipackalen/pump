@@ -658,3 +658,30 @@ Turned out wrong, and how it was caught:
 
 Still for the lead to decide: whether `replayBalloon` should be able to
 express a refund, and whether to apply the proposed ladders.
+
+## 2026-11-20: new ladders applied, and ladders made cheap to change
+
+The lead said yes to the proposed ladders (the entry "ladder redesign,
+proposed and not applied" has the numbers). They are in `config.ts` now
+(23cc9b5): Easy 32 rungs to 50x, Medium 20 to 100x, Hard 15 to 1,000x,
+Expert 10 to 5,000x. The whole suite and `npm run rtp` pass at 9400, 9700
+and 9900.
+
+Turned out wrong, and how it was caught:
+
+- Changing four arrays turned 38 tests red, though nothing was wrong. The
+  tests quoted numbers from the live ladders. Caught by trying the new
+  ladders on a separate working copy first. The lead expects to tune the
+  ladders many times, so those tests now use fixed ladders kept in
+  `packages/engine/test/fixtures.ts` (5c6babf). A ladder change is now one
+  edit in `config.ts` and one run of `npm run rtp`.
+- `game-spec.json` held a second copy of the ladders and of numbers worked
+  out from them. Caught the same way. The copies are gone (9ba5867).
+- I started a three-reviewer check of the ladders, and the lead stopped it
+  as too much for numbers that will change again. It was cancelled. The
+  exact checks that did run are the ones above.
+
+Known and not done: the math document on Claude Docs still shows the old
+ladders in its examples and tables; it will be redone once the ladders
+settle. The rule that the pop chance rises holds from an RTP of 93.59%
+with these ladders (91.91% before), so 94% starts and 93% does not.
