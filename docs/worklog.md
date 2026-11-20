@@ -609,3 +609,27 @@ roll outside its range throws a RangeError and not an EngineError; and
 - Still open: the page's independent review was stopped before it
   finished; CheckedDraw.message is the block-0 message, so the page
   rebuilds the message for the rare roll from block 1 or later.
+
+## 2026-11-20: engine comments and one test, after the second engine review
+
+A second review of the engine (five reviewers, each claim checked again by
+a skeptic) found no wrong number and no return above the RTP: every chance,
+6.6 million payouts, 18.6 million Patch prices and a best-strategy search,
+at 9400, 9700 and 9900. The engine tests added earlier today (the entry
+"engine tests after an independent review") are committed as 7e05f16.
+
+Turned out wrong, all in comments and one test, all caught by that review:
+
+- PumpEngine.ts is the file the brief names, and it held no formula, only a
+  line pointing at math.ts. Its header now has the math in short, and the
+  README says which file to read first.
+- The comment on cash-out gave a reason the project spec had dropped, and
+  the header said "one to three balloons" where the config sets the number.
+- The test that pins the worst rounding cases made its percentage with an
+  ordinary number. Easy's worst Patch is exactly 50.045%, which only came
+  out as 50.05 by luck. It is now rounded in whole numbers.
+
+No engine code changed. Still for the lead to decide, unchanged from the
+entry above: whether to refuse an RTP of 100% or more at boot, and whether
+`replayBalloon` should be able to express a refund (the server and the
+verify page work round that today).
