@@ -17,12 +17,15 @@
     "rtp": "npm run rtp --workspace @pump/engine",
     "sim": "npm run sim --workspace @pump/engine",
     "hammer": "npm run hammer --workspace @pump/server",
-    "dev:server": "npm run dev --workspace @pump/server"
+    "dev:server": "npm run dev --workspace @pump/server",
+    "dev:web": "npm run dev --workspace @pump/web",
+    "build": "npm run build --workspace @pump/web"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.6",
     "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.73.0",
