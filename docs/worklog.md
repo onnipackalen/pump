@@ -298,3 +298,14 @@ the game's own code. The engine was committed before anyone who did not
 write it had reviewed it; that review has been asked for. A gentler set of
 ladders is still being worked out; the ladders in `config.ts` are
 unchanged.
+
+## 2026-11-20: the screen uses the engine's math
+
+- The bet panel's preview and the demo game now import the math from
+  `@pump/engine`, and `apps/web/src/demo/placeholderMath.ts` is deleted
+  (3338cb2). The demo still draws with the browser's random source, not
+  the seeds, until the server is connected.
+- Nothing turned out wrong: the stand-in had matched every test vector in
+  `game-spec.json`, and all tests passed unchanged after the swap. The
+  one-screen layout was re-checked at its worst cases (3 balloons on the
+  Auto tab at 320x568 and 360x640): no scrolling.
