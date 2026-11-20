@@ -49,18 +49,29 @@ describe('limits', () => {
   });
 });
 
+/** The four difficulties the brief names. More may be added in config; these must stay. */
+const NAMED = ['easy', 'medium', 'hard', 'expert'] as const;
+
+function ladderOf(id: string): readonly number[] {
+  const difficulty = DIFFICULTIES.find((d) => d.id === id);
+  if (!difficulty) throw new Error(`no ${id} ladder`);
+  return difficulty.ladder;
+}
+
 describe('difficulties', () => {
-  it('are Easy, Medium, Hard and Expert, each with its own id', () => {
-    expect(DIFFICULTIES.map((d) => d.id)).toEqual(['easy', 'medium', 'hard', 'expert']);
+  it('include Easy, Medium, Hard and Expert, and every id is used once', () => {
+    const ids = DIFFICULTIES.map((d) => d.id);
+    expect(ids).toEqual(expect.arrayContaining([...NAMED]));
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('go from the longest ladder (Easy) to the shortest (Expert)', () => {
-    const lengths = DIFFICULTIES.map((d) => d.ladder.length);
+    const lengths = NAMED.map((id) => ladderOf(id).length);
     expect(lengths).toEqual([...lengths].sort((a, b) => b - a));
     expect(new Set(lengths).size).toBe(lengths.length);
   });
 
-  it('Easy has the smallest steps: its biggest jump is smaller than any other ladder’s biggest', () => {
+  it('Easy has the smallest steps: its biggest jump is smaller than the other three’s biggest', () => {
     // Biggest step of a ladder, as the exact fraction next / previous.
     const biggestStep = (ladder: readonly number[]): [bigint, bigint] => {
       let best: [bigint, bigint] = [1n, 1n];
@@ -70,16 +81,13 @@ describe('difficulties', () => {
       }
       return best;
     };
-    const [easy, ...others] = DIFFICULTIES;
-    if (!easy) throw new Error('no easy ladder');
-    for (const other of others) {
-      expect(lessOrEqual(biggestStep(easy.ladder), biggestStep(other.ladder))).toBe(true);
+    for (const other of ['medium', 'hard', 'expert']) {
+      expect(lessOrEqual(biggestStep(ladderOf('easy')), biggestStep(ladderOf(other)))).toBe(true);
     }
   });
 
   it('Expert tops out at 5,000x or more', () => {
-    const expert = DIFFICULTIES.find((d) => d.id === 'expert');
-    expect(expert?.ladder.at(-1)).toBeGreaterThanOrEqual(500_000);
+    expect(ladderOf('expert').at(-1)).toBeGreaterThanOrEqual(500_000);
   });
 });
 
@@ -93,7 +101,9 @@ describe.each(DIFFICULTIES)('$id ladder', ({ ladder }) => {
 
   it('pays its top prize in full at the minimum bet', () => {
     const top = ladder.at(-1) ?? 0;
-    expect((top * LIMITS.minBetCents) / 100).toBeLessThanOrEqual(LIMITS.maxPayoutCents);
+    expect(BigInt(top) * BigInt(LIMITS.minBetCents)).toBeLessThanOrEqual(
+      BigInt(LIMITS.maxPayoutCents) * 100n,
+    );
   });
 
   it('lets the maximum bet reach at least the first rung under the payout cap', () => {
