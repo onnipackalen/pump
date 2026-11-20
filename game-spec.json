@@ -9,7 +9,7 @@
     "configBp": 9700,
     "note": "RTP enters the math in two places: the first pump's survival chance, rtpBp / (100 * ladder[0]), and every Patch price, which is divided by rtpBp.",
     "mustPassAtBp": [9400, 9700, 9900],
-    "popChanceRisesEveryPumpFromBp": 9191
+    "popChanceMustRise": "Checked at start-up for the configured RTP and the ladders in use. The lowest RTP that passes depends on the ladders, so it is not copied here."
   },
 
   "money": {
@@ -28,24 +28,7 @@
   },
 
   "ladderUnit": "multiplier x 100 (101 = 1.01x)",
-  "difficulties": [
-    {
-      "id": "easy",
-      "ladder": [101, 111, 123, 137, 153, 171, 192, 216, 244, 277, 316, 362, 416, 480, 555, 645, 752, 881, 1040, 1230, 1460, 1740, 2080, 2500]
-    },
-    {
-      "id": "medium",
-      "ladder": [106, 125, 148, 178, 218, 271, 342, 440, 575, 765, 1040, 1435, 2020, 2900, 4250, 6350, 9700, 15000]
-    },
-    {
-      "id": "hard",
-      "ladder": [120, 163, 228, 330, 490, 755, 1210, 2000, 3450, 6200, 11600, 22800, 47000, 100000]
-    },
-    {
-      "id": "expert",
-      "ladder": [150, 255, 465, 920, 2000, 4750, 12500, 37500, 125000, 500000]
-    }
-  ],
+  "difficulties": "The live ladders are in packages/engine/src/config.ts (DIFFICULTIES) and nowhere else. They are tuned often, so this file does not copy them. `npm run rtp` prints every rung, chance and worst case for the ladders in use.",
 
   "rules": {
     "rung": "A balloon at rung k (k = times it has moved up) shows multiplier ladder[k-1] / 100. Rung 0 has no cash-out. A pump saved by a Patch uses a draw but does not change the rung.",
@@ -75,10 +58,10 @@
   ],
 
   "proof": [
-    "Patch price needs BigInt: the numerator exceeds 2^53 (9.375e15 for a 2000c bet at expert rung 9). Never compute it as a float ceil(p * B * m / R); that overcharges by a cent in thousands of bet/rung cases.",
+    "Patch price needs BigInt: the numerator can exceed 2^53 (for example 2.4e17 for a 100000c bet going from 59x to 100x). Never compute it as a float ceil(p * B * m / R); that overcharges by a cent in thousands of bet/rung cases.",
     "Assert 'Patch never over RTP' against the exact, unrounded value of the saved balloon (popChance * bet * multiplier), not its floored cash-out: pumping on can be worth more than the floored cash-out.",
     "Scan every legal bet (10 to 100000 cents) on every rung and report the worst cash-out RTP and worst Patch RTP with the bet where each occurs. Small bets fall well under RTP from cent rounding; that is allowed and must be shown, not hidden. Do not gate Patches by bet size.",
-    "Worst cases at 9700: cash-out 90.99% (easy, 13c, rung 3), 91.51% (medium, 10c, rung 1), 91.97% (hard, 11c, rung 2), 94.06% (expert, 11c, rung 1); Patch 50.05% (easy, 11c, pump 2), 64.75% (medium, 10c, pump 3), 79.14% (hard, 10c, pump 2), 84.93% (expert, 11c, pump 2).",
+    "The worst cases for the ladders in use are printed by `npm run rtp`, not copied here. They sit at the smallest bets, where one cent is a large share of the amount.",
     "No strategy beats RTP: expected money returned is at most RTP times expected money paid, short by under one cent per rounded amount, and exactly equal when nothing is rounded (whole-dollar bets, no Patch). Refunded bets are void and count on neither side."
   ],
 
@@ -88,6 +71,13 @@
   ],
 
   "testVectors": {
+    "note": "Computed on the fixed test ladders below (the same ones as packages/engine/test/fixtures.ts), not on the live ladders, so they stay true when the live ladders are tuned.",
+    "ladders": {
+      "easy": [101, 111, 123, 137, 153, 171, 192, 216, 244, 277, 316, 362, 416, 480, 555, 645, 752, 881, 1040, 1230, 1460, 1740, 2080, 2500],
+      "medium": [106, 125, 148, 178, 218, 271, 342, 440, 575, 765, 1040, 1435, 2020, 2900, 4250, 6350, 9700, 15000],
+      "hard": [120, 163, 228, 330, 490, 755, 1210, 2000, 3450, 6200, 11600, 22800, 47000, 100000],
+      "expert": [150, 255, 465, 920, 2000, 4750, 12500, 37500, 125000, 500000]
+    },
     "rtpBp": 9700,
     "surviveFraction": [
       { "difficulty": "easy", "pump": 1, "num": 97, "den": 101 },
