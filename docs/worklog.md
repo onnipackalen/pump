@@ -75,3 +75,65 @@ Turned out wrong, and how it was caught:
 Not done yet: the real HTTP client (needs the server), swapping
 `placeholderMath.ts` for the engine, auto-play, sound, the verify page, the
 pop and cash-out graphics, and a session time and net result display.
+
+## 2026-11-20: one screen, background and settings (branch `one-screen-layout`)
+
+Built in `apps/web/src`, on the branch `one-screen-layout`, in its own
+worktree. Not merged into main: another chat was fixing review bugs in the
+same files at the same time, and the look has not been approved yet.
+
+- The game is one screen that never scrolls. The page is a fixed, clipped
+  box: top bar, balloons, one control panel. The balloons take the room the
+  panel leaves, so they shrink before anything is pushed off the screen.
+- One control panel, showing only what the next tap needs: the bet before a
+  round (Manual and Auto are tabs), the picked balloon's three buttons
+  during a round (`RoundControls.tsx`), and progress with Stop while
+  auto-play runs. Each balloon shows two lines under it: its multiplier and
+  the money that goes with it.
+- The hint paragraphs are gone from the game screen. A capped bet shows its
+  top inside the bet box, before the round starts.
+- A settings button is always in the top bar (`SettingsMenu.tsx`, a native
+  dialog). It holds sound, the provably fair panel, the last 10 rounds, and
+  a new game info section (`GameInfo.tsx`): rules, limits, RTP and keys,
+  all read from config.
+- The background (`background.css`): a dusk glow, two far hills and a floor
+  with a horizon line, drawn with gradients and one inline drawing. Nothing
+  moves and nothing in it changes with the round.
+- The Cash out button lost its mint border. Mint is only for a real win.
+
+Checked in the browser with a script that measures every element and also
+tries to scroll the page by code. Bet screen (3 balloons, every bet
+capped), Auto tab, a live round and a finished round, at 1920x1080,
+1440x900, 1366x768, 1280x720, 1024x768, 1024x600, 768x1024, 430x932,
+412x915, 390x844, 375x667, 360x640, 320x568, and sideways at 932x430,
+844x390, 667x375 and 640x360. Nothing off screen, no clipped text, no
+scrolling.
+
+Turned out wrong, and how it was caught:
+
+- With `overflow: hidden` the page could still be scrolled by code. A test
+  click on the settings button scrolled the whole game sideways. Caught
+  from the screenshot. The page now uses `overflow: clip`, which cannot be
+  scrolled at all, and the size check tries to scroll it.
+- The first background had rings centred on the stage. With three balloons
+  they circled the middle one and looked like a selection. Caught on a
+  phone screenshot. Removed; the glow is now wide and even.
+- The background is drawn wider than the stage, and on a sideways phone it
+  painted over the Start button. Caught on a 568x320 screenshot. The panel
+  now sits above the scene.
+- "$1,000.00" under a balloon spilled into the next balloon on narrow
+  screens. Caught by the size check's clipped-text test. The number size is
+  now the slot width divided by the number of characters.
+- After an auto-play run, its result line pushed the panel past the screen
+  at 375x667 with three balloons. Caught by running auto-play and measuring
+  again. The result now takes the place of the ladder line.
+
+Known limits:
+
+- A phone held sideways and narrower than 640px (568x320) with three
+  balloons: the control panel scrolls inside itself. The page still does
+  not. The same happens if several bets show an error at once on the
+  smallest phones.
+- On sideways phones the half and double buttons are left out to make room.
+- Checked in Chromium only. `overflow: clip` and container units need
+  Safari 16 or newer. Not tried in Safari or on a real phone.
