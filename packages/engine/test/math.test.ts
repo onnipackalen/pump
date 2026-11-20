@@ -212,6 +212,11 @@ describe('patchPriceCents', () => {
     expect(patchPriceCents(9700, [1_000_000_007, 20_000_000_011], 70_571, 2)).toBe(
       691_159_282_955,
     );
+    // A second one, found by the review: 0.00004 above a whole cent, where
+    // ordinary numbers give ...665.
+    expect(patchPriceCents(9700, [1_295_455_190, 1_811_452_306], 72_451, 2)).toBe(
+      275_622_974_666,
+    );
   });
 
   describe.each(DIFFICULTIES)('$id', ({ ladder }) => {
@@ -247,8 +252,13 @@ describe('patchPriceCents', () => {
 describe('rounding only ever costs the player', () => {
   // The worst cases at 97%, as the README reports them. They sit at the
   // smallest bets, where one cent is a large share of the amount.
-  const percent = (top: bigint, bottom: bigint): string =>
-    (Number((top * 1_000_000n) / bottom) / 10_000).toFixed(2);
+  // A percentage with two decimals, rounded to the nearest (a tie goes up),
+  // worked out in whole numbers. Easy's worst Patch is exactly 50.045%, a tie
+  // that an ordinary number only rounds the right way by luck.
+  const percent = (top: bigint, bottom: bigint): string => {
+    const hundredths = (top * 20_000n + bottom) / (2n * bottom);
+    return `${String(hundredths / 100n)}.${String(hundredths % 100n).padStart(2, '0')}`;
+  };
 
   it.each([
     ['easy', '90.99', 13, 3],
