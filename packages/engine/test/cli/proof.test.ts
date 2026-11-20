@@ -20,15 +20,15 @@ import {
 } from '../../cli/proof';
 import { DIFFICULTIES, LIMITS, RTP_BP } from '../../src/config';
 import { cashOutCents, patchPriceCents, surviveChance } from '../../src/math';
+import { fixedLadder } from '../fixtures';
 
 /** The three RTP values reviewers will try, plus whatever is configured now. */
 const RTPS = [...new Set([9400, 9700, 9900, RTP_BP])];
 
-const ladderOf = (id: string): readonly number[] => {
-  const found = DIFFICULTIES.find((d) => d.id === id);
-  if (!found) throw new Error(`no difficulty ${id}`);
-  return found.ladder;
-};
+// Exact numbers are pinned against the fixed ladders in fixtures.ts, so tuning
+// the live ladders never touches them. The loops over DIFFICULTIES below check
+// the live ladders.
+const ladderOf = fixedLadder;
 
 /** Every cent up to $30, then steps that miss round numbers, then the limits. */
 const BETS: readonly number[] = [

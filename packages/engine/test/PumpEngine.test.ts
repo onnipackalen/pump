@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_CONFIG, RTP_BP, type GameConfig } from '../src/config';
+import { RTP_BP, type GameConfig } from '../src/config';
 import {
   cashOut,
   EngineError,
@@ -16,10 +16,13 @@ import {
   type ReplayDraw,
   type Round,
 } from '../src/PumpEngine';
+import { fixedConfig, fixedLadder } from './fixtures';
 
 /** The three RTP values reviewers will try, plus whatever is configured now. */
 const RTPS = [...new Set([9400, 9700, 9900, RTP_BP])];
-const at = (rtpBp: number): GameConfig => ({ ...GAME_CONFIG, rtpBp });
+// The rounds here are played on the fixed ladders in fixtures.ts, so the exact
+// numbers below do not move when the live ladders are tuned.
+const at = (rtpBp: number): GameConfig => fixedConfig(rtpBp);
 const CONFIG = at(9700);
 const RICH = 1_000_000_000;
 
@@ -112,7 +115,7 @@ describe('startRound', () => {
     expect(costCents).toBe(102_010);
     expect(round.difficultyId).toBe('expert');
     expect(round.rtpBp).toBe(9700);
-    expect(round.ladder).toEqual(GAME_CONFIG.difficulties.find((d) => d.id === 'expert')?.ladder);
+    expect(round.ladder).toEqual(fixedLadder('expert'));
     const fresh = { status: 'active', rung: 0, drawIndex: 0, patchesCents: 0, payoutCents: 0 };
     expect(round.balloons).toEqual([
       { ...fresh, betCents: 2000, topRung: 10 },

@@ -108,8 +108,10 @@ code the server uses.
 
 Same server seed and client seed as above, nonce 3, balloon 0. Easy
 difficulty, RTP 97%. The round's ladder starts 101, 111, 123 (1.01x, 1.11x,
-1.23x). In every draw below the first of the 8 numbers is below the limit,
-so only that one is shown.
+1.23x). That is the ladder saved with this round. The game's ladders can be
+tuned later, and a round is always checked with its own saved copy, so your
+own rounds may show other multipliers. In every draw below the first of the
+8 numbers is below the limit, so only that one is shown.
 
 1. **First press.** Rung 0, trying for rung 1. Draw index 0. Survival chance
    9700 / 10100, which is 97/101. `limit = 4,294,967,228`, as above.

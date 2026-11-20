@@ -12,6 +12,7 @@ import {
   surviveChance,
   topRungForBet,
 } from '../src/math';
+import { fixedConfig, fixedLadder } from './fixtures';
 
 // These tests redo the arithmetic in their own BigInt code, so that a mistake
 // in math.ts cannot hide behind the same mistake in a test.
@@ -19,11 +20,10 @@ import {
 /** The three RTP values reviewers will try, plus whatever is configured now. */
 const RTPS = [...new Set([9400, 9700, 9900, RTP_BP])];
 
-const ladderOf = (id: string): readonly number[] => {
-  const found = DIFFICULTIES.find((d) => d.id === id);
-  if (!found) throw new Error(`no difficulty ${id}`);
-  return found.ladder;
-};
+// Exact numbers are pinned against the fixed ladders in fixtures.ts, so tuning
+// the live ladders never touches them. The live ladders are covered by every
+// test that loops over DIFFICULTIES or uses GAME_CONFIG.
+const ladderOf = fixedLadder;
 
 function gcd(a: bigint, b: bigint): bigint {
   return b === 0n ? a : gcd(b, a % b);
@@ -250,8 +250,9 @@ describe('patchPriceCents', () => {
 });
 
 describe('rounding only ever costs the player', () => {
-  // The worst cases at 97%, as the README reports them. They sit at the
-  // smallest bets, where one cent is a large share of the amount.
+  // The worst cases at 97% on the fixed ladders. They sit at the smallest
+  // bets, where one cent is a large share of the amount. `npm run rtp` prints
+  // the same figures for the live ladders.
   // A percentage with two decimals, rounded to the nearest (a tie goes up),
   // worked out in whole numbers. Easy's worst Patch is exactly 50.045%, a tie
   // that an ordinary number only rounds the right way by luck.
@@ -348,7 +349,7 @@ describe('boot checks', () => {
     expect(ladderProblems(9190, ladderOf('easy'), LIMITS)).toEqual([
       'pump 2 is not riskier than pump 1 at this RTP',
     ]);
-    expect(() => assertValidConfig({ ...GAME_CONFIG, rtpBp: 9100 })).toThrow(/easy: pump 2/);
+    expect(() => assertValidConfig(fixedConfig(9100))).toThrow(/easy: pump 2/);
   });
 
   it('refuse an RTP at or above the first multiplier', () => {

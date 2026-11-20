@@ -18,7 +18,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   cashOut,
-  DIFFICULTIES,
   GAME_CONFIG,
   pump,
   RTP_BP,
@@ -40,6 +39,7 @@ import {
   type ClaimedBalloon,
   type RoundRecord,
 } from '@pump/engine/fair';
+import { fixedLadder } from '../fixtures';
 
 /** The three RTP values reviewers will try, plus whatever is configured now. */
 const RTPS = [...new Set([9400, 9700, 9900, RTP_BP])];
@@ -637,8 +637,9 @@ describe('records that are wrong but of the right types', () => {
 describe('the docs/fairness.md worked round with a Patch save', () => {
   // Server seed and client seed from the doc, nonce 3, balloon 0, Easy, RTP 97%.
   const DOC_SEED = 'a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14';
-  const easy = DIFFICULTIES.find((d) => d.id === 'easy');
-  if (easy === undefined) throw new Error('no easy ladder');
+  // A round keeps its own copy of the ladder it was played with, so the doc's
+  // round verifies whatever the live ladders are today. This is that copy.
+  const easy = { ladder: fixedLadder('easy') };
   // The doc gives no bet: it only changes the Patch price and the top rung.
   // 100 cents never meets the cap on Easy, so its top rung is the ladder's end.
   // Patch for pump 2: ceil(100 * 101 * (111 - 101) * 100 / (111 * 9700)) = ceil(9.38) = 10.
