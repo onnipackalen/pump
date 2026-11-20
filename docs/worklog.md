@@ -26,6 +26,16 @@ Turned out wrong, and how it was caught:
   work without their script (checked by running tsx, Vitest and a Vite
   build), so they are recorded as denied in `allowScripts`. Anything that
   compiles native code later will need an explicit approval there.
+- Session worktrees are created under `.claude/worktrees/` inside this
+  folder, and `npm run lint` from the main checkout started linting those
+  copies too. Caught by listing the git worktrees and counting them in
+  ESLint's debug output. `.claude/` is now ignored by ESLint.
+- The briefs for the parallel sessions said survive fractions are used
+  unreduced (9700/10100). `game-spec.json`, the approved math spec, says
+  reduced (97/101). The two give different rolls, so a round verified one
+  way would not match the other. Caught by reading the spec when it appeared
+  in the folder, before any engine code was merged. The engine and fair
+  sessions were told to use reduced fractions.
 - The purity guards were checked with a throwaway file that imported
   `node:fs` and used `console`, `Math.random`, `Date` and `any`. The compiler
   and the linter rejected all of it. The file was deleted, not committed.
