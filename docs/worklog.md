@@ -39,3 +39,39 @@ Turned out wrong, and how it was caught:
 - The purity guards were checked with a throwaway file that imported
   `node:fs` and used `console`, `Math.random`, `Date` and `any`. The compiler
   and the linter rejected all of it. The file was deleted, not committed.
+
+## 2026-11-20: web interface, first pass
+
+Built, all in `apps/web`:
+
+- `api/contract.ts`: a proposal for the API, written from what the screen
+  needs: endpoints, response shapes, error codes. Money in cents, chances as
+  exact fractions, a 409 carries the current state. To move into a shared
+  package once the server exists.
+- `demo/DemoClient.ts`: plays the game in the browser so the screen can be
+  clicked before the server is written. Not provably fair, resets on
+  refresh, badged "Demo" on screen. `demo/placeholderMath.ts` holds the few
+  rules it needs until the engine exports them; checked against every test
+  vector in `game-spec.json` with a throwaway test.
+- The game screen: bet panel (difficulty, 1 to 3 balloons, a bet each, a
+  cap warning before the round starts), balloon cards with multiplier,
+  cash-out value, pop chance and Patch price, last 10 rounds, the provably
+  fair panel, keyboard play, and a phone layout. The balloon art is copied
+  from `graphics/balloon`; pop and cash-out use stand-in CSS.
+- Each action sends a new idempotency key and the balloon's expected draw
+  index. Wins are coloured only when the payout beats the bet plus Patches.
+
+Turned out wrong, and how it was caught:
+
+- After the picked balloon popped, Space pumped the next live balloon
+  instead, so a player could risk a bet they never chose. Caught while
+  playing a 3-balloon round in the browser. Keys now act only on the picked
+  balloon, and held keys don't repeat.
+- The contract had the server choosing the first client seed, and the
+  screen read a round's ladder from the current config. Caught by reading
+  7e79187, which locked both rules from another chat mid-session. Fixed in
+  185f62f.
+
+Not done yet: the real HTTP client (needs the server), swapping
+`placeholderMath.ts` for the engine, auto-play, sound, the verify page, the
+pop and cash-out graphics, and a session time and net result display.
