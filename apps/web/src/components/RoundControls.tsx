@@ -1,6 +1,7 @@
 import type { BalloonView } from '../api/contract';
 import { riskStep } from '../game/risk';
 import { formatCents, formatChance, formatMultiplier } from '../money';
+import { HoldButton } from './HoldButton';
 
 interface RoundControlsProps {
   /** The balloon the buttons act on, or null if the picked one is over. */
@@ -10,15 +11,23 @@ interface RoundControlsProps {
    * it, so the big button here pumps them all.
    */
   readonly multi: boolean;
-  /** A request for this balloon is on its way. */
+  /**
+   * A request for this balloon is on its way, or the controls just moved to
+   * it from a balloon that ended: Cash out and Patch + Pump wait.
+   */
   readonly pending: boolean;
+  /** Pumps the picked balloon once (from the keyboard). */
   readonly onPump: () => void;
+  /** Pumps the picked balloon, again and again while held. */
+  readonly onPumpHold: () => void;
   readonly onPatchPump: () => void;
   readonly onCashOut: () => void;
-  /** How many balloons are still in play with no request on its way. */
-  readonly pumpableCount: number;
-  /** Pumps every balloon still in play, each as its own pump. */
+  /** How many balloons are still in play. */
+  readonly liveCount: number;
+  /** Pumps every balloon still in play once, each as its own pump. */
   readonly onPumpAll: () => void;
+  /** The same, again and again while held. */
+  readonly onPumpAllHold: () => void;
 }
 
 /**
@@ -30,16 +39,19 @@ interface RoundControlsProps {
  *
  * Each balloon has its own Pump button under it (BalloonCard). So with one
  * balloon the big button is Pump, and with two or three it is Pump all.
+ * Either one keeps pumping while it is held down.
  */
 export function RoundControls({
   balloon,
   multi,
   pending,
   onPump,
+  onPumpHold,
   onPatchPump,
   onCashOut,
-  pumpableCount,
+  liveCount,
   onPumpAll,
+  onPumpAllHold,
 }: RoundControlsProps) {
   const next = balloon?.next ?? null;
   const patchPrice = next?.patchPriceCents ?? null;
@@ -94,26 +106,28 @@ export function RoundControls({
           <span>Patch + Pump</span>
           <strong>{patchPrice === null ? '—' : formatCents(patchPrice)}</strong>
         </button>
+        {/* Never greyed out while a pump is on its way, so a hold doesn't
+            flash; a press that comes too soon is ignored by the game. */}
         {multi ? (
-          <button
-            type="button"
+          <HoldButton
             className="btn btn-primary"
-            disabled={pumpableCount === 0}
-            onClick={onPumpAll}
-            title="Pump every balloon still in play (A)"
+            disabled={liveCount === 0}
+            onHoldStart={onPumpAllHold}
+            onPress={onPumpAll}
+            title="Pump every balloon still in play (A). Hold to keep pumping."
           >
             Pump all
-          </button>
+          </HoldButton>
         ) : (
-          <button
-            type="button"
+          <HoldButton
             className="btn btn-primary"
-            disabled={off}
-            onClick={onPump}
-            title="Pump (Space)"
+            disabled={balloon === null}
+            onHoldStart={onPumpHold}
+            onPress={onPump}
+            title="Pump (Space). Hold to keep pumping."
           >
             Pump
-          </button>
+          </HoldButton>
         )}
       </div>
     </section>

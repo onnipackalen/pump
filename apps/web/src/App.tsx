@@ -1,5 +1,5 @@
 import { GAME_CONFIG } from '@pump/engine';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { gameClient } from './api';
 import type { RoundView } from './api/contract';
 import { AutoPlayPanel } from './components/AutoPlayPanel';
@@ -13,8 +13,10 @@ import { SettingsMenu } from './components/SettingsMenu';
 import { SoundToggle } from './components/SoundToggle';
 import type { AutoPlaySettings } from './game/autoPlay';
 import { checkBets, type BetSetup } from './game/betSetup';
+import { controlTarget, SWITCH_PAUSE_MS } from './game/controls';
 import { useAutoPlay } from './game/useAutoPlay';
 import { useGame, type GameEvent } from './game/useGame';
+import { useHoldPump } from './game/useHoldPump';
 import { useSessionClock } from './game/useSessionClock';
 import { roundWinTier } from './game/winTier';
 import { market } from './market';
@@ -31,17 +33,6 @@ type Mode = 'manual' | 'auto';
 /** Every game event goes to the speaker; cuesFor decides what it sounds like. */
 function playEventSound(event: GameEvent): void {
   for (const toPlay of cuesFor(event)) soundBoard.play(toPlay.cue, toPlay.height, toPlay.delay);
-}
-
-/**
- * The balloon the buttons and keys act on: the one the player picked, if it
- * is still in play. It never jumps to another balloon by itself; otherwise
- * a tap or a Space meant for a balloon that just popped would pump a
- * different one.
- */
-function keyboardTarget(round: RoundView | null, chosen: number): number | null {
-  if (!round || round.status !== 'active') return null;
-  return round.balloons[chosen]?.status === 'active' ? chosen : null;
 }
 
 function isTyping(target: EventTarget | null): boolean {
@@ -76,7 +67,29 @@ const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown
  * while auto-play runs. Everything else is in settings.
  */
 export function App() {
-  const game = useGame(gameClient, playEventSound);
+  // The balloon the player picked. The controls act on it while it is in
+  // play, then move on to the next one (see controlTarget).
+  const [chosen, setChosen] = useState(0);
+  // True for a moment after the controls moved on (SWITCH_PAUSE_MS).
+  const [switchPause, setSwitchPause] = useState(false);
+  const pauseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(pauseTimer.current), []);
+
+  const onGameEvent = (event: GameEvent): void => {
+    playEventSound(event);
+    // The picked balloon just popped or cashed out: move the controls to the
+    // next one still in play, and pause them for a moment.
+    if (event.kind !== 'pump' && event.kind !== 'cash-out') return;
+    if (event.balloon.status === 'active' || event.balloon.index !== chosen) return;
+    const next = controlTarget(event.round, chosen);
+    if (next === null) return;
+    setChosen(next);
+    clearTimeout(pauseTimer.current);
+    setSwitchPause(true);
+    pauseTimer.current = setTimeout(() => setSwitchPause(false), SWITCH_PAUSE_MS);
+  };
+
+  const game = useGame(gameClient, onGameEvent);
   const { state } = game;
   const autoPlay = useAutoPlay(game.actions);
   const [setup, setSetup] = useState<BetSetup>({
@@ -84,7 +97,6 @@ export function App() {
     bets: ['1.00'],
   });
   const [mode, setMode] = useState<Mode>('manual');
-  const [chosen, setChosen] = useState(0);
   const [muted, setMuted] = useState(soundBoard.muted);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const motion = useMotionSetting();
@@ -102,7 +114,7 @@ export function App() {
   const autoRunning = autoPlay.status.running;
   const balance = state.wallet?.balanceCents ?? 0;
   const check = checkBets(setup, config.limits, balance);
-  const target = autoRunning ? null : keyboardTarget(round, chosen);
+  const target = autoRunning ? null : controlTarget(round, chosen);
   const targetBalloon = target === null ? null : (round?.balloons[target] ?? null);
   const setupDifficulty =
     config.difficulties.find((d) => d.id === setup.difficultyId) ?? config.difficulties[0];
@@ -110,18 +122,27 @@ export function App() {
   // What the panel shows: Stop while auto-play runs, the round's buttons
   // during a round played by hand, and the bet otherwise.
   const panel = autoRunning ? 'auto-running' : roundActive ? 'round' : 'bet';
-  // The balloons a tap can pump right now: the round is played by hand, the
-  // balloon is still in play, and no request for it is on its way.
-  const pumpable =
+  // The balloons still in play in a round played by hand.
+  const live =
     panel === 'round' && round
-      ? round.balloons
-          .filter((b) => b.status === 'active' && !(state.pending[b.index] ?? false))
-          .map((b) => b.index)
+      ? round.balloons.filter((b) => b.status === 'active').map((b) => b.index)
       : [];
+  // Holding a Pump button, Space or A keeps pumping.
+  const hold = useHoldPump(round, state.pending, game.pump, panel === 'round');
 
-  /** Pump all: one ordinary pump per balloon still in play, each its own draw. */
+  /**
+   * Pump all: one ordinary pump per balloon still in play, each its own
+   * draw. A balloon whose last pump is still on its way is left out.
+   */
   const pumpAll = (): void => {
-    for (const index of pumpable) game.pump(index, false);
+    for (const index of live) game.pump(index, false);
+  };
+
+  const holdOne = (index: number): void => {
+    if (round) hold.start({ kind: 'one', roundId: round.id, index }, 'pointer');
+  };
+  const holdAll = (): void => {
+    if (round) hold.start({ kind: 'all', roundId: round.id }, 'pointer');
   };
 
   const start = (): void => {
@@ -156,10 +177,17 @@ export function App() {
     };
   }, []);
 
-  // Keyboard play. Held keys don't repeat: one press is one action.
+  // Keyboard play. The keyboard's own repeats are ignored: one press is one
+  // action, except that holding Space or A keeps pumping (the hold sends
+  // each pump after the last answer, like holding a Pump button). The key
+  // coming up ends the hold. Space, P and C wait out the pause after the
+  // controls move to another balloon.
   // While auto-play runs, only Esc (stop) and M (sound) do anything.
   // While settings is open, no key plays the game: Esc closes the sheet.
   useEffect(() => {
+    function onKeyUp(event: KeyboardEvent): void {
+      if (event.key === ' ' || event.key === 'a' || event.key === 'A') hold.stop();
+    }
     function onKeyDown(event: KeyboardEvent): void {
       if (settingsOpen) return;
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
@@ -181,19 +209,21 @@ export function App() {
       switch (event.key) {
         case ' ':
           event.preventDefault();
-          if (!event.repeat && target !== null) game.pump(target, false);
+          if (!event.repeat && target !== null && !switchPause && round) {
+            hold.start({ kind: 'one', roundId: round.id, index: target }, 'key');
+          }
           break;
         case 'p':
         case 'P':
-          if (!event.repeat && target !== null) game.pump(target, true);
+          if (!event.repeat && target !== null && !switchPause) game.pump(target, true);
           break;
         case 'c':
         case 'C':
-          if (!event.repeat && target !== null) game.cashOut(target);
+          if (!event.repeat && target !== null && !switchPause) game.cashOut(target);
           break;
         case 'a':
         case 'A':
-          if (!event.repeat) pumpAll();
+          if (!event.repeat && round) hold.start({ kind: 'all', roundId: round.id }, 'key');
           break;
         case '1':
         case '2':
@@ -217,7 +247,11 @@ export function App() {
       }
     }
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
   });
 
   return (
@@ -327,10 +361,13 @@ export function App() {
                       }
                       onSelect={() => setChosen(balloon.index)}
                       canPump={panel === 'round' && balloon.status === 'active'}
-                      pending={state.pending[balloon.index] ?? false}
                       onPump={() => {
                         setChosen(balloon.index);
                         game.pump(balloon.index, false);
+                      }}
+                      onPumpHold={() => {
+                        setChosen(balloon.index);
+                        holdOne(balloon.index);
                       }}
                     />
                   ))
@@ -351,9 +388,12 @@ export function App() {
               <RoundControls
                 balloon={targetBalloon}
                 multi={round.balloons.length > 1}
-                pending={target !== null && (state.pending[target] ?? false)}
+                pending={(target !== null && (state.pending[target] ?? false)) || switchPause}
                 onPump={() => {
                   if (target !== null) game.pump(target, false);
+                }}
+                onPumpHold={() => {
+                  if (target !== null) holdOne(target);
                 }}
                 onPatchPump={() => {
                   if (target !== null) game.pump(target, true);
@@ -361,8 +401,9 @@ export function App() {
                 onCashOut={() => {
                   if (target !== null) game.cashOut(target);
                 }}
-                pumpableCount={pumpable.length}
+                liveCount={live.length}
                 onPumpAll={pumpAll}
+                onPumpAllHold={holdAll}
               />
             )}
 

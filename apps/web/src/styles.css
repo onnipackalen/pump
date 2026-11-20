@@ -418,6 +418,14 @@ body {
 
 /* --------------------------------------------------------------- Controls */
 
+/* A button that keeps acting while held: a long press on a phone must not
+   select its text or open a menu. */
+.hold {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .btn {
   min-height: var(--tap);
   padding: 4px 12px;

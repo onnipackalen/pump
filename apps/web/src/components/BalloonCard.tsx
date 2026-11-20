@@ -3,6 +3,7 @@ import type { BalloonView } from '../api/contract';
 import { Balloon, balloonScale, type BalloonBeat } from '../balloon/Balloon';
 import type { Beat } from '../game/useGame';
 import { riskStep } from '../game/risk';
+import { HoldButton } from './HoldButton';
 import { multiplierAt } from '../game/rules';
 import type { WinTier } from '../game/winTier';
 import { formatCents, formatMultiplier } from '../money';
@@ -26,10 +27,10 @@ interface BalloonCardProps {
   readonly onSelect: () => void;
   /** It can be pumped by hand now: the round is played by hand and this balloon is still in play. */
   readonly canPump: boolean;
-  /** A request for this balloon is on its way, so its Pump button waits. */
-  readonly pending: boolean;
-  /** Picks this balloon and pumps it. */
+  /** Picks this balloon and pumps it once (from the keyboard). */
   readonly onPump: () => void;
+  /** Picks this balloon and pumps it, again and again while held. */
+  readonly onPumpHold: () => void;
 }
 
 /**
@@ -154,32 +155,29 @@ function SlotLabel({
 function SlotAction({
   slot,
   show,
-  pending,
   onPump,
+  onPumpHold,
 }: {
   readonly slot: number;
   readonly show: boolean;
-  readonly pending: boolean;
   readonly onPump: () => void;
+  readonly onPumpHold: () => void;
 }) {
   return (
     <div className="slot-action">
       {show && (
-        <button
-          type="button"
+        <HoldButton
           className="btn btn-outline slot-pump"
-          disabled={pending}
-          // The slot itself also picks the balloon on a click; this button
-          // picks it and pumps it, so the click stops here.
-          onClick={(event) => {
-            event.stopPropagation();
-            onPump();
-          }}
+          // Never greyed out while a pump is on its way: during a hold it
+          // would flash on every pump, and the balloon's press already shows
+          // it. A press that comes too soon is ignored by the game.
+          onHoldStart={onPumpHold}
+          onPress={onPump}
           aria-label={`Pump balloon ${slot}`}
-          title={`Pump balloon ${slot}`}
+          title={`Pump balloon ${slot}. Hold to keep pumping.`}
         >
           Pump
-        </button>
+        </HoldButton>
       )}
     </div>
   );
@@ -202,8 +200,8 @@ export function BalloonCard({
   selected,
   onSelect,
   canPump,
-  pending,
   onPump,
+  onPumpHold,
 }: BalloonCardProps) {
   const slot = balloon.index + 1;
   const topMultiplier = multiplierAt(ladder, balloon.topRung);
@@ -241,7 +239,7 @@ export function BalloonCard({
         won={win !== undefined}
         live={!quiet}
       />
-      <SlotAction slot={slot} show={canPump} pending={pending} onPump={onPump} />
+      <SlotAction slot={slot} show={canPump} onPump={onPump} onPumpHold={onPumpHold} />
     </article>
   );
 }
@@ -260,7 +258,7 @@ export function PreviewCard({ slot, betCents }: PreviewCardProps) {
         <Balloon slot={slot} scale={0.45} />
       </div>
       <SlotLabel main={betCents === null ? '—' : formatCents(betCents)} sub="" />
-      <SlotAction slot={slot} show={false} pending={false} onPump={() => undefined} />
+      <SlotAction slot={slot} show={false} onPump={() => undefined} onPumpHold={() => undefined} />
     </article>
   );
 }
