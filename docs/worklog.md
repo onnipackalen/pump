@@ -350,3 +350,53 @@ Turned out wrong, and how it was caught:
 
 Not done yet: nobody who did not write these two commands has reviewed
 them. Timings above were taken while other work was loading the machine.
+
+## 2026-11-20: server, wallet, game routes and hammer
+
+Built, all in `apps/server` and `packages/contract`:
+
+- The database layer on Node's built-in SQLite: one schema with the money
+  rules written as constraints and triggers. The ledger is append-only and
+  chained by a running balance; a balance can only be set to what the last
+  ledger row says; one grant per player; one bet and at most one payout or
+  refund per balloon; one active round and one active seed per player; a
+  nonce that only goes up; finished balloons and rounds that never change.
+- Wallet, players (anonymous, httpOnly cookie, only a hash stored), seeds
+  (hash shown, seed revealed on rotation) and idempotency: the key lookup,
+  the change and the stored answer are one immediate transaction.
+- The game routes on top of the engine: start a round, pump with or without
+  a Patch, cash out, restore after refresh, the 24-hour abandoned-round rule
+  (lazily and by a sweep), and the data a finished round needs to be
+  replayed. Every balloon action is stored in order with its draw.
+- `reconcile()`: checks the wallet and the rounds against each other from
+  the stored data alone.
+- `npm run hammer`: starts a real server, fires about 4,000 overlapping
+  requests, then reconciles.
+- `@pump/contract`: the request and response types, moved out of the web
+  app so both sides import the same ones.
+
+Turned out wrong, and how it was caught:
+
+- The first reconcile only checked the wallet. Once rounds existed it would
+  have passed a database where a balloon was marked paid with no ledger row.
+  Caught while writing the hammer and asking what it actually proves. Round
+  checks were added, with tests that corrupt the data and expect a report.
+- The hammer's first version would have called a refused Patch (402, not
+  enough balance) a failure. Caught by reading its rules against the API's
+  status codes before any player ran low. 402 is now a fair way to lose a
+  race.
+- To be sure the hammer can fail, the expected-draw-index check was removed
+  from a copy of the game service on purpose. The hammer then reported "2 of
+  2 same-moment requests succeeded" in every group, while the ledger still
+  reconciled: money was safe, the rule was not. The file was restored with
+  `git checkout`.
+- Another chat had a change staged in the shared working tree. A bare
+  `git commit` would have swept it into this session's commit. Caught by
+  reading `git status` first; every commit here names its files.
+- The test fixtures first used a non-null `!` and a hand-built object to get
+  a second server instance. Replaced with a guard and a `Seat.on(app)`
+  helper before commit.
+
+Not done yet: the web app still plays against its demo client; the verify
+page; serving the web build from the server; deployment. Findings from the
+independent review of this code are still to come.
