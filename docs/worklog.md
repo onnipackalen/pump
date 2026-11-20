@@ -435,3 +435,34 @@ independent review of this code are still to come.
   chat was asked to wrap up. `config.ts` is unchanged. Applying it is a
   config-only change (the four arrays, plus the tests and spec values that
   quote the old ones) and needs the user's yes.
+
+## 2026-11-20: verify page, and the demo on real seeds (web)
+
+Built:
+
+- The demo game now plays through the engine's own startRound, pump and
+  cashOut, and draws every pump from the seeds with @pump/engine/fair, as
+  the server will. It records each balloon's actions and draws (a672904).
+- The web contract gained the round record the verify page reads, agreed
+  with the server chat: GET /api/rounds/:roundId/verify -> VerifiableRound,
+  409 seed_not_revealed before rotation, seedRevealed on history rows.
+- The verify page (#verify): pick a revealed round, see its inputs, the
+  verdict, the seed-hash check and every draw, and edit inputs to watch the
+  check fail. It is on branch `verify-page` (c165458), not main, because it
+  imports verifyRound from the provably fair chat's
+  packages/engine/src/fair/verify.ts, which is not committed yet. Merge the
+  branch once it lands, mapping onto its final shapes.
+
+Turned out wrong, and how it was caught:
+
+- I first wrote my own round checker. Then I found the provably fair chat
+  writing verifyRound in the engine for the same page. I deleted mine
+  (never committed) and pointed the page at theirs, so there is one checker.
+- My checker's "tries for rung" label was filled in before the rung was
+  tracked, so every pump showed rung 1. Caught by the docs/fairness.md
+  Patch-save example used as a test.
+- At 360px the verify page's cards grew to the width of the draw table, so
+  the page scrolled sideways inside its box. Caught by a width check in the
+  browser; the cards now shrink and only the table scrolls.
+- The background code review of the page was stopped before it finished,
+  so the branch has not been independently reviewed yet.
