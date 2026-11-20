@@ -206,6 +206,9 @@ export function topRungForBet(
   return top;
 }
 
+/** 100%, in basis points. The RTP must be below it. */
+const FULL_RTP_BP = 10_000;
+
 /**
  * Everything that must hold for one ladder at one RTP before the game may
  * run. Returns one sentence per problem; an empty list means the ladder is
@@ -239,6 +242,9 @@ export function ladderProblems(
 
   // R / m_1 < 1, or the first pump could never pop.
   if (rtp >= 100n * at(1)) problems.push('RTP must be below the first multiplier');
+  // R itself must be below 100%. At 100% or more the game would pay back at
+  // least everything it takes in, which can only be a mistake in the config.
+  if (rtpBp >= FULL_RTP_BP) problems.push('RTP must be below 100%');
 
   // The pop chance must rise with every pump, strictly.
   // Pump 1 to 2:   1 - R/m_1 < 1 - m_1/m_2   <=>   rtpBp * h_2 > 100 * h_1^2

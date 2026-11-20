@@ -357,6 +357,17 @@ describe('boot checks', () => {
     );
   });
 
+  it('refuse an RTP of 100% or more, which would give the players the edge', () => {
+    // All of these are below Easy's first multiplier (1.01x), so no other rule stops them.
+    for (const rtpBp of [10_000, 10_050, 10_099]) {
+      expect(ladderProblems(rtpBp, ladderOf('easy'), LIMITS)).toEqual(['RTP must be below 100%']);
+      expect(() => assertValidConfig({ ...GAME_CONFIG, rtpBp })).toThrow(/RTP must be below 100%/);
+    }
+    // 99.99% is the highest RTP that may run.
+    expect(configProblems({ ...GAME_CONFIG, rtpBp: 9_999 })).toEqual([]);
+    expect(() => assertValidConfig({ ...GAME_CONFIG, rtpBp: 9_999 })).not.toThrow();
+  });
+
   it('refuse ladders that do not rise, start too low, or flatten out', () => {
     expect(ladderProblems(9700, [], LIMITS)).toEqual(['the ladder is empty']);
     expect(ladderProblems(9700, [100, 200], LIMITS)).toContain(
