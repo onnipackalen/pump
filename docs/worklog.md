@@ -526,3 +526,35 @@ Turned out wrong, and how it was caught: nothing in the change. One process
 point: four chats were editing this folder at once, and a local test run
 in the middle showed 66 failures from half-finished edits. CI on the pushed
 commit was green. Caught by running the suite before building.
+
+## 2026-11-20: server fixes after an independent review
+
+Ten reviewers (five attacking, five checking each claim) went through the
+server. Nothing they found lets a player create or lose money through the
+API. What they did find, and what was done:
+
+- `INSERT OR REPLACE` deletes the row it replaces without firing "never
+  delete" triggers, so plain SQL could swap a ledger row and double a
+  balance. Caught by a reviewer who tried it. The schema now refuses a
+  replace on every guarded table by itself, and the connection also turns
+  `recursive_triggers` on.
+- A refusal built its answer before its request was rolled back, so a stored
+  "balance too low" could show a balance that no longer existed. Caught by
+  reading the order of steps and confirmed with a two-charge request. The
+  answer is now built after the rollback.
+- Every request without a cookie created a player, so a page that loaded the
+  session and the history together made two. Caught by sending the two
+  requests at once. Only `GET /api/session` creates a player now; the rest
+  answer 401 `no_session`.
+- The history counted a refunded bet as money staked and lost. Caught by
+  abandoning a round and reading its history line. Refunded bets are now
+  shown apart.
+- The database let a ledger row and its balloon disagree, a round use a
+  nonce its seed never gave, and a balloon jump rungs. The schema was
+  rewritten (no database existed yet) so each of these is refused, and
+  writing a ledger row now moves the balance in the same statement.
+
+Left for later, on purpose: the server picks the next server seed while it
+already knows the player's client seed (a locked rule, so it is the lead's
+decision); old idempotency keys are never removed; `reconcile()` does not
+replay rounds from their seeds.

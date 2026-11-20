@@ -62,7 +62,7 @@ All JSON. The exact shapes are TypeScript types in `packages/contract`.
 
 | Address | What it does |
 | --- | --- |
-| `GET /api/session` | Wallet, seeds and the round in progress, so a page refresh restores it. A first visit creates the player with $10,000 and sets the cookie. |
+| `GET /api/session` | Wallet, seeds and the round in progress, so a page refresh restores it. A first visit creates the player with $10,000 and sets the cookie. It is the only request that creates a player, so the screen loads it first. |
 | `GET /api/history?limit=10` | The player's latest finished rounds. |
 | `POST /api/rounds` | Starts a round: `{ difficultyId, betsCents }`, one bet per balloon. Charges the bets. |
 | `POST /api/rounds/:id/pump` | One pump: `{ balloonIndex, expectedDrawIndex, patch }`. With `patch: true` the Patch is bought and the pump made in one step. The answer says `survived`, `saved`, `popped` or `top`. |
@@ -76,12 +76,14 @@ always look like `{ "error": { "code", "message" } }`:
 
 | Code | Status | Meaning |
 | --- | --- | --- |
-| `invalid_request` | 400 | The request is malformed or breaks a rule (422 if a key is reused for a different request). |
+| `invalid_request` | 400 | The request is malformed or breaks a rule. |
+| `no_session` | 401 | No player cookie. Load `GET /api/session` first. |
 | `insufficient_funds` | 402 | The balance does not cover the bets or the Patch. Nothing was charged. |
 | `not_found` | 404 | No such round for this player. |
 | `conflict` | 409 | The balloon is not in the state the request expected. The body carries the round as it is now. |
 | `round_active` | 409 | A round is in progress: no second round, no seed changes. |
 | `seed_not_revealed` | 409 | The round cannot be checked until its server seed is rotated. |
+| `key_reused` | 422 | This idempotency key was already used for a different request. |
 
 **Pump and Cash Out at the same moment.** Each pump and cash-out says which
 state of the balloon it was made from (`expectedDrawIndex`, the number of draws
@@ -112,10 +114,14 @@ How the wallet is kept safe:
   inside it. Two requests can never both read a balance and then both spend it.
 - **The ledger is append-only and chained.** Every cent that moves is one
   ledger row holding the amount and the balance after it. Database triggers
-  refuse to change or delete a row, refuse a row that does not continue from
-  the previous balance, and refuse a balance that does not match the last row.
-  So the balance equals the sum of the ledger at all times, and the database
+  refuse to change, delete or replace a row, refuse a row that does not
+  continue from the previous balance, and refuse a balance that does not match
+  the last row. Writing the row moves the balance in the same statement. So
+  the balance equals the sum of the ledger at all times, and the database
   enforces it, not only the code.
+- **The ledger must agree with the round.** A bet row has to be the balloon's
+  bet, a payout has to be what a cashed balloon recorded, and a refund has to
+  be the bet of a refunded balloon, all for a balloon of that same player.
 - **Check and charge are one statement.** The ledger row is written only if
   the balance can take it. A player with $5 cannot spend $10.
 - **Nothing is paid twice.** Unique indexes allow one opening grant per player,
@@ -124,7 +130,8 @@ How the wallet is kept safe:
   `Idempotency-Key` header. The key lookup, the change, and the stored answer
   are one transaction, so a crash cannot leave a change done but unrecorded.
   A repeat gets the first answer back, whether that was a success or a
-  refusal. One key used for two different requests is refused with 422.
+  refusal. A refusal's answer is built after its request is rolled back, so it
+  shows the real balance. One key used for two different requests is refused.
 - **The server seed stays secret.** Only its SHA-256 is shown until the player
   rotates. The code that reads seeds cannot read an active one.
 - **Players are anonymous.** A random token in an httpOnly cookie; the
