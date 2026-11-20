@@ -242,3 +242,59 @@ Turned out wrong, and how it was caught:
 - My own fix for a demo race first paired a revealed seed with the wrong
   hash when two rotations raced. Caught by thinking through the await gap
   before committing; the check now sits right before the change.
+
+## 2026-11-20: game math and engine rules
+
+Built:
+
+- `game-spec.json`: the math spec. The ladders, the one rule every chance
+  follows from, Patch pricing, rounding, the cap, what the proof and the
+  simulator must show, and test vectors. (f59b856)
+- `packages/engine/src/math.ts`: pump chances in lowest terms, the cash-out
+  value, the Patch price in BigInt, the top rung under the cap, and the
+  start-up checks from `CLAUDE.md`. Same function names as the web app's
+  `placeholderMath.ts`. (28d9a59)
+- `packages/engine/src/PumpEngine.ts`: start a round, pump with or without
+  a Patch, cash out, the top rung, abandoned rounds, a quote for the screen
+  and a replay for the verify page. One draw per pump. A refused request
+  makes no draw. The engine never moves money; it returns the cents.
+  (b3d3cf0)
+- Tests that do their own arithmetic, at 9400, 9700 and 9900. Every
+  cash-out point returns exactly the RTP before rounding. Whole strategies
+  are played through the engine down every path and weighed with exact
+  fractions: none returns more than the RTP, the shortfall is under one
+  cent per rounded amount, and whole-dollar play without Patches returns
+  exactly the RTP.
+- A plain-English document explaining all the math (outside the repo),
+  read by three reviewers, one of whom recomputed every number in it.
+
+Turned out wrong, and how it was caught:
+
+- The first spec let a player buy a Patch first and pump later, with a
+  refund if they cashed out instead. `CLAUDE.md` locks Patch + pump as one
+  step. Caught by the review chat reading the spec against `CLAUDE.md`. The
+  armed state was removed before any code used it.
+- The first checking script worked out the worst rounding cases and never
+  printed them. Caught by the same review. They are now pinned in a test
+  and listed in the spec: 90.99% for a 13-cent Easy cash-out, 50.05% for a
+  Patch on an 11-cent Easy bet.
+- Rounding was changed to a random draw in the math chat on the user's
+  word, while another chat held the opposite answer from the user. The
+  math and the engine were first written with random rounding, then
+  switched back to floor and ceil the same day, before any commit. Caught
+  by the builder chat, which set the two answers side by side and asked
+  the user once. Lesson: a design question goes to the user in one chat
+  only, and the answer is passed on.
+- The math document said changing the RTP changes one thing. It changes
+  two: the first pump's pop chance and every Patch price. Its diagram also
+  suggested a Patch is only spent when it saves the balloon. Caught by the
+  reviewers who read the document against `CLAUDE.md`.
+- One engine test used a roll outside its range (19 on a draw whose rolls
+  run 0 to 18). Caught on its first run by the engine's own range check.
+
+Not done yet: `npm run rtp` and `npm run sim` are still stubs, so the scan
+of every legal bet and the 10-million-round runs have not been done with
+the game's own code. The engine was committed before anyone who did not
+write it had reviewed it; that review has been asked for. A gentler set of
+ladders is still being worked out; the ladders in `config.ts` are
+unchanged.
