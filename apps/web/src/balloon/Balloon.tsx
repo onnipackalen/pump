@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import './balloon.css';
+import './balloon-app.css';
 
 /**
  * The balloon picture, copied from graphics/balloon/balloon.svg (the
@@ -35,9 +36,14 @@ export interface BalloonProps {
   readonly win?: 1 | 2 | 3 | undefined;
   /** Reached its top rung, only together with `win`. */
   readonly top?: boolean | undefined;
+  /**
+   * The multiplier printed on the balloon, like "1.37×". Empty before the
+   * first pump: an unpumped balloon has no multiplier yet.
+   */
+  readonly value?: string | undefined;
 }
 
-export function Balloon({ slot, scale, beat, strain, patch, win, top }: BalloonProps) {
+export function Balloon({ slot, scale, beat, strain, patch, win, top, value }: BalloonProps) {
   const style = { '--balloon-scale': scale.toFixed(4) } as CSSProperties;
   return (
     <svg
@@ -135,6 +141,11 @@ export function Balloon({ slot, scale, beat, strain, patch, win, top }: BalloonP
               <path className="pb-rim" d="M163 118C160 156 132 190 108 201C128 186 153 158 163 118Z" />
               <path className="pb-shine" d="M47 96C45 66 61 42 85 33C70 47 60 68 58 93C57.5 101 47.5 102 47 96Z" />
               <ellipse className="pb-glint" cx="99" cy="33" rx="7" ry="4" />
+              {/* value: the multiplier written on the balloon. Your code sets the
+                   text; leave it empty before the first pump. */}
+              <text className="pb-value" x="100" y="124">
+                {value}
+              </text>
               {/* strain: thin spot that shows as the pop chance rises. */}
               <g className="pb-strain">
                 {/* Thin spot: the rubber looks paler where it is stretched most, with a
@@ -177,8 +188,16 @@ export function Balloon({ slot, scale, beat, strain, patch, win, top }: BalloonP
           </g>
           {/* remnant: torn rubber left on the knot after a pop. Hidden until then. */}
           <path className="pb-remnant" d="M86 207L83.5 198L90 201.5L91.5 192L97 199L101 189.5L105 198.5L110.5 193L111 201.5L117 197.5L114 207Q100 211 86 207Z" />
-          <path className="pb-knot" d="M100 205C96 209 92.5 214 91 219.5Q100 217 109 219.5C107.5 214 104 209 100 205Z" />
-          <ellipse className="pb-knot" cx="100" cy="220" rx="9.5" ry="2.6" />
+          {/* neck: the open neck the hose blows into while the balloon is pumped. */}
+          <g className="pb-neck">
+            <path className="pb-neck-tube" d="M95.5 204C96.6 210 96.6 215.5 95.2 220H104.8C103.4 215.5 103.4 210 104.5 204Z" />
+            <ellipse className="pb-neck-lip" cx="100" cy="220.6" rx="6.4" ry="2.4" />
+          </g>
+          {/* tie: the knot. Hidden until the balloon is tied off on cash-out. */}
+          <g className="pb-tie">
+            <path className="pb-knot" d="M100 205C96 209 92.5 214 91 219.5Q100 217 109 219.5C107.5 214 104 209 100 205Z" />
+            <ellipse className="pb-knot" cx="100" cy="220" rx="9.5" ry="2.6" />
+          </g>
           {/* shards: 8 pieces of rubber that fly out on a pop. Hidden until
                then. They rest inside the body outline so they don't move the
                pivot. Each one's flight is set in balloon.css. */}

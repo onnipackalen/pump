@@ -1,0 +1,16 @@
+/*
+ * App-side choices on top of the copied balloon art (balloon.css stays an
+ * exact copy of graphics/balloon/balloon.css).
+ *
+ * The user asked that only signs commonly used in the gambling industry
+ * ship. An industry check against live casino games and UK and Ontario rules
+ * (see docs/worklog.md, 2026-11-20) found no product using these details,
+ * so they are switched off here:
+ * - the grey dashed "ghost" outline left after a pop;
+ * - the torn rubber scrap left on the knot after a pop;
+ * - the tick badge after a cash-out (the card says "Cashed out" and the
+ *   amount in words instead, as UK RTS 14F guidance suggests).
+ */
+.pump-balloon :is(.pb-ghost, .pb-remnant, .pb-tick) {
+  display: none;
+}

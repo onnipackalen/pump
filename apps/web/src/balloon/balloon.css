@@ -1,6 +1,6 @@
-/* Copied from graphics/balloon/balloon.css on 2026-11-20 (snapshot after the
- * pump-and-hose update). Re-copy it when the graphics change; do not edit it
- * here. */
+/* Copied from graphics/balloon/balloon.css on 2026-11-20 (snapshot with the
+ * multiplier on the balloon and the tied neck). Re-copy it when the graphics
+ * change; do not edit it here. App-side choices live in balloon-app.css. */
 
 /*
  * Pump balloon: colours, layer pivots and size.
@@ -58,6 +58,49 @@
 }
 .pump-balloon .pb-knot {
   fill: var(--balloon-deep);
+}
+
+/* Open neck while pumping; the knot (.pb-tie) only shows once tied. */
+.pump-balloon .pb-neck-tube {
+  fill: var(--balloon-base);
+}
+.pump-balloon .pb-neck-lip {
+  fill: var(--balloon-deep);
+}
+.pump-balloon .pb-tie {
+  opacity: 0;
+}
+.pump-balloon :is(.pb-neck, .pb-tie) {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+}
+
+/* The multiplier on the balloon. It squashes and stretches with the body
+ * and never shows smaller than half its full size. Five characters
+ * ("1.01x") still fit inside the smallest balloon; the thin outline in the
+ * balloon's colour keeps edge letters readable. Dark on pearl and azure,
+ * white on violet: at least 5.3 to 1 contrast against each colour. */
+.pump-balloon {
+  --balloon-ink: #0e1424;
+}
+.pump-balloon[data-slot="3"] {
+  --balloon-ink: #ffffff;
+}
+.pump-balloon .pb-value {
+  fill: var(--balloon-ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 30px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  text-anchor: middle;
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  transform: scale(max(1, calc(0.5 / var(--balloon-scale))));
+  stroke: var(--balloon-base);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  paint-order: stroke;
 }
 .pump-balloon .pb-shade-a {
   stop-color: #fff;
@@ -345,6 +388,9 @@
 .pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-remnant {
   opacity: 1;
 }
+.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) :is(.pb-neck-tube, .pb-neck-lip) {
+  fill: var(--pb-popped);
+}
 .pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-knot {
   fill: var(--pb-popped);
 }
@@ -406,7 +452,7 @@
  * ------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion="full"]) .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-shard) {
+  :root:not([data-motion="full"]) .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-shard, .pb-neck, .pb-tie) {
     animation: none !important;
   }
   :root:not([data-motion="full"]) .pump-balloon .pb-grow {
@@ -414,8 +460,22 @@
   }
 }
 
-:root[data-motion="reduce"] .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-shard) {
+:root[data-motion="reduce"] .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-shard, .pb-neck, .pb-tie) {
   animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .pump-balloon[data-beat="cashout"] .pb-neck {
+    opacity: 0;
+  }
+  :root:not([data-motion="full"]) .pump-balloon[data-beat="cashout"] .pb-tie {
+    opacity: 1;
+  }
+}
+:root[data-motion="reduce"] .pump-balloon[data-beat="cashout"] .pb-neck {
+  opacity: 0;
+}
+:root[data-motion="reduce"] .pump-balloon[data-beat="cashout"] .pb-tie {
+  opacity: 1;
 }
 :root[data-motion="reduce"] .pump-balloon .pb-grow {
   transition: none !important;
@@ -468,6 +528,12 @@
 .pump-balloon[data-beat="cashed"] .pb-float {
   opacity: 0;
 }
+.pump-balloon[data-beat="cashed"] .pb-neck {
+  opacity: 0;
+}
+.pump-balloon[data-beat="cashed"] .pb-tie {
+  opacity: 1;
+}
 .pump-balloon[data-beat="cashed"] .pb-hose {
   transform: scale(0.5);
 }
@@ -478,6 +544,13 @@
 /* The release. */
 .pump-balloon[data-beat="cashout"] .pb-float {
   animation: pb-float-away var(--pb-float-ms) linear forwards;
+}
+/* The neck is tied off in the first 60 ms, during the dip. */
+.pump-balloon[data-beat="cashout"] .pb-neck {
+  animation: pb-neck-close 80ms ease-in forwards;
+}
+.pump-balloon[data-beat="cashout"] .pb-tie {
+  animation: pb-tie-on 140ms cubic-bezier(0.3, 0.7, 0.4, 1.3) 20ms both;
 }
 .pump-balloon[data-beat="cashout"] .pb-hose {
   animation: pb-hose-back 300ms cubic-bezier(0.2, 0.8, 0.3, 1) 40ms forwards;
@@ -505,6 +578,24 @@
   100% {
     opacity: 0;
     transform: translateY(-240px) scale(1, 1);
+  }
+}
+
+@keyframes pb-neck-close {
+  to {
+    opacity: 0;
+    transform: scale(0.7, 0.5);
+  }
+}
+
+@keyframes pb-tie-on {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
