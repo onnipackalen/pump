@@ -1,10 +1,14 @@
 /**
  * @pump/engine/fair: turning seeds into draws (provably fair).
  *
- * Kept apart from PumpEngine.ts, which must not touch crypto. The server and
- * the browser verify page both import this, so a round can be recomputed
- * anywhere from its seeds. It is pure and synchronous: no I/O, no clock, no
- * randomness of its own, and the same result in Node and in the browser.
+ * Kept apart from PumpEngine.ts, which must not touch crypto or seeds: engine
+ * files outside this folder may import only types from here (`import type`),
+ * and nothing from @noble. test/fair/boundary.test.ts checks this.
+ *
+ * The server and the browser verify page both import this, so a round can be
+ * recomputed anywhere from its seeds. It is pure and synchronous: no I/O, no
+ * clock, no randomness of its own, and the same result in Node and in the
+ * browser.
  *
  * The recipe for one pump, top to bottom (docs/fairness.md has a worked
  * example with real numbers):

@@ -41,7 +41,7 @@ They will change RTP to 94% and 99% and rerun everything, then send bugs for a 4
 - Bytes become a roll like this. Read each 32-byte block as 8 unsigned 32-bit words, big-endian (first byte is the biggest part). With limit = 2^32 - (2^32 mod den), skip every word >= limit; the first word below it gives roll = word mod den. If all 8 words of a block are skipped, move to the next block. The pump survives if roll < num.
 - num/den is the survival chance reduced to lowest terms (9700/10100 becomes 97/101) before drawing. Reduced and unreduced give different rolls, so this never changes.
 - HMAC-SHA256 and SHA-256 come from @noble/hashes: synchronous (no await inside a transaction) and the same code in the server and the browser. Tests cross-check it against Node's built-in crypto.
-- The engine never sees seeds. A pump asks for one integer in [0, den) and the fair module supplies it.
+- The engine never sees seeds. A pump asks for one integer in [0, den) and the fair module supplies it. Engine files outside src/fair may import only types from the fair module (`import type`) and nothing from @noble; packages/engine/test/fair/boundary.test.ts fails otherwise.
 - Every round stores the RTP and the ladder it was played with. Verification uses those copies, never the current config, so a round played at 9700 still verifies after RTP changes to 9400.
 - The first client seed is made in the browser, so a player who never edits it is still not using one the server picked.
 - The recipe is written for players in docs/fairness.md, with a reference script in another language that does not use this codebase.
