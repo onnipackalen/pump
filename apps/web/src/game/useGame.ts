@@ -12,6 +12,7 @@ import type {
   WalletView,
 } from '../api/contract';
 import { makeClientSeed } from './clientSeed';
+import { isOlder } from './roundOrder';
 
 /**
  * What a balloon's picture is doing right now. The balloon art reads it:
@@ -207,37 +208,80 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     };
   }, [client]);
 
-  /** Takes in a server answer for the round and wallet. */
+  /** Takes in a server answer for the round and wallet, unless the screen already has newer. */
   const apply = useCallback(
     (result: ActionResult) => {
-      setState((s) => ({ ...s, round: result.round, wallet: result.wallet }));
+      setState((s) =>
+        isOlder(result.round, s.round) ? s : { ...s, round: result.round, wallet: result.wallet },
+      );
       if (result.round.status === 'finished') void refreshHistory();
     },
     [refreshHistory],
   );
 
-  /** Shows what went wrong. On a 409 the server sends the state as it is now; show that. */
-  const handleFailure = useCallback((error: unknown, balloonIndex: number | null) => {
-    setState((s) => {
-      let next: GameState = {
-        ...s,
-        notice: { tone: 'error', text: describeFailure(error) },
-      };
-      if (balloonIndex !== null) {
-        next = {
-          ...next,
-          beats: replaceAt(next.beats, balloonIndex, 'idle'),
-          pending: replaceAt(next.pending, balloonIndex, false),
+  /**
+   * Asks the server for the whole state again. Used when an answer may have
+   * been lost, so the screen can never hide a round the server has.
+   */
+  const resync = useCallback(async () => {
+    try {
+      const session = await client.getSession();
+      setState((s) => {
+        const active = session.activeRound;
+        // With no active round left, keep a finished round on screen, but
+        // never one that still looks active.
+        const round = active ?? (s.round?.status === 'active' ? null : s.round);
+        const sameRound = round !== null && round.id === s.round?.id;
+        return {
+          ...s,
+          wallet: session.wallet,
+          fairness: session.fairness,
+          round,
+          beats: sameRound ? s.beats : (round?.balloons.map(() => 'idle' as const) ?? []),
+          pending: round?.balloons.map((b) => inFlight.current.has(String(b.index))) ?? [],
         };
-      }
-      if (error instanceof ApiFailure) {
-        const { round, wallet } = error.body;
-        if (round) next = { ...next, round };
-        if (wallet) next = { ...next, wallet };
-      }
-      return next;
-    });
-  }, []);
+      });
+      void refreshHistory();
+    } catch {
+      // Still offline: the notice already says something went wrong.
+    }
+  }, [client, refreshHistory]);
+
+  /** Shows what went wrong. On a 409 the server sends the state as it is now; show that. */
+  const handleFailure = useCallback(
+    (error: unknown, balloonIndex: number | null) => {
+      setState((s) => {
+        let next: GameState = {
+          ...s,
+          notice: { tone: 'error', text: describeFailure(error) },
+        };
+        if (balloonIndex !== null) {
+          next = {
+            ...next,
+            beats: replaceAt(next.beats, balloonIndex, 'idle'),
+            pending: replaceAt(next.pending, balloonIndex, false),
+          };
+        }
+        if (error instanceof ApiFailure) {
+          const { round, wallet } = error.body;
+          if (round && !isOlder(round, s.round)) {
+            next = { ...next, round, ...(wallet ? { wallet } : {}) };
+          } else if (!round && wallet) {
+            next = { ...next, wallet };
+          }
+        }
+        return next;
+      });
+      // The server may have applied an action whose answer never arrived, or
+      // refused one because of a round the screen doesn't show. Catch up.
+      const lost = error instanceof NetworkFailure;
+      const refusedForUnseenState =
+        error instanceof ApiFailure &&
+        (error.code === 'round_active' || (error.code === 'conflict' && !error.body.round));
+      if (lost || refusedForUnseenState) void resync();
+    },
+    [resync],
+  );
 
   const startRoundAction = useCallback(
     async (difficultyId: string, betsCents: readonly number[]): Promise<ActionResult | null> => {
@@ -360,18 +404,24 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     [startRoundAction],
   );
 
+  // The button and key handlers also check `pending` from the same render as
+  // `round`. Right after an answer, the in-flight mark is gone but a key
+  // handler may still hold the old round; this stops it sending a stale
+  // draw index.
+  const pending = state.pending;
+
   const pump = useCallback(
     (balloonIndex: number, patch: boolean) => {
-      if (round) void pumpAction(round, balloonIndex, patch);
+      if (round && !pending[balloonIndex]) void pumpAction(round, balloonIndex, patch);
     },
-    [pumpAction, round],
+    [pumpAction, round, pending],
   );
 
   const cashOut = useCallback(
     (balloonIndex: number) => {
-      if (round) void cashOutAction(round, balloonIndex);
+      if (round && !pending[balloonIndex]) void cashOutAction(round, balloonIndex);
     },
-    [cashOutAction, round],
+    [cashOutAction, round, pending],
   );
 
   const setClientSeed = useCallback(
