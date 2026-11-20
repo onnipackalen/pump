@@ -13,7 +13,8 @@
  * Endpoints. All JSON. Every mutating request carries an Idempotency-Key
  * header (1 to 128 characters from A-Z, a-z, 0-9, _ and -); a repeat with the
  * same key gets the stored original response, whether that was a success or
- * a refusal. Using one key for two different requests is refused with 422.
+ * a refusal. Using one key for two different requests is refused with 422
+ * "key_reused".
  *
  *   GET  /api/session                     -> SessionView
  *        Wallet, seeds, and the in-progress round if there is one, so a page
@@ -33,9 +34,17 @@
  * balloon was not in the state the request expected; the body carries the
  * current state so the screen can catch up.
  *
- * Status codes: invalid_request 400 (422 for a reused idempotency key),
- * insufficient_funds 402, not_found 404, conflict, round_active and
- * seed_not_revealed 409, internal_error 500.
+ * Status codes: invalid_request 400, no_session 401, insufficient_funds 402,
+ * not_found 404, conflict, round_active and seed_not_revealed 409,
+ * key_reused 422, internal_error 500.
+ *
+ * Three things a client must do:
+ * - Load GET /api/session first, alone. It is the only request that creates
+ *   a player and sets the cookie; every other request answers 401
+ *   "no_session" without one.
+ * - Make a new idempotency key for every new player action, and reuse it
+ *   only to retry that same action. A refusal is stored under its key too.
+ * - Send no body (or {}) to POST /api/fairness/rotate.
  */
 
 /** An exact chance: num out of den. */
@@ -116,9 +125,15 @@ export interface RoundSummary {
   readonly id: string;
   readonly difficultyId: string;
   readonly balloonCount: number;
+  /** The bets that were actually played. A refunded bet is not counted. */
   readonly betCents: number;
   readonly patchesCents: number;
   readonly payoutCents: number;
+  /**
+   * Bets handed back because the round was abandoned before those balloons
+   * were ever pumped. They are void bets: not part of betCents, and not a win.
+   */
+  readonly refundedCents: number;
   readonly serverSeedHash: string;
   readonly nonce: number;
   /** ISO 8601. */
@@ -203,6 +218,10 @@ export type ApiErrorCode =
   | 'round_active'
   | 'seed_not_revealed'
   | 'not_found'
+  /** No valid player cookie. Load GET /api/session first: it creates the player. */
+  | 'no_session'
+  /** This idempotency key was already used for a different request. */
+  | 'key_reused'
   | 'internal_error';
 
 /** One thing done to a balloon, in the order it was done. */

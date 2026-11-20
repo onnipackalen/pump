@@ -1,10 +1,13 @@
 import type { RoundView } from '@pump/contract';
 import { GAME_CONFIG } from '@pump/engine';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { text } from '../src/db/rows';
+import { immediate } from '../src/db/transaction';
 import { reconcile, roundProblems } from '../src/services/reconcile';
-import { testWorld, type TestWorld } from './helpers';
+import { cashOutByHand, insertActiveRound, testWorld, type TestWorld } from './helpers';
 import { Seat } from './play';
 
+const AT = '2026-01-01T00:00:00.000Z';
 let world: TestWorld;
 let seats: Seat[];
 
@@ -95,28 +98,21 @@ describe('after many rounds of mixed play', () => {
 });
 
 describe('the round check notices', () => {
-  beforeEach(async () => {
-    const seat = seats[0];
-    if (!seat) throw new Error('no seat');
-    const round = (await seat.start('easy', [1000, 1000])).body.round;
-    const pumped = await seat.pump(round, 0);
-    if (pumped.body.round.balloons[0]?.status === 'active') {
-      await seat.cashOut(pumped.body.round, 0);
-    }
+  // A hand-made round of two $10 balloons with both bets charged correctly.
+  beforeEach(() => {
+    const playerId = text(world.db.prepare('SELECT id FROM players LIMIT 1').get() ?? {}, 'id');
+    insertActiveRound(world.db, playerId, 'by-hand', [1000, 1000]);
+    immediate(world.db, () => {
+      world.services.wallet.charge(playerId, 'bet', 1000, { roundId: 'by-hand', balloonIndex: 0 }, AT);
+      world.services.wallet.charge(playerId, 'bet', 1000, { roundId: 'by-hand', balloonIndex: 1 }, AT);
+    });
     expect(roundProblems(world.db)).toEqual([]);
   });
 
-  it('a payout the balloon does not show', () => {
-    world.db.exec('DROP TRIGGER balloons_finished_is_final');
-    world.db.exec('UPDATE balloons SET payout_cents = payout_cents + 1 WHERE balloon_index = 0');
-    expect(roundProblems(world.db).join('\n')).toMatch(/round .* balloon 0: /);
-  });
-
-  it('a balloon marked popped that was in fact paid', () => {
-    world.db.exec('DROP TRIGGER balloons_finished_is_final');
-    world.db.exec("UPDATE balloons SET status = 'cashed', payout_cents = 500 WHERE balloon_index = 1");
+  it('a balloon that cashed out but was never paid', () => {
+    cashOutByHand(world.db, 'by-hand', 0, 1010);
     expect(roundProblems(world.db).join('\n')).toContain(
-      'balloon 1: cashed, so payout 500 and refund 0 are due, but the ledger paid 0 and refunded 0',
+      'balloon 0: cashed, so payout 1010 and refund 0 are due, but the ledger paid 0 and refunded 0',
     );
   });
 
@@ -133,6 +129,8 @@ describe('the round check notices', () => {
   });
 
   it('a finished round with a balloon still in play', () => {
+    // Only possible with the guard removed, which is what this simulates.
+    world.db.exec('DROP TRIGGER rounds_finish_when_no_balloon_in_play');
     world.db.exec(
       "UPDATE rounds SET status = 'finished', finished_at = '2026-01-01T01:00:00.000Z'",
     );

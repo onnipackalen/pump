@@ -15,10 +15,10 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token, 'ascii').digest('hex');
 }
 
-export interface ResolvedPlayer {
+export interface NewPlayer {
   readonly player: Player;
-  /** Set when a new player was just created: the token to put in their cookie. */
-  readonly issuedToken: string | null;
+  /** The token to put in the new player's cookie. It is not stored anywhere else. */
+  readonly token: string;
 }
 
 export type PlayersService = ReturnType<typeof playersService>;
@@ -33,7 +33,7 @@ export function playersService(
    * Creates a player in one transaction: the player row, the opening grant
    * through the ledger, and their first server seed.
    */
-  function create(): ResolvedPlayer {
+  function create(): NewPlayer {
     const id = runtime.newId();
     const token = runtime.newToken();
     const at = runtime.now().toISOString();
@@ -43,20 +43,17 @@ export function playersService(
       wallet.grant(id, STARTING_BALANCE_CENTS, at);
       seeds.insert({ playerId: id, seed, seedHash: hashServerSeed(seed), at });
     });
-    return { player: players.get(id), issuedToken: token };
+    return { player: players.get(id), token };
   }
 
   return {
-    /**
-     * Finds the player a cookie token belongs to. With no token, or one we do
-     * not know, this is a first visit and a new player is created.
-     */
-    resolve(token: string | undefined): ResolvedPlayer {
-      if (token !== undefined && TOKEN_PATTERN.test(token)) {
-        const player = players.findByTokenHash(hashToken(token));
-        if (player) return { player, issuedToken: null };
-      }
-      return create();
+    /** The player a cookie token belongs to, or null if there is none. */
+    find(token: string | undefined): Player | null {
+      if (token === undefined || !TOKEN_PATTERN.test(token)) return null;
+      return players.findByTokenHash(hashToken(token));
     },
+
+    /** A first visit: a new player with the opening balance and a first server seed. */
+    create,
   };
 }

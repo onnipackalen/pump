@@ -157,7 +157,13 @@ describe('a round left alone for 24 hours', () => {
     const history = (await seat.get<HistoryResponse>('/api/history')).body.rounds;
 
     expect(history).toHaveLength(1);
-    expect(history[0]).toMatchObject({ id: round.id, betCents: 3000, payoutCents: 1010 });
+    // Two of the three bets were never played: they are refunded, not staked.
+    expect(history[0]).toMatchObject({
+      id: round.id,
+      betCents: 1000,
+      payoutCents: 1010,
+      refundedCents: 2000,
+    });
   });
 });
 

@@ -214,7 +214,7 @@ describe('one key used for two different requests', () => {
     const other = await setClientSeed('other', 'reused');
 
     expect(other.statusCode).toBe(422);
-    expect(other.json()).toMatchObject({ error: { code: 'invalid_request' } });
+    expect(other.json()).toMatchObject({ error: { code: 'key_reused' } });
     expect(await clientSeedNow()).toBe('first');
     expect((await setClientSeed('first', 'reused')).body).toBe(first.body);
   });

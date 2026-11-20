@@ -14,11 +14,7 @@ const db = openDatabase(databasePath);
 migrate(db);
 
 const runtime = systemRuntime(db);
-const app = buildApp({
-  runtime,
-  logger: true,
-  secureCookies: process.env.NODE_ENV === 'production',
-});
+const app = buildApp({ runtime, logger: true });
 
 // The 24-hour rule for players who never come back: now and then, settle
 // every round that has been left idle that long.

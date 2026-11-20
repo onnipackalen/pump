@@ -52,9 +52,11 @@ export type LedgerRepository = ReturnType<typeof ledgerRepository>;
 
 /** The only code that writes to the ledger or changes a balance. */
 export function ledgerRepository(db: Db) {
-  // Check and record in ONE statement: the row is written only if the
-  // balance can take the amount. There is no gap between "is there enough?"
-  // and "write it down" for another request to slip into.
+  // Check, record and move the balance in ONE statement. The row is written
+  // only if the balance can take the amount, and a database trigger then
+  // sets the stored balance to this row's balance_after_cents as part of the
+  // same insert. There is no gap between "is there enough?", "write it down"
+  // and "move the balance" for another request, or a crash, to slip into.
   const insertIfAffordable = db.prepare(`
     INSERT INTO ledger
       (player_id, kind, amount_cents, balance_after_cents, round_id, balloon_index, created_at)
@@ -62,11 +64,6 @@ export function ledgerRepository(db: Db) {
     FROM players
     WHERE id = :playerId AND balance_cents + :amount >= 0
   `);
-  // Then move the stored balance to match. A trigger refuses this update
-  // unless the result equals the ledger row just written.
-  const applyToBalance = db.prepare(
-    'UPDATE players SET balance_cents = balance_cents + :amount WHERE id = :playerId',
-  );
   const selectBalance = db.prepare('SELECT balance_cents FROM players WHERE id = :playerId');
   const selectByPlayer = db.prepare('SELECT * FROM ledger WHERE player_id = :playerId ORDER BY id');
 
@@ -93,7 +90,6 @@ export function ledgerRepository(db: Db) {
         at: entry.at,
       });
       if (Number(written.changes) !== 1) return null;
-      applyToBalance.run({ playerId: entry.playerId, amount: entry.amountCents });
       return balanceOf(entry.playerId);
     },
 

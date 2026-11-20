@@ -33,6 +33,7 @@ export function sessionService(
           betCents: round.betCents,
           patchesCents: round.patchesCents,
           payoutCents: round.payoutCents,
+          refundedCents: round.refundedCents,
           serverSeedHash: round.serverSeedHash,
           nonce: round.nonce,
           finishedAt: round.finishedAt,

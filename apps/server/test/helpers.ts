@@ -96,35 +96,62 @@ export function onlyPlayerId(db: Db): string {
 }
 
 /**
- * Puts an active round straight into the database. The game service that will
- * start rounds does not exist yet; tests that need "a round is in progress"
- * use this.
+ * Puts an active round straight into the database, with one unpumped balloon
+ * per bet. Tests that need "a round is in progress" without playing one use
+ * this. It follows the database's own rules: the seed hands out the nonce
+ * first, then the round and its balloons are written.
  */
-export function insertActiveRound(db: Db, playerId: string, roundId = 'round-1'): void {
+export function insertActiveRound(
+  db: Db,
+  playerId: string,
+  roundId = 'round-1',
+  betsCents: readonly number[] = [],
+): void {
   const seed = db
     .prepare('SELECT id, next_nonce FROM server_seeds WHERE player_id = ? AND revealed_at IS NULL')
     .get(playerId);
   if (!seed) throw new Error('Player has no active seed');
-  db.prepare(
-    `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder,
-                         server_seed_id, client_seed, nonce, started_at, last_action_at)
-     VALUES (?, ?, 'active', 'easy', 9700, '[101,111]', ?, 'seed', ?, ?, ?)`,
-  ).run(
-    roundId,
-    playerId,
-    int(seed, 'id'),
-    int(seed, 'next_nonce'),
-    '2026-01-01T00:00:00.000Z',
-    '2026-01-01T00:00:00.000Z',
-  );
+  const at = '2026-01-01T00:00:00.000Z';
   db.prepare('UPDATE server_seeds SET next_nonce = next_nonce + 1 WHERE id = ?').run(
     int(seed, 'id'),
   );
+  db.prepare(
+    `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder,
+                         server_seed_id, client_seed, nonce, started_at, last_action_at)
+     VALUES (?, ?, 'active', 'easy', ?, '[101,111]', ?, 'seed', ?, ?, ?)`,
+  ).run(roundId, playerId, GAME_CONFIG.rtpBp, int(seed, 'id'), int(seed, 'next_nonce'), at, at);
+  betsCents.forEach((betCents, balloonIndex) => {
+    db.prepare(
+      `INSERT INTO balloons (round_id, balloon_index, bet_cents, status, rung, draw_index, top_rung)
+       VALUES (?, ?, ?, 'active', 0, 0, 2)`,
+    ).run(roundId, balloonIndex, betCents);
+  });
 }
 
+/** Ends a round by hand: any balloon still in play is popped, then the round is closed. */
 export function finishRound(db: Db, roundId = 'round-1'): void {
+  db.prepare("UPDATE balloons SET status = 'popped' WHERE round_id = ? AND status = 'active'").run(
+    roundId,
+  );
   db.prepare("UPDATE rounds SET status = 'finished', finished_at = ? WHERE id = ?").run(
     '2026-01-01T00:05:00.000Z',
     roundId,
   );
+}
+
+/** As if `rounds` more rounds had been played on the active seed: the nonce goes up one at a time. */
+export function bumpNonce(db: Db, rounds: number): void {
+  for (let i = 0; i < rounds; i += 1) {
+    db.exec('UPDATE server_seeds SET next_nonce = next_nonce + 1 WHERE revealed_at IS NULL');
+  }
+}
+
+/** Takes one balloon of a hand-made round up one rung and cashes it out for `payoutCents`. */
+export function cashOutByHand(db: Db, roundId: string, balloonIndex: number, payoutCents: number): void {
+  db.prepare(
+    'UPDATE balloons SET rung = 1, draw_index = 1 WHERE round_id = ? AND balloon_index = ?',
+  ).run(roundId, balloonIndex);
+  db.prepare(
+    "UPDATE balloons SET status = 'cashed', payout_cents = ? WHERE round_id = ? AND balloon_index = ?",
+  ).run(payoutCents, roundId, balloonIndex);
 }

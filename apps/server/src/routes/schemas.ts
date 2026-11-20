@@ -54,6 +54,7 @@ export const cashOutBody = z.strictObject({
 export const noBody = z.union([z.undefined(), z.null(), z.strictObject({})]);
 
 /** The Idempotency-Key header: 1 to 128 characters from A-Z, a-z, 0-9, _ and -. */
-export const idempotencyKey = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/, {
-  message: 'Send an Idempotency-Key header: 1 to 128 characters from A-Z, a-z, 0-9, _ and -.',
-});
+const KEY_RULE = 'Send an Idempotency-Key header: 1 to 128 characters from A-Z, a-z, 0-9, _ and -.';
+export const idempotencyKey = z
+  .string({ error: KEY_RULE })
+  .regex(/^[A-Za-z0-9_-]{1,128}$/, { message: KEY_RULE });

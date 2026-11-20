@@ -5,6 +5,7 @@ import { buildApp } from '../src/app';
 import { text } from '../src/db/rows';
 import { PLAYER_COOKIE } from '../src/settings';
 import {
+  cashOutByHand,
   count,
   finishRound,
   firstVisit,
@@ -77,7 +78,8 @@ describe('coming back', () => {
     const response = await app.inject({ method: 'GET', url: '/api/session', cookies });
 
     expect(response.json<SessionView>()).toEqual(session);
-    expect(response.headers['set-cookie']).toBeUndefined();
+    // The same cookie is sent again, so it does not run out while they keep playing.
+    expect(String(response.headers['set-cookie'])).toContain(`${PLAYER_COOKIE}=${cookies[PLAYER_COOKIE] ?? ''};`);
     expect(count(db, 'players')).toBe(1);
     expect(count(db, 'ledger')).toBe(1);
   });
@@ -117,13 +119,10 @@ describe('GET /api/history', () => {
     const { app, db } = testWorld();
     const { cookies, session } = await firstVisit(app);
     const playerId = onlyPlayerId(db);
-    insertActiveRound(db, playerId, 'round-1');
-    db.exec(`
-      INSERT INTO balloons (round_id, balloon_index, bet_cents, status, rung, draw_index,
-                            top_rung, patches_cents, payout_cents)
-      VALUES ('round-1', 0, 1000, 'cashed', 3, 4, 24, 37, 1230),
-             ('round-1', 1, 2500, 'popped', 1, 2, 24, 0, 0)
-    `);
+    insertActiveRound(db, playerId, 'round-1', [1000, 2500]);
+    db.exec('UPDATE balloons SET patches_cents = 37 WHERE balloon_index = 0');
+    cashOutByHand(db, 'round-1', 0, 1230);
+    // finishRound pops the balloon that is still in play.
     finishRound(db, 'round-1');
     insertActiveRound(db, playerId, 'round-2');
 
@@ -138,6 +137,7 @@ describe('GET /api/history', () => {
           betCents: 3500,
           patchesCents: 37,
           payoutCents: 1230,
+          refundedCents: 0,
           serverSeedHash: session.fairness.serverSeedHash,
           nonce: 0,
           finishedAt: '2026-01-01T00:05:00.000Z',
@@ -186,5 +186,39 @@ describe('GET /api/history', () => {
       cookies,
     });
     expect(response.statusCode).toBe(200);
+  });
+});
+
+describe('a request with no player cookie', () => {
+  it('is refused everywhere except the session load, and never creates a player', async () => {
+    const { app, db } = testWorld();
+    const requests = [
+      { method: 'GET', url: '/api/history' },
+      { method: 'GET', url: '/api/rounds/some-round/verify' },
+      { method: 'POST', url: '/api/rounds', payload: { difficultyId: 'easy', betsCents: [100] } },
+      { method: 'POST', url: '/api/fairness/rotate' },
+      { method: 'PUT', url: '/api/fairness/client-seed', payload: { clientSeed: 'seed' } },
+    ] as const;
+
+    for (const request of requests) {
+      const response = await app.inject({ ...request, headers: { 'idempotency-key': 'key-1' } });
+      expect(response.statusCode, request.url).toBe(401);
+      expect(response.json()).toMatchObject({ error: { code: 'no_session' } });
+      expect(response.headers['set-cookie']).toBeUndefined();
+    }
+    expect(count(db, 'players')).toBe(0);
+  });
+
+  it('means two requests sent together on a first visit still make one player', async () => {
+    const { app, db } = testWorld();
+
+    const [session, history] = await Promise.all([
+      app.inject({ method: 'GET', url: '/api/session' }),
+      app.inject({ method: 'GET', url: '/api/history' }),
+    ]);
+
+    expect(session.statusCode).toBe(200);
+    expect(history.statusCode).toBe(401);
+    expect(count(db, 'players')).toBe(1);
   });
 });

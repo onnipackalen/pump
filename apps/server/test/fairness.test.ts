@@ -4,7 +4,15 @@ import type { FastifyInstance } from 'fastify';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Db } from '../src/db/database';
 import { text } from '../src/db/rows';
-import { count, firstVisit, insertActiveRound, onlyPlayerId, testWorld, type Visitor } from './helpers';
+import {
+  bumpNonce,
+  count,
+  firstVisit,
+  insertActiveRound,
+  onlyPlayerId,
+  testWorld,
+  type Visitor,
+} from './helpers';
 
 let app: FastifyInstance;
 let db: Db;
@@ -76,7 +84,7 @@ describe('PUT /api/fairness/client-seed', () => {
 
   it('never resets the nonce and never touches the server seed', async () => {
     // As if three rounds had been played on this server seed.
-    db.exec('UPDATE server_seeds SET next_nonce = 3');
+    bumpNonce(db, 3);
 
     const first = await setClientSeed('seed-A');
     const second = await setClientSeed('seed-B');
@@ -140,7 +148,7 @@ describe('PUT /api/fairness/client-seed', () => {
 describe('POST /api/fairness/rotate', () => {
   it('reveals the old seed, and it matches the hash that was shown before', async () => {
     const hashShownBefore = visitor.session.fairness.serverSeedHash;
-    db.exec('UPDATE server_seeds SET next_nonce = 5');
+    bumpNonce(db, 5);
 
     const response = await rotate();
 
@@ -153,7 +161,7 @@ describe('POST /api/fairness/rotate', () => {
   });
 
   it('starts a new seed with a new hash and its nonce at 0', async () => {
-    db.exec('UPDATE server_seeds SET next_nonce = 5');
+    bumpNonce(db, 5);
 
     const result = (await rotate()).json<RotateResult>();
 

@@ -8,7 +8,15 @@ import { immediate } from './transaction';
  *
  * The rules that keep money safe are written here as constraints and
  * triggers, so the database itself refuses a bad write even if the code
- * above it has a bug.
+ * above it has a bug. Four kinds of guard appear on every table that matters:
+ *
+ *   no update / no delete   history is never rewritten
+ *   no replace              SQLite's INSERT OR REPLACE deletes the old row
+ *                           first, quietly. A BEFORE INSERT trigger sees that
+ *                           the row exists and refuses, on any connection.
+ *   starts fresh            a new row begins in its first state, never
+ *                           halfway through
+ *   one step at a time      a row only moves forward, one step per change
  */
 interface Migration {
   readonly id: number;
@@ -19,10 +27,13 @@ interface Migration {
 const MIGRATIONS: readonly Migration[] = [
   {
     id: 1,
-    name: 'players, seeds, rounds, ledger, idempotency',
+    name: 'players, seeds, rounds, balloons, actions, ledger, idempotency',
     sql: `
-      -- One row per anonymous player. The cookie holds a random token; only
-      -- its SHA-256 is stored, so a copy of the database cannot log in.
+      ------------------------------------------------------------------
+      -- Players. One row per anonymous player. The cookie holds a random
+      -- token; only its SHA-256 is stored, so a copy of the database
+      -- cannot log in.
+      ------------------------------------------------------------------
       CREATE TABLE players (
         id            TEXT PRIMARY KEY,
         token_hash    TEXT NOT NULL UNIQUE,
@@ -31,17 +42,28 @@ const MIGRATIONS: readonly Migration[] = [
         created_at    TEXT NOT NULL
       ) STRICT;
 
+      CREATE TRIGGER players_no_replace BEFORE INSERT ON players
+      WHEN EXISTS (SELECT 1 FROM players WHERE id = NEW.id OR token_hash = NEW.token_hash)
+      BEGIN SELECT RAISE(ABORT, 'a player is never replaced'); END;
+
       -- A player starts with nothing. The opening grant arrives through the
       -- ledger like every other cent.
       CREATE TRIGGER players_start_at_zero BEFORE INSERT ON players
       WHEN NEW.balance_cents <> 0
       BEGIN SELECT RAISE(ABORT, 'a new player starts at 0; money arrives through the ledger'); END;
 
+      CREATE TRIGGER players_fixed BEFORE UPDATE ON players
+      WHEN NEW.id <> OLD.id OR NEW.token_hash <> OLD.token_hash OR NEW.created_at <> OLD.created_at
+      BEGIN SELECT RAISE(ABORT, 'a player keeps their id and token'); END;
+
       CREATE TRIGGER players_no_delete BEFORE DELETE ON players
       BEGIN SELECT RAISE(ABORT, 'players are never deleted'); END;
 
+      ------------------------------------------------------------------
       -- Server seeds. A player has exactly one active seed (revealed_at is
-      -- null). The nonce belongs to the seed: it starts at 0 and only goes up.
+      -- null). The nonce belongs to the seed: it starts at 0 and goes up by
+      -- one for each round, never back.
+      ------------------------------------------------------------------
       CREATE TABLE server_seeds (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         player_id   TEXT NOT NULL REFERENCES players(id),
@@ -55,15 +77,27 @@ const MIGRATIONS: readonly Migration[] = [
       CREATE UNIQUE INDEX one_active_seed_per_player
         ON server_seeds(player_id) WHERE revealed_at IS NULL;
 
+      CREATE TRIGGER server_seeds_no_replace BEFORE INSERT ON server_seeds
+      WHEN EXISTS (
+        SELECT 1 FROM server_seeds
+        WHERE id = NEW.id OR seed = NEW.seed
+           OR (player_id = NEW.player_id AND revealed_at IS NULL)
+      )
+      BEGIN SELECT RAISE(ABORT, 'a player has one active seed, and a seed is never replaced'); END;
+
+      CREATE TRIGGER server_seeds_start_fresh BEFORE INSERT ON server_seeds
+      WHEN NEW.next_nonce <> 0 OR NEW.revealed_at IS NOT NULL
+      BEGIN SELECT RAISE(ABORT, 'a new seed starts secret, with its nonce at 0'); END;
+
       CREATE TRIGGER server_seeds_fixed BEFORE UPDATE ON server_seeds
       WHEN NEW.id <> OLD.id OR NEW.player_id <> OLD.player_id
         OR NEW.seed <> OLD.seed OR NEW.seed_hash <> OLD.seed_hash
         OR NEW.created_at <> OLD.created_at
       BEGIN SELECT RAISE(ABORT, 'a server seed never changes'); END;
 
-      CREATE TRIGGER server_seeds_nonce_only_up BEFORE UPDATE OF next_nonce ON server_seeds
-      WHEN NEW.next_nonce < OLD.next_nonce
-      BEGIN SELECT RAISE(ABORT, 'a nonce only goes up'); END;
+      CREATE TRIGGER server_seeds_nonce_one_step BEFORE UPDATE OF next_nonce ON server_seeds
+      WHEN NEW.next_nonce <> OLD.next_nonce AND NEW.next_nonce <> OLD.next_nonce + 1
+      BEGIN SELECT RAISE(ABORT, 'a nonce only goes up, one round at a time'); END;
 
       CREATE TRIGGER server_seeds_revealed_is_final BEFORE UPDATE ON server_seeds
       WHEN OLD.revealed_at IS NOT NULL
@@ -72,8 +106,10 @@ const MIGRATIONS: readonly Migration[] = [
       CREATE TRIGGER server_seeds_no_delete BEFORE DELETE ON server_seeds
       BEGIN SELECT RAISE(ABORT, 'server seeds are never deleted'); END;
 
-      -- Rounds. Each keeps its own copy of the RTP and ladder it was played
-      -- with, so it still verifies after the configuration changes.
+      ------------------------------------------------------------------
+      -- Rounds. Each keeps its own copy of the RTP and ladder it was
+      -- played with, so it still verifies after the configuration changes.
+      ------------------------------------------------------------------
       CREATE TABLE rounds (
         id             TEXT PRIMARY KEY,
         player_id      TEXT NOT NULL REFERENCES players(id),
@@ -99,9 +135,60 @@ const MIGRATIONS: readonly Migration[] = [
 
       CREATE INDEX rounds_history ON rounds(player_id, finished_at);
 
+      CREATE TRIGGER rounds_no_replace BEFORE INSERT ON rounds
+      WHEN EXISTS (
+        SELECT 1 FROM rounds
+        WHERE id = NEW.id
+           OR (server_seed_id = NEW.server_seed_id AND nonce = NEW.nonce)
+           OR (player_id = NEW.player_id AND status = 'active')
+      )
+      BEGIN SELECT RAISE(ABORT, 'one active round per player, and a round is never replaced'); END;
+
+      CREATE TRIGGER rounds_start_active BEFORE INSERT ON rounds
+      WHEN NEW.status <> 'active'
+      BEGIN SELECT RAISE(ABORT, 'a new round starts active'); END;
+
+      -- The nonce is not chosen: it is the one the player's own active seed
+      -- has just handed out.
+      CREATE TRIGGER rounds_on_own_active_seed BEFORE INSERT ON rounds
+      WHEN NOT EXISTS (
+        SELECT 1 FROM server_seeds
+        WHERE id = NEW.server_seed_id AND player_id = NEW.player_id
+          AND revealed_at IS NULL AND next_nonce = NEW.nonce + 1
+      )
+      BEGIN SELECT RAISE(ABORT, 'a round uses its own player''s active seed and the nonce that seed just gave'); END;
+
+      -- A finished round is closed for good, and a round keeps the seeds,
+      -- RTP and ladder it started with.
+      CREATE TRIGGER rounds_finished_is_final BEFORE UPDATE ON rounds
+      WHEN OLD.status = 'finished'
+      BEGIN SELECT RAISE(ABORT, 'a finished round never changes'); END;
+
+      CREATE TRIGGER rounds_fixed BEFORE UPDATE ON rounds
+      WHEN NEW.id <> OLD.id OR NEW.player_id <> OLD.player_id
+        OR NEW.difficulty_id <> OLD.difficulty_id OR NEW.rtp_bp <> OLD.rtp_bp
+        OR NEW.ladder <> OLD.ladder OR NEW.server_seed_id <> OLD.server_seed_id
+        OR NEW.client_seed <> OLD.client_seed OR NEW.nonce <> OLD.nonce
+        OR NEW.started_at <> OLD.started_at
+      BEGIN SELECT RAISE(ABORT, 'a round keeps the seeds, RTP and ladder it started with'); END;
+
+      CREATE TRIGGER rounds_no_delete BEFORE DELETE ON rounds
+      BEGIN SELECT RAISE(ABORT, 'rounds are never deleted'); END;
+
+      -- Seeds cannot change mid-round: a seed cannot be revealed while a
+      -- round is still being played on it.
+      CREATE TRIGGER server_seeds_not_revealed_mid_round BEFORE UPDATE OF revealed_at ON server_seeds
+      WHEN NEW.revealed_at IS NOT NULL
+        AND EXISTS (SELECT 1 FROM rounds WHERE server_seed_id = OLD.id AND status = 'active')
+      BEGIN SELECT RAISE(ABORT, 'a seed cannot be revealed while a round is using it'); END;
+
+      ------------------------------------------------------------------
+      -- Balloons. How many a round may have is the engine's rule, not the
+      -- database's.
+      ------------------------------------------------------------------
       CREATE TABLE balloons (
         round_id      TEXT NOT NULL REFERENCES rounds(id),
-        balloon_index INTEGER NOT NULL CHECK (balloon_index BETWEEN 0 AND 2),
+        balloon_index INTEGER NOT NULL CHECK (balloon_index >= 0),
         bet_cents     INTEGER NOT NULL CHECK (bet_cents > 0),
         status        TEXT NOT NULL CHECK (status IN ('active', 'popped', 'cashed', 'refunded')),
         rung          INTEGER NOT NULL CHECK (rung >= 0),
@@ -109,13 +196,132 @@ const MIGRATIONS: readonly Migration[] = [
         top_rung      INTEGER NOT NULL CHECK (top_rung >= 1),
         patches_cents INTEGER NOT NULL DEFAULT 0 CHECK (patches_cents >= 0),
         payout_cents  INTEGER NOT NULL DEFAULT 0 CHECK (payout_cents >= 0),
-        PRIMARY KEY (round_id, balloon_index)
+        PRIMARY KEY (round_id, balloon_index),
+        -- A balloon cannot climb without a draw, or past its top rung.
+        CHECK (rung <= draw_index AND rung <= top_rung),
+        -- Only a cashed balloon has a payout, and it was pumped at least once.
+        CHECK ((status = 'cashed') = (payout_cents > 0)),
+        CHECK (status <> 'cashed' OR rung >= 1),
+        -- A refunded balloon was never played.
+        CHECK (status <> 'refunded' OR (draw_index = 0 AND patches_cents = 0))
       ) STRICT, WITHOUT ROWID;
 
+      CREATE TRIGGER balloons_no_replace BEFORE INSERT ON balloons
+      WHEN EXISTS (
+        SELECT 1 FROM balloons WHERE round_id = NEW.round_id AND balloon_index = NEW.balloon_index
+      )
+      BEGIN SELECT RAISE(ABORT, 'a balloon is never replaced'); END;
+
+      CREATE TRIGGER balloons_start_fresh BEFORE INSERT ON balloons
+      WHEN NEW.status <> 'active' OR NEW.rung <> 0 OR NEW.draw_index <> 0
+        OR NEW.patches_cents <> 0 OR NEW.payout_cents <> 0
+      BEGIN SELECT RAISE(ABORT, 'a new balloon starts unpumped'); END;
+
+      CREATE TRIGGER balloons_only_in_an_active_round BEFORE INSERT ON balloons
+      WHEN NOT EXISTS (SELECT 1 FROM rounds WHERE id = NEW.round_id AND status = 'active')
+      BEGIN SELECT RAISE(ABORT, 'a balloon belongs to a round in progress'); END;
+
+      -- Once a balloon has popped, cashed out or been refunded it is over.
+      -- Nothing can pump it, pay it or change it again.
+      CREATE TRIGGER balloons_finished_is_final BEFORE UPDATE ON balloons
+      WHEN OLD.status <> 'active'
+      BEGIN SELECT RAISE(ABORT, 'a finished balloon never changes'); END;
+
+      CREATE TRIGGER balloons_fixed BEFORE UPDATE ON balloons
+      WHEN NEW.round_id <> OLD.round_id OR NEW.balloon_index <> OLD.balloon_index
+        OR NEW.bet_cents <> OLD.bet_cents OR NEW.top_rung <> OLD.top_rung
+      BEGIN SELECT RAISE(ABORT, 'a balloon keeps its bet and its top rung'); END;
+
+      -- One change is at most one draw and at most one rung, and a Patch
+      -- charge is never taken back.
+      CREATE TRIGGER balloons_one_step BEFORE UPDATE ON balloons
+      WHEN NEW.draw_index NOT IN (OLD.draw_index, OLD.draw_index + 1)
+        OR NEW.rung NOT IN (OLD.rung, OLD.rung + 1)
+        OR (NEW.rung = OLD.rung + 1 AND NEW.draw_index <> OLD.draw_index + 1)
+        OR NEW.patches_cents < OLD.patches_cents
+      BEGIN SELECT RAISE(ABORT, 'a balloon moves one draw and one rung at a time, never back'); END;
+
+      CREATE TRIGGER balloons_move_only_in_an_active_round BEFORE UPDATE ON balloons
+      WHEN NOT EXISTS (SELECT 1 FROM rounds WHERE id = OLD.round_id AND status = 'active')
+      BEGIN SELECT RAISE(ABORT, 'a balloon belongs to a round in progress'); END;
+
+      CREATE TRIGGER balloons_no_delete BEFORE DELETE ON balloons
+      BEGIN SELECT RAISE(ABORT, 'balloons are never deleted'); END;
+
+      -- A round ends when its last balloon is done, not before.
+      CREATE TRIGGER rounds_finish_when_no_balloon_in_play BEFORE UPDATE OF status ON rounds
+      WHEN NEW.status = 'finished'
+        AND EXISTS (SELECT 1 FROM balloons WHERE round_id = OLD.id AND status = 'active')
+      BEGIN SELECT RAISE(ABORT, 'a round cannot finish while a balloon is still in play'); END;
+
+      ------------------------------------------------------------------
+      -- Balloon actions. Everything that was done to a balloon, in order.
+      -- With the seeds, this is enough to play a finished round again and
+      -- check every cent. A pump stores the draw that decided it; a
+      -- cash-out stores no draw.
+      -- outcome: survived, saved, popped or top for a pump; cashed (the
+      -- player pressed Cash Out) or abandoned (the 24-hour rule did).
+      ------------------------------------------------------------------
+      CREATE TABLE balloon_actions (
+        round_id      TEXT NOT NULL,
+        balloon_index INTEGER NOT NULL,
+        seq           INTEGER NOT NULL CHECK (seq >= 0),
+        kind          TEXT NOT NULL CHECK (kind IN ('pump', 'cashOut')),
+        patch         INTEGER CHECK (patch IN (0, 1)),
+        draw_index    INTEGER CHECK (draw_index >= 0),
+        den           INTEGER CHECK (den >= 2),
+        num           INTEGER CHECK (num >= 1),
+        roll          INTEGER CHECK (roll >= 0),
+        outcome       TEXT NOT NULL,
+        created_at    TEXT NOT NULL,
+        PRIMARY KEY (round_id, balloon_index, seq),
+        FOREIGN KEY (round_id, balloon_index) REFERENCES balloons(round_id, balloon_index),
+        CHECK (
+          (kind = 'pump'
+            AND patch IS NOT NULL AND draw_index IS NOT NULL
+            AND den IS NOT NULL AND num IS NOT NULL AND roll IS NOT NULL
+            AND roll < den AND num < den
+            AND outcome IN ('survived', 'saved', 'popped', 'top')
+            -- The outcome must be what the roll says: below num survives.
+            AND (roll < num) = (outcome IN ('survived', 'top'))
+            -- Only a Patch can save a pump that would have popped.
+            AND (outcome = 'saved') = (roll >= num AND patch = 1))
+          OR
+          (kind = 'cashOut'
+            AND patch IS NULL AND draw_index IS NULL
+            AND den IS NULL AND num IS NULL AND roll IS NULL
+            AND outcome IN ('cashed', 'abandoned'))
+        )
+      ) STRICT, WITHOUT ROWID;
+
+      -- A draw index decides one pump, once. Two pumps sent with the same
+      -- expected draw index can never both be recorded.
+      CREATE UNIQUE INDEX one_pump_per_draw_index
+        ON balloon_actions(round_id, balloon_index, draw_index) WHERE draw_index IS NOT NULL;
+
+      -- Actions are numbered 0, 1, 2, ... and a pump's draw index is the
+      -- number of pumps before it. Nothing can be slipped in or skipped.
+      CREATE TRIGGER balloon_actions_in_order BEFORE INSERT ON balloon_actions
+      WHEN NEW.seq <> (SELECT COUNT(*) FROM balloon_actions
+                       WHERE round_id = NEW.round_id AND balloon_index = NEW.balloon_index)
+        OR (NEW.kind = 'pump' AND NEW.draw_index <> (
+              SELECT COUNT(*) FROM balloon_actions
+              WHERE round_id = NEW.round_id AND balloon_index = NEW.balloon_index
+                AND kind = 'pump'))
+      BEGIN SELECT RAISE(ABORT, 'balloon actions are recorded in order, with no gaps'); END;
+
+      CREATE TRIGGER balloon_actions_no_update BEFORE UPDATE ON balloon_actions
+      BEGIN SELECT RAISE(ABORT, 'balloon actions are append-only'); END;
+
+      CREATE TRIGGER balloon_actions_no_delete BEFORE DELETE ON balloon_actions
+      BEGIN SELECT RAISE(ABORT, 'balloon actions are append-only'); END;
+
+      ------------------------------------------------------------------
       -- The ledger: one row for every cent that moves. Amounts are signed:
       -- a bet or a Patch is negative, a grant, payout or refund is positive.
       -- balance_after_cents is the balance once this row has been applied,
-      -- so the rows form a chain that can be checked from the first to the last.
+      -- so the rows form a chain that can be checked from first to last.
+      ------------------------------------------------------------------
       CREATE TABLE ledger (
         id                  INTEGER PRIMARY KEY AUTOINCREMENT,
         player_id           TEXT NOT NULL REFERENCES players(id),
@@ -126,6 +332,8 @@ const MIGRATIONS: readonly Migration[] = [
         round_id            TEXT REFERENCES rounds(id),
         balloon_index       INTEGER,
         created_at          TEXT NOT NULL,
+        -- Ids stay in the range every tool can read exactly.
+        CHECK (id > 0 AND id < 9007199254740992),
         CHECK (
           (kind IN ('bet', 'patch') AND amount_cents < 0)
           OR (kind IN ('grant', 'payout', 'refund') AND amount_cents > 0)
@@ -146,6 +354,21 @@ const MIGRATIONS: readonly Migration[] = [
       CREATE UNIQUE INDEX one_payout_or_refund_per_balloon
         ON ledger(round_id, balloon_index) WHERE kind IN ('payout', 'refund');
 
+      -- The same three rules as triggers. A unique index alone can be got
+      -- round with INSERT OR REPLACE, which would delete the first payment
+      -- to make room for the second.
+      CREATE TRIGGER ledger_paid_once BEFORE INSERT ON ledger
+      WHEN EXISTS (
+        SELECT 1 FROM ledger
+        WHERE id = NEW.id
+           OR (NEW.kind = 'grant' AND kind = 'grant' AND player_id = NEW.player_id)
+           OR (NEW.kind = 'bet' AND kind = 'bet'
+               AND round_id = NEW.round_id AND balloon_index = NEW.balloon_index)
+           OR (NEW.kind IN ('payout', 'refund') AND kind IN ('payout', 'refund')
+               AND round_id = NEW.round_id AND balloon_index = NEW.balloon_index)
+      )
+      BEGIN SELECT RAISE(ABORT, 'this money was already moved: one grant per player, one bet and one payout or refund per balloon'); END;
+
       -- Append-only: a ledger row is never changed and never removed.
       CREATE TRIGGER ledger_no_update BEFORE UPDATE ON ledger
       BEGIN SELECT RAISE(ABORT, 'the ledger is append-only'); END;
@@ -163,9 +386,26 @@ const MIGRATIONS: readonly Migration[] = [
            WHERE player_id = NEW.player_id ORDER BY id DESC LIMIT 1), 0);
       END;
 
-      -- The stored balance may only be set to what the ledger says. A balance
-      -- can therefore never change without a ledger row in the same
-      -- transaction, and never drift from the ledger.
+      -- A row for a round must be for a real balloon of that player, and say
+      -- what the balloon says: a bet row is the balloon's bet, a payout is
+      -- what a cashed balloon recorded, a refund is the bet of a refunded one.
+      CREATE TRIGGER ledger_matches_its_balloon BEFORE INSERT ON ledger
+      WHEN NEW.round_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM balloons b JOIN rounds r ON r.id = b.round_id
+        WHERE b.round_id = NEW.round_id AND b.balloon_index = NEW.balloon_index
+          AND r.player_id = NEW.player_id
+          AND (NEW.kind <> 'bet' OR b.bet_cents = -NEW.amount_cents)
+          AND (NEW.kind <> 'payout' OR (b.status = 'cashed' AND b.payout_cents = NEW.amount_cents))
+          AND (NEW.kind <> 'refund' OR (b.status = 'refunded' AND b.bet_cents = NEW.amount_cents))
+      )
+      BEGIN SELECT RAISE(ABORT, 'a ledger row must match a balloon of its own player'); END;
+
+      -- New rows go on the end. A row cannot be slipped into the past.
+      CREATE TRIGGER ledger_newest_last AFTER INSERT ON ledger
+      WHEN NEW.id <> (SELECT MAX(id) FROM ledger)
+      BEGIN SELECT RAISE(ABORT, 'a ledger row is always added at the end'); END;
+
+      -- The stored balance may only be set to what the ledger says ...
       CREATE TRIGGER players_balance_follows_ledger BEFORE UPDATE OF balance_cents ON players
       BEGIN
         SELECT RAISE(ABORT, 'a balance must equal the last ledger row')
@@ -174,9 +414,19 @@ const MIGRATIONS: readonly Migration[] = [
            WHERE player_id = NEW.id ORDER BY id DESC LIMIT 1), 0);
       END;
 
+      -- ... and writing a ledger row moves it there, in the same statement.
+      -- So a row and its balance change are one step that cannot be split:
+      -- the balance equals the sum of the ledger at all times.
+      CREATE TRIGGER ledger_moves_the_balance AFTER INSERT ON ledger
+      BEGIN
+        UPDATE players SET balance_cents = NEW.balance_after_cents WHERE id = NEW.player_id;
+      END;
+
+      ------------------------------------------------------------------
       -- Repeated requests. The first answer to (player, key) is stored here
-      -- in the same transaction as the change it describes, and returned for
-      -- every repeat.
+      -- in the same transaction as the change it describes, and returned
+      -- for every repeat.
+      ------------------------------------------------------------------
       CREATE TABLE idempotency_keys (
         player_id    TEXT NOT NULL REFERENCES players(id),
         key          TEXT NOT NULL,
@@ -187,120 +437,46 @@ const MIGRATIONS: readonly Migration[] = [
         PRIMARY KEY (player_id, key)
       ) STRICT, WITHOUT ROWID;
 
+      CREATE TRIGGER idempotency_keys_no_replace BEFORE INSERT ON idempotency_keys
+      WHEN EXISTS (
+        SELECT 1 FROM idempotency_keys WHERE player_id = NEW.player_id AND key = NEW.key
+      )
+      BEGIN SELECT RAISE(ABORT, 'a stored answer is never replaced'); END;
+
       CREATE TRIGGER idempotency_keys_no_update BEFORE UPDATE ON idempotency_keys
       BEGIN SELECT RAISE(ABORT, 'a stored answer never changes'); END;
-    `,
-  },
-  {
-    id: 2,
-    name: 'balloon actions, and guards on finished balloons and rounds',
-    sql: `
-      -- Everything that was done to a balloon, in order. With the seeds, this
-      -- is enough to play a finished round again and check every cent.
-      -- A pump stores the draw that decided it. A cash-out stores no draw.
-      -- outcome: survived, saved, popped or top for a pump; cashed (the
-      -- player pressed Cash Out) or abandoned (the 24-hour rule did).
-      CREATE TABLE balloon_actions (
-        round_id      TEXT NOT NULL,
-        balloon_index INTEGER NOT NULL,
-        seq           INTEGER NOT NULL CHECK (seq >= 0),
-        kind          TEXT NOT NULL CHECK (kind IN ('pump', 'cashOut')),
-        patch         INTEGER CHECK (patch IN (0, 1)),
-        draw_index    INTEGER CHECK (draw_index >= 0),
-        den           INTEGER CHECK (den >= 1),
-        num           INTEGER CHECK (num >= 0),
-        roll          INTEGER CHECK (roll >= 0),
-        outcome       TEXT NOT NULL,
-        created_at    TEXT NOT NULL,
-        PRIMARY KEY (round_id, balloon_index, seq),
-        FOREIGN KEY (round_id, balloon_index) REFERENCES balloons(round_id, balloon_index),
-        CHECK (
-          (kind = 'pump'
-            AND patch IS NOT NULL AND draw_index IS NOT NULL
-            AND den IS NOT NULL AND num IS NOT NULL AND roll IS NOT NULL
-            AND roll < den AND num <= den
-            AND outcome IN ('survived', 'saved', 'popped', 'top'))
-          OR
-          (kind = 'cashOut'
-            AND patch IS NULL AND draw_index IS NULL
-            AND den IS NULL AND num IS NULL AND roll IS NULL
-            AND outcome IN ('cashed', 'abandoned'))
-        )
-      ) STRICT, WITHOUT ROWID;
 
-      -- A draw index decides one pump, once. Two pumps sent with the same
-      -- expected draw index can never both be recorded.
-      CREATE UNIQUE INDEX one_pump_per_draw_index
-        ON balloon_actions(round_id, balloon_index, draw_index) WHERE draw_index IS NOT NULL;
-
-      CREATE TRIGGER balloon_actions_no_update BEFORE UPDATE ON balloon_actions
-      BEGIN SELECT RAISE(ABORT, 'balloon actions are append-only'); END;
-
-      CREATE TRIGGER balloon_actions_no_delete BEFORE DELETE ON balloon_actions
-      BEGIN SELECT RAISE(ABORT, 'balloon actions are append-only'); END;
-
-      -- Once a balloon has popped, cashed out or been refunded it is over.
-      -- Nothing can pump it, pay it or change it again.
-      CREATE TRIGGER balloons_finished_is_final BEFORE UPDATE ON balloons
-      WHEN OLD.status <> 'active'
-      BEGIN SELECT RAISE(ABORT, 'a finished balloon never changes'); END;
-
-      CREATE TRIGGER balloons_fixed BEFORE UPDATE ON balloons
-      WHEN NEW.round_id <> OLD.round_id OR NEW.balloon_index <> OLD.balloon_index
-        OR NEW.bet_cents <> OLD.bet_cents OR NEW.top_rung <> OLD.top_rung
-      BEGIN SELECT RAISE(ABORT, 'a balloon keeps its bet and its top rung'); END;
-
-      -- A balloon only moves forward: it uses up draws, climbs, and is
-      -- charged for Patches. None of those ever goes back down.
-      CREATE TRIGGER balloons_only_forward BEFORE UPDATE ON balloons
-      WHEN NEW.draw_index < OLD.draw_index OR NEW.rung < OLD.rung
-        OR NEW.patches_cents < OLD.patches_cents OR NEW.rung > NEW.top_rung
-      BEGIN SELECT RAISE(ABORT, 'a balloon only moves forward, and never past its top rung'); END;
-
-      CREATE TRIGGER balloons_no_delete BEFORE DELETE ON balloons
-      BEGIN SELECT RAISE(ABORT, 'balloons are never deleted'); END;
-
-      -- A finished round is closed for good, and a round keeps the seeds,
-      -- RTP and ladder it started with.
-      CREATE TRIGGER rounds_finished_is_final BEFORE UPDATE ON rounds
-      WHEN OLD.status = 'finished'
-      BEGIN SELECT RAISE(ABORT, 'a finished round never changes'); END;
-
-      CREATE TRIGGER rounds_fixed BEFORE UPDATE ON rounds
-      WHEN NEW.id <> OLD.id OR NEW.player_id <> OLD.player_id
-        OR NEW.difficulty_id <> OLD.difficulty_id OR NEW.rtp_bp <> OLD.rtp_bp
-        OR NEW.ladder <> OLD.ladder OR NEW.server_seed_id <> OLD.server_seed_id
-        OR NEW.client_seed <> OLD.client_seed OR NEW.nonce <> OLD.nonce
-        OR NEW.started_at <> OLD.started_at
-      BEGIN SELECT RAISE(ABORT, 'a round keeps the seeds, RTP and ladder it started with'); END;
-
-      CREATE TRIGGER rounds_no_delete BEFORE DELETE ON rounds
-      BEGIN SELECT RAISE(ABORT, 'rounds are never deleted'); END;
+      -- Deleting a stored answer would let its request run a second time.
+      CREATE TRIGGER idempotency_keys_no_delete BEFORE DELETE ON idempotency_keys
+      BEGIN SELECT RAISE(ABORT, 'a stored answer is never deleted'); END;
     `,
   },
 ];
 
-/** Brings the database up to date. Safe to call on every start. */
+/**
+ * Brings the database up to date. Safe to call on every start, and safe if
+ * two processes start on a fresh file at once: each step is checked and
+ * applied inside one write transaction, so the second process finds the work
+ * already done.
+ */
 export function migrate(db: Db): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      id         INTEGER PRIMARY KEY,
-      name       TEXT NOT NULL,
-      applied_at TEXT NOT NULL
-    ) STRICT
-  `);
-  const applied = new Set(
-    db
-      .prepare('SELECT id FROM schema_migrations')
-      .all()
-      .map((row) => int(row, 'id')),
-  );
+  immediate(db, () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        id         INTEGER PRIMARY KEY,
+        name       TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      ) STRICT
+    `);
+  });
+  const isApplied = db.prepare('SELECT COUNT(*) AS n FROM schema_migrations WHERE id = :id');
   const record = db.prepare(
     'INSERT INTO schema_migrations (id, name, applied_at) VALUES (:id, :name, :at)',
   );
   for (const migration of MIGRATIONS) {
-    if (applied.has(migration.id)) continue;
     immediate(db, () => {
+      const row = isApplied.get({ id: migration.id });
+      if (row !== undefined && int(row, 'n') > 0) return;
       db.exec(migration.sql);
       record.run({ id: migration.id, name: migration.name, at: new Date().toISOString() });
     });

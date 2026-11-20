@@ -17,6 +17,8 @@ export interface FinishedRound {
   readonly betCents: number;
   readonly patchesCents: number;
   readonly payoutCents: number;
+  /** Bets handed back unplayed by the 24-hour rule. Not part of betCents. */
+  readonly refundedCents: number;
   readonly serverSeedHash: string;
   /** True once the round's server seed has been rotated out, so it can be checked. */
   readonly seedRevealed: boolean;
@@ -116,6 +118,7 @@ function toFinishedRound(row: Row): FinishedRound {
     betCents: int(row, 'bet_cents'),
     patchesCents: int(row, 'patches_cents'),
     payoutCents: int(row, 'payout_cents'),
+    refundedCents: int(row, 'refunded_cents'),
     serverSeedHash: text(row, 'seed_hash'),
     seedRevealed: nullableText(row, 'revealed_at') !== null,
     nonce: int(row, 'nonce'),
@@ -168,7 +171,11 @@ export function roundsRepository(db: Db) {
   const selectFinished = db.prepare(`
     SELECT r.id, r.difficulty_id, r.nonce, r.finished_at, s.seed_hash, s.revealed_at,
            COUNT(b.balloon_index)            AS balloon_count,
-           COALESCE(SUM(b.bet_cents), 0)     AS bet_cents,
+           -- A refunded bet is void: it was never played, so it is not a stake.
+           COALESCE(SUM(CASE WHEN b.status = 'refunded' THEN 0 ELSE b.bet_cents END), 0)
+                                             AS bet_cents,
+           COALESCE(SUM(CASE WHEN b.status = 'refunded' THEN b.bet_cents ELSE 0 END), 0)
+                                             AS refunded_cents,
            COALESCE(SUM(b.patches_cents), 0) AS patches_cents,
            COALESCE(SUM(b.payout_cents), 0)  AS payout_cents
     FROM rounds r

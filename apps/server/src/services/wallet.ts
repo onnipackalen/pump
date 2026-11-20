@@ -55,7 +55,7 @@ export function walletService(ledger: LedgerRepository) {
       const balance = post(playerId, kind, -cents, ref, at);
       if (balance === null) {
         throw new ApiError('insufficient_funds', 'Your balance is too low for this', {
-          wallet: { balanceCents: ledger.balanceOf(playerId) },
+          wallet: () => ({ balanceCents: ledger.balanceOf(playerId) }),
         });
       }
       return balance;

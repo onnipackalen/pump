@@ -86,6 +86,19 @@ export function gameService(
     balanceCents: wallet.balanceOf(playerId),
   });
 
+  /**
+   * The round and wallet to send with a refusal. They are read when the
+   * answer is built, after the refused request has been rolled back, so they
+   * always show the state as it really is.
+   */
+  const stateNow = (playerId: string, roundId: string | null) => ({
+    round: (): RoundView | null => {
+      const stored = roundId === null ? null : rounds.find(roundId);
+      return stored ? toRoundView(stored) : null;
+    },
+    wallet: (): WalletView => walletOf(playerId),
+  });
+
   /** The player's own round, or "not found". Another player's round does not exist for them. */
   function load(playerId: string, roundId: string): StoredRound {
     const stored = rounds.find(roundId);
@@ -103,20 +116,16 @@ export function gameService(
 
   /**
    * Turns a refusal from the engine into the answer the player gets. A
-   * conflict carries the round as it is now, so the screen can catch up. The
-   * engine refuses before it changes or draws anything, so "now" is simply
-   * the round as it was loaded.
+   * conflict carries the round as it is now, so the screen can catch up.
    */
-  function refusal(error: unknown, playerId: string, stored: StoredRound | null): unknown {
+  function refusal(error: unknown, playerId: string, roundId: string | null): unknown {
     if (!(error instanceof EngineError)) return error;
+    const now = stateNow(playerId, roundId);
     switch (error.code) {
       case 'conflict':
-        return new ApiError('conflict', error.message, {
-          round: stored ? toRoundView(stored) : null,
-          wallet: walletOf(playerId),
-        });
+        return new ApiError('conflict', error.message, now);
       case 'insufficient_funds':
-        return new ApiError('insufficient_funds', error.message, { wallet: walletOf(playerId) });
+        return new ApiError('insufficient_funds', error.message, { wallet: now.wallet });
       case 'invalid_request':
         return new ApiError('invalid_request', error.message);
     }
@@ -125,10 +134,7 @@ export function gameService(
   /** A round that is over accepts nothing more. The answer shows how it ended. */
   function assertActive(stored: StoredRound, playerId: string): void {
     if (stored.status !== 'active') {
-      throw new ApiError('conflict', 'This round is over.', {
-        round: toRoundView(stored),
-        wallet: walletOf(playerId),
-      });
+      throw new ApiError('conflict', 'This round is over.', stateNow(playerId, stored.id));
     }
   }
 
@@ -190,10 +196,11 @@ export function gameService(
       assertInTransaction(runtime.db);
       const active = rounds.activeOf(playerId);
       if (active) {
-        throw new ApiError('round_active', 'Finish the round in progress before starting another.', {
-          round: toRoundView(active),
-          wallet: walletOf(playerId),
-        });
+        throw new ApiError(
+          'round_active',
+          'Finish the round in progress before starting another.',
+          stateNow(playerId, active.id),
+        );
       }
       const player = players.get(playerId);
       if (player.clientSeed === null) {
@@ -268,7 +275,7 @@ export function gameService(
           draw,
         );
       } catch (error) {
-        throw refusal(error, playerId, stored);
+        throw refusal(error, playerId, roundId);
       }
 
       const at = runtime.now().toISOString();
@@ -312,7 +319,7 @@ export function gameService(
       try {
         result = cashOut(stored.round, body);
       } catch (error) {
-        throw refusal(error, playerId, stored);
+        throw refusal(error, playerId, roundId);
       }
 
       const at = runtime.now().toISOString();

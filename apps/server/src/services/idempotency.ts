@@ -52,8 +52,10 @@ export function idempotencyService(runtime: Runtime, keys: IdempotencyRepository
      * answer or finds nothing was done at all.
      *
      * A refusal (an ApiError) is an answer too. The action's own changes are
-     * undone, the refusal is stored, and a repeat gets the same refusal. Any
-     * other error undoes everything and stores nothing, so it can be retried.
+     * undone first, and only then is the refusal's answer built, so it shows
+     * the balance and round as they really are. The refusal is stored, and a
+     * repeat gets the same refusal. Any other error undoes everything and
+     * stores nothing, so it can be retried.
      */
     once(request: OnceRequest, action: () => Answer): Answer {
       return immediate(runtime.db, () => {
@@ -61,9 +63,8 @@ export function idempotencyService(runtime: Runtime, keys: IdempotencyRepository
         if (stored) {
           if (stored.requestHash !== request.fingerprint) {
             throw new ApiError(
-              'invalid_request',
+              'key_reused',
               'This idempotency key was already used for a different request.',
-              { status: 422 },
             );
           }
           const body: unknown = JSON.parse(stored.body);

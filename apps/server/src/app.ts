@@ -14,7 +14,7 @@ export interface AppOptions {
   readonly runtime: Runtime;
   /** Print request logs. Off in tests. */
   readonly logger?: boolean;
-  /** Send the player cookie over HTTPS only. On in production. */
+  /** Force the player cookie's Secure flag. Unset: Secure whenever the request came over HTTPS. */
   readonly secureCookies?: boolean;
 }
 
@@ -34,12 +34,13 @@ function statusOf(error: unknown): number | null {
  * @pump/engine, never here.
  */
 export function buildApp(options: AppOptions): FastifyInstance {
-  const app = Fastify({ logger: options.logger ?? false, bodyLimit: 16 * 1024 });
+  // trustProxy: behind a host's HTTPS proxy, request.protocol reports 'https'.
+  const app = Fastify({ logger: options.logger ?? false, bodyLimit: 16 * 1024, trustProxy: true });
   void app.register(cookie);
 
   const context: RouteContext = {
     services: buildServices(options.runtime),
-    secureCookies: options.secureCookies ?? false,
+    secureCookies: options.secureCookies,
   };
 
   // Answers hold balances and seeds: never let a browser or proxy cache them.

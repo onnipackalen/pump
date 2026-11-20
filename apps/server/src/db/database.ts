@@ -22,6 +22,10 @@ export function openDatabase(path: string): Db {
   db.exec('PRAGMA synchronous = FULL');
   // SQLite only enforces foreign keys when asked to.
   db.exec('PRAGMA foreign_keys = ON');
+  // Without this, INSERT OR REPLACE deletes the row it replaces WITHOUT
+  // firing the "never delete" triggers. The schema also guards against
+  // REPLACE on its own, for any other connection; this is the second lock.
+  db.exec('PRAGMA recursive_triggers = ON');
   db.exec('PRAGMA busy_timeout = 5000');
   return db;
 }
