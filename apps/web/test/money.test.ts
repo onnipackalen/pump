@@ -3,6 +3,7 @@ import {
   centsToInput,
   formatCents,
   formatChance,
+  formatElapsed,
   formatMultiplier,
   formatSignedCents,
   parseDollarsToCents,
@@ -69,5 +70,14 @@ describe('formatChance', () => {
     expect(formatChance({ num: 999_999, den: 1_000_000 })).toBe('>99.99%');
     expect(formatChance({ num: 0, den: 7 })).toBe('0%');
     expect(formatChance({ num: 7, den: 7 })).toBe('100%');
+  });
+});
+
+describe('formatElapsed', () => {
+  it('shows hours, minutes and seconds', () => {
+    expect(formatElapsed(0)).toBe('0:00:00');
+    expect(formatElapsed(59_999)).toBe('0:00:59');
+    expect(formatElapsed(3_725_000)).toBe('1:02:05');
+    expect(formatElapsed(-5)).toBe('0:00:00');
   });
 });

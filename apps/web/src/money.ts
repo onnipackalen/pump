@@ -76,3 +76,12 @@ export function formatChance(chance: Fraction): string {
   const { whole, rest } = splitHundredths(basisPoints);
   return `${whole}.${rest}%`;
 }
+
+/** Elapsed time as h:mm:ss, the form UK RTS 13C asks for. 3725000 ms -> "1:02:05". */
+export function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const seconds = total % 60;
+  const minutes = Math.floor(total / 60) % 60;
+  const hours = Math.floor(total / 3600);
+  return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
