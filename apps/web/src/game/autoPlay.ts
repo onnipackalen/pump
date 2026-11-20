@@ -7,9 +7,10 @@
  *
  * The strategy, for each round:
  * - start a round with the bets in the bet panel;
- * - pump balloon 1 until it has had the target number of successful pumps,
- *   then cash it out; then balloon 2, then balloon 3. Balloons are
- *   independent and each has its own draws, so the order changes nothing;
+ * - play every balloon at once: on each beat, every balloon still in play
+ *   is pumped if it is below the target number of successful pumps, or
+ *   cashed out if it has reached it. Balloons are independent and each has
+ *   its own draws, so playing them together changes no outcome;
  * - a balloon whose top rung (after the payout cap) is below the target
  *   cashes out by itself when it reaches the top;
  * - no Patches are bought.
@@ -44,31 +45,36 @@ export interface AutoPlayProgress {
 
 export type StopReason = 'rounds-done' | 'profit' | 'loss' | 'balance' | 'player' | 'error';
 
-/** The next thing to do in a round. */
+/** One action on one balloon. */
 export type AutoStep =
   | { readonly kind: 'pump'; readonly balloonIndex: number }
-  | { readonly kind: 'cash-out'; readonly balloonIndex: number }
-  | { readonly kind: 'done' };
+  | { readonly kind: 'cash-out'; readonly balloonIndex: number };
 
 /**
- * Picks the next action in a round: the first balloon still in play is
- * pumped until it reaches the target (or its own lower top), then cashed out.
+ * The actions for the next beat of a round: one for every balloon still in
+ * play, all sent together. A balloon below the target (or its own lower
+ * top) is pumped; one that has reached the target is cashed out. Empty when
+ * no balloon is in play, so the round is over.
  */
-export function nextStep(round: RoundView, targetPumps: number): AutoStep {
+export function nextSteps(round: RoundView, targetPumps: number): readonly AutoStep[] {
+  const steps: AutoStep[] = [];
   for (const balloon of round.balloons) {
     if (balloon.status !== 'active') continue;
     // An active balloon is always below its top: the top cashes out by itself.
-    if (balloon.rung >= targetPumps) return { kind: 'cash-out', balloonIndex: balloon.index };
-    return { kind: 'pump', balloonIndex: balloon.index };
+    steps.push(
+      balloon.rung >= targetPumps
+        ? { kind: 'cash-out', balloonIndex: balloon.index }
+        : { kind: 'pump', balloonIndex: balloon.index },
+    );
   }
-  return { kind: 'done' };
+  return steps;
 }
 
 /**
- * The most steps one round can take: per balloon, one pump per rung up to
+ * The most actions one round can take: per balloon, one pump per rung up to
  * the target and one cash-out. Auto-play buys no Patches, so every pump
- * either moves up a rung or ends the balloon. A round that takes more steps
- * than this means something is wrong, and auto-play stops.
+ * either moves up a rung or ends the balloon. A round that takes more
+ * actions than this means something is wrong, and auto-play stops.
  */
 export function maxStepsPerRound(balloonCount: number, targetPumps: number): number {
   return balloonCount * (targetPumps + 1);

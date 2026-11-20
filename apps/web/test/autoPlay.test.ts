@@ -4,7 +4,7 @@ import {
   checkBeforeRound,
   maxStepsPerRound,
   MAX_AUTO_ROUNDS,
-  nextStep,
+  nextSteps,
   roundNetCents,
   type AutoPlaySettings,
 } from '../src/game/autoPlay';
@@ -18,25 +18,32 @@ const settings = (overrides: Partial<AutoPlaySettings> = {}): AutoPlaySettings =
   ...overrides,
 });
 
-describe('nextStep', () => {
-  it('pumps the first balloon still in play until it reaches the target', () => {
-    const r = round([balloon({ rung: 2 }), balloon()]);
-    expect(nextStep(r, 3)).toEqual({ kind: 'pump', balloonIndex: 0 });
+describe('nextSteps', () => {
+  it('pumps every balloon still in play that is below the target, together', () => {
+    const r = round([balloon({ rung: 2 }), balloon(), balloon({ rung: 1 })]);
+    expect(nextSteps(r, 3)).toEqual([
+      { kind: 'pump', balloonIndex: 0 },
+      { kind: 'pump', balloonIndex: 1 },
+      { kind: 'pump', balloonIndex: 2 },
+    ]);
   });
 
-  it('cashes a balloon out once it has the target number of pumps', () => {
-    const r = round([balloon({ rung: 3 }), balloon()]);
-    expect(nextStep(r, 3)).toEqual({ kind: 'cash-out', balloonIndex: 0 });
+  it('cashes out a balloon at the target while it keeps pumping the others', () => {
+    const r = round([balloon({ rung: 3 }), balloon({ rung: 1 })]);
+    expect(nextSteps(r, 3)).toEqual([
+      { kind: 'cash-out', balloonIndex: 0 },
+      { kind: 'pump', balloonIndex: 1 },
+    ]);
   });
 
-  it('moves on past balloons that popped or cashed out', () => {
+  it('leaves out balloons that popped or cashed out', () => {
     const r = round([balloon({ status: 'popped' }), balloon({ status: 'cashed' }), balloon()]);
-    expect(nextStep(r, 3)).toEqual({ kind: 'pump', balloonIndex: 2 });
+    expect(nextSteps(r, 3)).toEqual([{ kind: 'pump', balloonIndex: 2 }]);
   });
 
-  it('is done when no balloon is in play', () => {
+  it('is empty when no balloon is in play', () => {
     const r = round([balloon({ status: 'popped' }), balloon({ status: 'cashed' })]);
-    expect(nextStep(r, 3)).toEqual({ kind: 'done' });
+    expect(nextSteps(r, 3)).toEqual([]);
   });
 });
 

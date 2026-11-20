@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { RoundView } from '../api/contract';
+import type { ActionResult, RoundView } from '../api/contract';
 import {
   checkBeforeRound,
   maxStepsPerRound,
-  nextStep,
+  nextSteps,
   roundNetCents,
   type AutoPlayProgress,
   type AutoPlaySettings,
   type StopReason,
 } from './autoPlay';
+import { roundProgress } from './roundOrder';
 import type { GameActions } from './useGame';
 
 /** Everything auto-play needs to know when it starts. */
@@ -58,6 +59,21 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * The answer that saw every change, from a beat of actions sent together.
+ * The server applies requests one at a time, so the last one it applied
+ * holds every balloon's latest state and the latest balance; it is the one
+ * with the most round progress. Null if any action failed.
+ */
+export function newestAnswer(results: readonly (ActionResult | null)[]): ActionResult | null {
+  let newest: ActionResult | null = null;
+  for (const result of results) {
+    if (!result) return null;
+    if (!newest || roundProgress(result.round) > roundProgress(newest.round)) newest = result;
+  }
+  return newest;
+}
+
+/**
  * Plays rounds until a stop rule says no. Every action goes through the
  * same GameActions as a player's clicks, and the next step is worked out
  * from the server's last answer, never from a guess.
@@ -86,20 +102,28 @@ export async function runAutoPlay(
     balanceCents = started.wallet.balanceCents;
 
     const stepLimit = maxStepsPerRound(round.balloons.length, settings.targetPumps);
-    for (let steps = 0; ; steps += 1) {
-      const step = nextStep(round, settings.targetPumps);
-      if (step.kind === 'done') break;
-      if (steps >= stepLimit) return { reason: 'error', progress };
+    let taken = 0;
+    for (;;) {
+      const steps = nextSteps(round, settings.targetPumps);
+      if (steps.length === 0) break;
+      taken += steps.length;
+      if (taken > stepLimit) return { reason: 'error', progress };
       await sleep(pauses.stepMs);
       if (shouldStop()) return { reason: 'player', progress };
 
-      const result =
-        step.kind === 'pump'
-          ? await actions.pump(round, step.balloonIndex, false)
-          : await actions.cashOut(round, step.balloonIndex);
-      if (!result) return { reason: 'error', progress };
-      round = result.round;
-      balanceCents = result.wallet.balanceCents;
+      // Every balloon still in play at once. Each request carries its own
+      // balloon's draw index, so they can't get in each other's way.
+      const results = await Promise.all(
+        steps.map((step) =>
+          step.kind === 'pump'
+            ? actions.pump(round, step.balloonIndex, false)
+            : actions.cashOut(round, step.balloonIndex),
+        ),
+      );
+      const newest = newestAnswer(results);
+      if (!newest) return { reason: 'error', progress };
+      round = newest.round;
+      balanceCents = newest.wallet.balanceCents;
     }
 
     progress = {

@@ -139,6 +139,41 @@ describe('runAutoPlay against the demo game', () => {
     expect((await client.getHistory(100)).length).toBe(3);
   });
 
+  it('plays every balloon at once: one action per balloon still in play on each beat', async () => {
+    const { client, balance } = await newDemo();
+    const actions = actionsFor(client);
+    const beats = new Map<RoundView, number[]>();
+    const record = (r: RoundView, i: number): void => {
+      beats.set(r, [...(beats.get(r) ?? []), i]);
+    };
+    const watching: GameActions = {
+      ...actions,
+      pump: (r, i, patch) => {
+        record(r, i);
+        return actions.pump(r, i, patch);
+      },
+      cashOut: (r, i) => {
+        record(r, i);
+        return actions.cashOut(r, i);
+      },
+    };
+    const { reason, progress } = await runAutoPlay(
+      { settings: settings({ rounds: 5 }), difficultyId: 'easy', betsCents: [100, 100, 100], balanceCents: balance },
+      watching,
+      () => false,
+      () => undefined,
+      NO_PAUSES,
+    );
+    expect(reason).toBe('rounds-done');
+    // Each beat acts once on every balloon that round still had in play.
+    for (const [r, indexes] of beats) {
+      const live = r.balloons.filter((b) => b.status === 'active').map((b) => b.index);
+      expect(indexes).toEqual(live);
+    }
+    const after = await client.getSession();
+    expect(after.wallet.balanceCents - balance).toBe(progress.netCents);
+  });
+
   it('stops on the first failed action', async () => {
     const { client, balance } = await newDemo();
     const actions = actionsFor(client);
@@ -162,34 +197,40 @@ const MAX_ROUNDS = 1000;
 
 /**
  * A scripted game where every pump survives and every rung pays 2x, so a
- * test can know the result in advance.
+ * test can know the result in advance. Like the server, it keeps one
+ * current round, applies each request to it in turn, and refuses a request
+ * whose draw index is out of date.
  */
 function alwaysSurvives(): GameActions {
   let balanceCents = 10_000;
+  let current: RoundView | null = null;
   const wallet = () => ({ balanceCents });
-  const withBalloon = (r: RoundView, i: number, change: Partial<BalloonView>): RoundView => {
-    const balloons = r.balloons.map((b) => (b.index === i ? { ...b, ...change } : b));
-    const status = balloons.some((b) => b.status === 'active') ? 'active' : 'finished';
-    return { ...r, balloons, status };
+  const apply = (sent: RoundView, i: number, change: (b: BalloonView) => Partial<BalloonView>) => {
+    const b = current?.balloons[i];
+    if (!current || !b || current.id !== sent.id || b.status !== 'active') return null;
+    if (b.drawIndex !== sent.balloons[i]?.drawIndex) return null;
+    const balloons = current.balloons.map((x) => (x.index === i ? { ...x, ...change(x) } : x));
+    const status = balloons.some((x) => x.status === 'active') ? 'active' : 'finished';
+    current = { ...current, balloons, status };
+    return current;
   };
   return {
     startRound: (_difficulty, betsCents) => {
       balanceCents -= betsCents.reduce((sum, bet) => sum + bet, 0);
-      const r = round(betsCents.map((betCents) => balloon({ betCents })));
-      return Promise.resolve({ round: r, wallet: wallet() });
+      current = round(betsCents.map((betCents) => balloon({ betCents })));
+      return Promise.resolve({ round: current, wallet: wallet() });
     },
     pump: (r, i) => {
-      const b = r.balloons[i];
-      if (!b) return Promise.resolve(null);
-      const next = withBalloon(r, i, { rung: b.rung + 1, drawIndex: b.drawIndex + 1 });
-      return Promise.resolve({ outcome: 'survived' as const, round: next, wallet: wallet() });
+      const next = apply(r, i, (b) => ({ rung: b.rung + 1, drawIndex: b.drawIndex + 1 }));
+      return Promise.resolve(
+        next ? { outcome: 'survived' as const, round: next, wallet: wallet() } : null,
+      );
     },
     cashOut: (r, i) => {
-      const b = r.balloons[i];
-      if (!b) return Promise.resolve(null);
-      balanceCents += b.betCents * 2;
-      const next = withBalloon(r, i, { status: 'cashed', payoutCents: b.betCents * 2 });
-      return Promise.resolve({ round: next, wallet: wallet() });
+      const bet = current?.balloons[i]?.betCents ?? 0;
+      const next = apply(r, i, (b) => ({ status: 'cashed', payoutCents: b.betCents * 2 }));
+      if (next) balanceCents += bet * 2;
+      return Promise.resolve(next ? { round: next, wallet: wallet() } : null);
     },
   };
 }
