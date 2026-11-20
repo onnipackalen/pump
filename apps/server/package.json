@@ -10,7 +10,10 @@
     "hammer": "tsx scripts/hammer.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.5",
+    "@pump/contract": "*",
     "@pump/engine": "*",
-    "fastify": "^5.12.8"
+    "fastify": "^5.12.8",
+    "zod": "^4.6.7"
   }
 }
