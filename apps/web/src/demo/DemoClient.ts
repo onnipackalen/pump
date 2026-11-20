@@ -1,97 +1,80 @@
 /**
  * DEMO STAND-IN. Delete it once the server exists.
  *
- * Plays the game inside the browser so the screen can be built and clicked
- * before the API is written. It is not the real game:
- * - its draws come from crypto.getRandomValues, not from the seeds, so it
- *   is not provably fair (the chances, payouts and Patch prices do come from
- *   the engine's math in @pump/engine);
- * - nothing is saved: a page refresh starts over.
+ * Plays the game inside the browser so the screen can be used before the
+ * API is connected. It runs the real rules and the real draws:
+ * - every rule (bets, pumps, Patches, cash-outs, the top rung) is the
+ *   engine's own startRound, pump and cashOut from @pump/engine;
+ * - every pump is drawn from the seeds with @pump/engine/fair, exactly as
+ *   the server will draw it, and each balloon's actions are recorded, so a
+ *   round can be checked on the verify page once its seed is rotated.
+ * What it is not: a server. The server seed lives in this browser, so the
+ * player could peek at it, and nothing is saved: a refresh starts over.
  * The brief says a browser-only game does not count, so the screen shows a
  * "Demo" badge whenever this client is in use.
  *
- * It does copy the server's promises the screen relies on: one active
- * round, idempotency keys, expected draw index checks, and seeds that stay
- * fixed during a round.
+ * It also keeps the server's promises the screen relies on: one active
+ * round, idempotency keys, expected draw index checks (409 with the current
+ * state), and seeds that stay fixed during a round.
  */
 
 import {
-  cashOutCents,
+  cashOut as engineCashOut,
+  EngineError,
   GAME_CONFIG,
-  multiplierAt,
-  patchPriceCents,
-  popChance,
-  pumpSurvives,
-  surviveChance,
-  topRungForBet,
-  type Difficulty,
+  isRoundOver,
+  pump as enginePump,
+  quoteBalloon,
+  startRound as engineStartRound,
   type GameConfig,
+  type Round,
 } from '@pump/engine';
+import { drawerFor, hashServerSeed } from '@pump/engine/fair';
 import { ApiFailure, type GameClient } from '../api/client';
-import { CLIENT_SEED_PATTERN } from '../game/clientSeed';
 import type {
   ActionResult,
   ApiErrorBody,
-  BalloonStatus,
+  BalloonAction,
+  DrawRecordView,
   BalloonView,
   CashOutBody,
   FairnessView,
   PumpBody,
-  PumpOutcome,
   PumpResult,
   RotateResult,
   RoundSummary,
   RoundView,
   SessionView,
   StartRoundRequest,
+  VerifiableRound,
 } from '../api/contract';
+import { CLIENT_SEED_PATTERN } from '../game/clientSeed';
 
 const STARTING_BALANCE_CENTS = 1_000_000;
 
-interface DemoBalloon {
-  readonly betCents: number;
-  readonly topRung: number;
-  status: BalloonStatus;
-  rung: number;
-  drawIndex: number;
-  patchesCents: number;
-  payoutCents: number;
-}
-
+/** A round as the demo "server" keeps it: the engine's round plus its seeds and actions. */
 interface DemoRound {
   readonly id: string;
-  readonly difficulty: Difficulty;
-  /** This round's own copy of the RTP, as the real server keeps one. */
-  readonly rtpBp: number;
+  round: Round;
+  readonly serverSeed: string;
   readonly serverSeedHash: string;
   readonly clientSeed: string;
   readonly nonce: number;
   readonly startedAt: string;
-  readonly balloons: DemoBalloon[];
+  finishedAt: string | null;
+  /** The payout cap this round was played under, kept with the round like its RTP. */
+  readonly maxPayoutCents: number;
+  /** Per balloon, every action in order: what the verify page replays. */
+  readonly actions: BalloonAction[][];
+  /** Per balloon, the draw of every pump in order: what the verify page compares. */
+  readonly draws: DrawRecordView[][];
 }
 
-function randomHex(bytes: number): string {
-  const buffer = new Uint8Array(bytes);
+/** A new server seed: 32 random bytes as 64 lowercase hex characters. */
+function newServerSeed(): string {
+  const buffer = new Uint8Array(32);
   crypto.getRandomValues(buffer);
   return Array.from(buffer, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join(
-    '',
-  );
-}
-
-/** A uniform whole number in [0, den), by rejection sampling. */
-function uniformInt(den: number): number {
-  const limit = 2 ** 32 - (2 ** 32 % den);
-  const word = new Uint32Array(1);
-  for (;;) {
-    crypto.getRandomValues(word);
-    const value = word[0] ?? 0;
-    if (value < limit) return value % den;
-  }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -107,147 +90,116 @@ export class DemoClient implements GameClient {
   readonly isDemo = true;
 
   private balanceCents = STARTING_BALANCE_CENTS;
-  private serverSeed = randomHex(32);
-  private serverSeedHash: Promise<string>;
+  private serverSeed = newServerSeed();
+  private serverSeedHash = hashServerSeed(this.serverSeed);
   /** Null until the browser sends the first one. */
   private clientSeed: string | null = null;
   private nonce = 0;
-  private round: DemoRound | null = null;
-  private history: RoundSummary[] = [];
+  private active: DemoRound | null = null;
+  /** Finished rounds, newest first. */
+  private finished: DemoRound[] = [];
   private readonly answered = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly config: GameConfig = GAME_CONFIG,
     private readonly latencyMs = 120,
-  ) {
-    this.serverSeedHash = sha256Hex(this.serverSeed);
-  }
+  ) {}
 
   async getSession(): Promise<SessionView> {
     await sleep(this.latencyMs);
     return {
       wallet: this.wallet(),
-      fairness: await this.fairness(),
-      activeRound: this.round ? this.roundView(this.round) : null,
+      fairness: this.fairness(),
+      activeRound: this.active ? this.roundView(this.active) : null,
     };
   }
 
   async getHistory(limit: number): Promise<readonly RoundSummary[]> {
     await sleep(this.latencyMs);
-    return this.history.slice(0, limit);
+    return this.finished.slice(0, limit).map((r) => this.summary(r));
   }
+
+  // Each action below awaits only its pretend network delay, then does all
+  // of its checks and changes with no await in between, like the server's
+  // single transaction.
 
   startRound(request: StartRoundRequest, key: string): Promise<ActionResult> {
     return this.once(key, async () => {
       await sleep(this.latencyMs);
-      // Every await comes before the checks, so checking, charging and
-      // creating the round happen in one go, like the server's transaction.
-      const seedBefore = this.serverSeed;
-      const serverSeedHash = await this.serverSeedHash;
-      this.assertSeedUnchanged(seedBefore);
-      if (this.round) fail({ code: 'round_active', message: 'Finish the current round first.' });
+      if (this.active) fail({ code: 'round_active', message: 'Finish the current round first.' });
       const clientSeed = this.clientSeed;
       if (clientSeed === null) {
         fail({ code: 'invalid_request', message: 'Set a client seed first.' });
       }
-
-      const difficulty = this.config.difficulties.find((d) => d.id === request.difficultyId);
-      if (!difficulty) fail({ code: 'invalid_request', message: 'Unknown difficulty.' });
-
-      const { limits } = this.config;
-      const bets = request.betsCents;
-      if (bets.length < 1 || bets.length > limits.maxBalloons) {
-        fail({ code: 'invalid_request', message: `Bet on 1 to ${limits.maxBalloons} balloons.` });
-      }
-      for (const bet of bets) {
-        if (!Number.isSafeInteger(bet) || bet < limits.minBetCents || bet > limits.maxBetCents) {
-          fail({ code: 'invalid_request', message: 'A bet is outside the limits.' });
-        }
-      }
-      const total = bets.reduce((sum, bet) => sum + bet, 0);
-      if (total > this.balanceCents) {
-        fail({ code: 'insufficient_funds', message: 'Not enough balance for these bets.' });
-      }
-
-      this.balanceCents -= total;
-      this.round = {
+      const started = this.engine(() =>
+        engineStartRound(this.config, request.difficultyId, request.betsCents, this.balanceCents),
+      );
+      this.balanceCents -= started.costCents;
+      this.active = {
         id: crypto.randomUUID(),
-        difficulty,
-        rtpBp: this.config.rtpBp,
-        serverSeedHash,
+        round: started.round,
+        serverSeed: this.serverSeed,
+        serverSeedHash: this.serverSeedHash,
         clientSeed,
         nonce: this.nonce,
         startedAt: new Date().toISOString(),
-        balloons: bets.map((betCents) => ({
-          betCents,
-          topRung: topRungForBet(difficulty.ladder, betCents, limits.maxPayoutCents),
-          status: 'active',
-          rung: 0,
-          drawIndex: 0,
-          patchesCents: 0,
-          payoutCents: 0,
-        })),
+        finishedAt: null,
+        maxPayoutCents: this.config.limits.maxPayoutCents,
+        actions: started.round.balloons.map(() => []),
+        draws: started.round.balloons.map(() => []),
       };
       this.nonce += 1;
-      return { round: this.roundView(this.round), wallet: this.wallet() };
+      return { round: this.roundView(this.active), wallet: this.wallet() };
     });
   }
 
   pump(roundId: string, body: PumpBody, key: string): Promise<PumpResult> {
     return this.once(key, async () => {
       await sleep(this.latencyMs);
-      const { round, balloon } = this.expect(roundId, body.balloonIndex, body.expectedDrawIndex);
-      const ladder = round.difficulty.ladder;
-      const pump = balloon.rung + 1;
-
-      if (body.patch) {
-        if (balloon.rung === 0) {
-          fail({ code: 'invalid_request', message: 'No Patch before the first pump.' });
-        }
-        const price = patchPriceCents(round.rtpBp, ladder, balloon.betCents, pump);
-        if (price > this.balanceCents) {
-          fail({ code: 'insufficient_funds', message: 'Not enough balance for the Patch.' });
-        }
-        this.balanceCents -= price;
-        balloon.patchesCents += price;
-      }
-
-      const survive = surviveChance(round.rtpBp, ladder, pump);
-      const survived = pumpSurvives(survive, uniformInt(survive.den));
-      balloon.drawIndex += 1;
-
-      let outcome: PumpOutcome;
-      if (survived) {
-        balloon.rung = pump;
-        if (pump === balloon.topRung) {
-          this.payOut(round, balloon);
-          outcome = 'top';
-        } else {
-          outcome = 'survived';
-        }
-      } else if (body.patch) {
-        outcome = 'saved';
-      } else {
-        balloon.status = 'popped';
-        outcome = 'popped';
-      }
-
-      const view = this.roundView(round);
-      this.finishIfOver(round);
-      return { outcome, round: view, wallet: this.wallet() };
+      const demo = this.activeRound(roundId);
+      const { balloonIndex, expectedDrawIndex, patch } = body;
+      // The draw for this pump, from the seeds. The engine calls it once,
+      // and only after every check has passed, so a refused request never
+      // touches the seeds.
+      const draw = (den: number): number =>
+        drawerFor({
+          serverSeed: demo.serverSeed,
+          clientSeed: demo.clientSeed,
+          nonce: demo.nonce,
+          balloonIndex,
+          drawIndex: expectedDrawIndex,
+        })(den);
+      const result = this.engine(
+        () =>
+          enginePump(
+            demo.round,
+            { balloonIndex, expectedDrawIndex, patch, balanceCents: this.balanceCents },
+            draw,
+          ),
+        demo,
+      );
+      demo.round = result.round;
+      this.balanceCents -= result.patchChargedCents ?? 0;
+      this.balanceCents += result.payoutCents;
+      demo.actions[balloonIndex]?.push({ kind: 'pump', patch });
+      const { drawIndex, den, num, roll } = result.draw;
+      demo.draws[balloonIndex]?.push({ drawIndex, den, num, roll });
+      const view = this.roundView(demo);
+      this.finishIfOver(demo);
+      return { outcome: result.outcome, round: view, wallet: this.wallet() };
     });
   }
 
   cashOut(roundId: string, body: CashOutBody, key: string): Promise<ActionResult> {
     return this.once(key, async () => {
       await sleep(this.latencyMs);
-      const { round, balloon } = this.expect(roundId, body.balloonIndex, body.expectedDrawIndex);
-      if (balloon.rung === 0) {
-        fail({ code: 'invalid_request', message: 'Pump at least once before cashing out.' });
-      }
-      this.payOut(round, balloon);
-      const view = this.roundView(round);
-      this.finishIfOver(round);
+      const demo = this.activeRound(roundId);
+      const result = this.engine(() => engineCashOut(demo.round, body), demo);
+      demo.round = result.round;
+      this.balanceCents += result.payoutCents;
+      demo.actions[body.balloonIndex]?.push({ kind: 'cashOut' });
+      const view = this.roundView(demo);
+      this.finishIfOver(demo);
       return { round: view, wallet: this.wallet() };
     });
   }
@@ -258,7 +210,7 @@ export class DemoClient implements GameClient {
       if (!CLIENT_SEED_PATTERN.test(clientSeed)) {
         fail({ code: 'invalid_request', message: 'Use 1 to 64 of A-Z, a-z, 0-9, _ and -.' });
       }
-      if (this.round) fail({ code: 'round_active', message: 'Seeds are locked during a round.' });
+      if (this.active) fail({ code: 'round_active', message: 'Seeds are locked during a round.' });
       // The nonce belongs to the server seed: changing the client seed keeps it.
       this.clientSeed = clientSeed;
       return this.fairness();
@@ -268,31 +220,94 @@ export class DemoClient implements GameClient {
   rotateSeed(key: string): Promise<RotateResult> {
     return this.once(key, async () => {
       await sleep(this.latencyMs);
-      const seedBefore = this.serverSeed;
-      const serverSeedHash = await this.serverSeedHash;
-      this.assertSeedUnchanged(seedBefore);
-      if (this.round) fail({ code: 'round_active', message: 'Seeds are locked during a round.' });
+      if (this.active) fail({ code: 'round_active', message: 'Seeds are locked during a round.' });
       const revealed = {
         serverSeed: this.serverSeed,
-        serverSeedHash,
+        serverSeedHash: this.serverSeedHash,
         roundsPlayed: this.nonce,
       };
-      this.serverSeed = randomHex(32);
-      this.serverSeedHash = sha256Hex(this.serverSeed);
+      this.serverSeed = newServerSeed();
+      this.serverSeedHash = hashServerSeed(this.serverSeed);
       this.nonce = 0;
-      return { revealed, fairness: await this.fairness() };
+      return { revealed, fairness: this.fairness() };
     });
   }
 
-  /**
-   * Fails if the server seed was rotated while an action waited for its
-   * hash. Call it right before the action changes anything, with no await
-   * in between, so a seed and its hash always match.
-   */
-  private assertSeedUnchanged(seedBefore: string): void {
-    if (this.serverSeed !== seedBefore) {
-      fail({ code: 'conflict', message: 'The server seed just changed. Please try again.' });
+  async getVerifiableRound(roundId: string): Promise<VerifiableRound> {
+    await sleep(this.latencyMs);
+    const demo = this.finished.find((r) => r.id === roundId);
+    if (!demo || demo.finishedAt === null) {
+      return fail({ code: 'not_found', message: 'There is no finished round with that id.' });
     }
+    if (!this.isRevealed(demo)) {
+      return fail({
+        code: 'seed_not_revealed',
+        message: 'This round’s server seed is still in use. Rotate it to check the round.',
+      });
+    }
+    const { round } = demo;
+    return {
+      id: demo.id,
+      difficultyId: round.difficultyId,
+      rtpBp: round.rtpBp,
+      ladder: round.ladder,
+      maxPayoutCents: demo.maxPayoutCents,
+      serverSeed: demo.serverSeed,
+      serverSeedHash: demo.serverSeedHash,
+      clientSeed: demo.clientSeed,
+      nonce: demo.nonce,
+      finishedAt: demo.finishedAt,
+      balloons: round.balloons.map((b, index) => ({
+        betCents: b.betCents,
+        topRung: b.topRung,
+        actions: demo.actions[index] ?? [],
+        status: b.status,
+        rung: b.rung,
+        drawIndex: b.drawIndex,
+        patchesCents: b.patchesCents,
+        payoutCents: b.payoutCents,
+        draws: demo.draws[index] ?? [],
+      })),
+    };
+  }
+
+  /** A round's seed is revealed once it is no longer the active seed. */
+  private isRevealed(demo: DemoRound): boolean {
+    return demo.serverSeed !== this.serverSeed;
+  }
+
+  /**
+   * Runs an engine call and turns a rule it refuses into the API's error.
+   * A refused request changes nothing and makes no draw. A conflict carries
+   * the current state, as the server's 409 does.
+   */
+  private engine<T>(call: () => T, demo?: DemoRound): T {
+    try {
+      return call();
+    } catch (error) {
+      if (!(error instanceof EngineError)) throw error;
+      return fail({
+        code: error.code,
+        message: error.message,
+        ...(error.code === 'conflict' && demo
+          ? { round: this.roundView(demo), wallet: this.wallet() }
+          : {}),
+      });
+    }
+  }
+
+  /** The active round with this id, or a 409 carrying what is there instead. */
+  private activeRound(roundId: string): DemoRound {
+    const demo = this.active;
+    if (!demo || demo.id !== roundId) {
+      return fail({
+        code: 'conflict',
+        message: 'That round is over.',
+        round: demo ? this.roundView(demo) : null,
+        wallet: this.wallet(),
+      });
+    }
+    return demo;
   }
 
   /** Runs an action once per key; a repeat gets the first answer back. */
@@ -304,111 +319,71 @@ export class DemoClient implements GameClient {
     return answer;
   }
 
-  /** The balloon, if it is still active and in the state the client saw. */
-  private expect(
-    roundId: string,
-    balloonIndex: number,
-    expectedDrawIndex: number,
-  ): { round: DemoRound; balloon: DemoBalloon } {
-    const round = this.round;
-    if (!round || round.id !== roundId) {
-      return fail({
-        code: 'conflict',
-        message: 'That round is over.',
-        round: round ? this.roundView(round) : null,
-        wallet: this.wallet(),
-      });
-    }
-    const balloon = round.balloons[balloonIndex];
-    if (!balloon) return fail({ code: 'invalid_request', message: 'No such balloon.' });
-    if (balloon.status !== 'active' || balloon.drawIndex !== expectedDrawIndex) {
-      return fail({
-        code: 'conflict',
-        message: 'That balloon has changed.',
-        round: this.roundView(round),
-        wallet: this.wallet(),
-      });
-    }
-    return { round, balloon };
+  private finishIfOver(demo: DemoRound): void {
+    if (!isRoundOver(demo.round)) return;
+    demo.finishedAt = new Date().toISOString();
+    this.finished.unshift(demo);
+    this.active = null;
   }
 
-  private payOut(round: DemoRound, balloon: DemoBalloon): void {
-    balloon.payoutCents = cashOutCents(balloon.betCents, round.difficulty.ladder, balloon.rung);
-    balloon.status = 'cashed';
-    this.balanceCents += balloon.payoutCents;
-  }
-
-  private finishIfOver(round: DemoRound): void {
-    if (round.balloons.some((b) => b.status === 'active')) return;
-    const sum = (pick: (b: DemoBalloon) => number): number =>
-      round.balloons.reduce((total, b) => total + pick(b), 0);
-    this.history.unshift({
-      id: round.id,
-      difficultyId: round.difficulty.id,
-      balloonCount: round.balloons.length,
+  private summary(demo: DemoRound): RoundSummary {
+    const balloons = demo.round.balloons;
+    const sum = (pick: (b: (typeof balloons)[number]) => number): number =>
+      balloons.reduce((total, b) => total + pick(b), 0);
+    return {
+      id: demo.id,
+      difficultyId: demo.round.difficultyId,
+      balloonCount: balloons.length,
       betCents: sum((b) => b.betCents),
       patchesCents: sum((b) => b.patchesCents),
       payoutCents: sum((b) => b.payoutCents),
-      serverSeedHash: round.serverSeedHash,
-      nonce: round.nonce,
-      finishedAt: new Date().toISOString(),
-    });
-    this.round = null;
+      serverSeedHash: demo.serverSeedHash,
+      nonce: demo.nonce,
+      finishedAt: demo.finishedAt ?? demo.startedAt,
+      seedRevealed: this.isRevealed(demo),
+    };
   }
 
   private wallet(): { balanceCents: number } {
     return { balanceCents: this.balanceCents };
   }
 
-  private async fairness(): Promise<FairnessView> {
+  private fairness(): FairnessView {
     return {
-      serverSeedHash: await this.serverSeedHash,
+      serverSeedHash: this.serverSeedHash,
       clientSeed: this.clientSeed,
       nextNonce: this.nonce,
     };
   }
 
-  private roundView(round: DemoRound): RoundView {
-    const active = round.balloons.some((b) => b.status === 'active');
+  private roundView(demo: DemoRound): RoundView {
+    const { round } = demo;
     return {
-      id: round.id,
-      difficultyId: round.difficulty.id,
+      id: demo.id,
+      difficultyId: round.difficultyId,
       rtpBp: round.rtpBp,
-      ladder: round.difficulty.ladder,
-      status: active ? 'active' : 'finished',
-      serverSeedHash: round.serverSeedHash,
-      clientSeed: round.clientSeed,
-      nonce: round.nonce,
-      startedAt: round.startedAt,
-      balloons: round.balloons.map((b, index) => this.balloonView(round, b, index)),
-    };
-  }
-
-  private balloonView(round: DemoRound, balloon: DemoBalloon, index: number): BalloonView {
-    const ladder = round.difficulty.ladder;
-    const { rtpBp } = round;
-    const isActive = balloon.status === 'active';
-    const pump = balloon.rung + 1;
-    return {
-      index,
-      betCents: balloon.betCents,
-      status: balloon.status,
-      rung: balloon.rung,
-      drawIndex: balloon.drawIndex,
-      topRung: balloon.topRung,
-      multiplierHundredths: balloon.rung > 0 ? multiplierAt(ladder, balloon.rung) : null,
-      cashOutCents:
-        isActive && balloon.rung > 0 ? cashOutCents(balloon.betCents, ladder, balloon.rung) : null,
-      next: isActive
-        ? {
-            popChance: popChance(rtpBp, ladder, pump),
-            multiplierHundredths: multiplierAt(ladder, pump),
-            patchPriceCents:
-              balloon.rung > 0 ? patchPriceCents(rtpBp, ladder, balloon.betCents, pump) : null,
-          }
-        : null,
-      patchesCents: balloon.patchesCents,
-      payoutCents: balloon.payoutCents,
+      ladder: round.ladder,
+      status: isRoundOver(round) ? 'finished' : 'active',
+      serverSeedHash: demo.serverSeedHash,
+      clientSeed: demo.clientSeed,
+      nonce: demo.nonce,
+      startedAt: demo.startedAt,
+      balloons: round.balloons.map((b, index): BalloonView => {
+        const quote = quoteBalloon(round, index);
+        return {
+          index,
+          betCents: b.betCents,
+          status: b.status,
+          rung: b.rung,
+          drawIndex: b.drawIndex,
+          topRung: b.topRung,
+          multiplierHundredths: quote.multiplierHundredths,
+          cashOutCents: quote.cashOutCents,
+          next: quote.next,
+          patchesCents: b.patchesCents,
+          payoutCents: b.payoutCents,
+        };
+      }),
     };
   }
 }

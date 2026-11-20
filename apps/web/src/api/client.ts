@@ -10,6 +10,7 @@ import type {
   RoundSummary,
   SessionView,
   StartRoundRequest,
+  VerifiableRound,
 } from './contract';
 
 /**
@@ -32,6 +33,8 @@ export interface GameClient {
   cashOut(roundId: string, body: CashOutBody, key: string): Promise<ActionResult>;
   setClientSeed(clientSeed: string, key: string): Promise<FairnessView>;
   rotateSeed(key: string): Promise<RotateResult>;
+  /** A finished round to recompute. Fails with seed_not_revealed until its seed is rotated. */
+  getVerifiableRound(roundId: string): Promise<VerifiableRound>;
 }
 
 /** The server said no. Carries the error body, including any current state. */
