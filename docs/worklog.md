@@ -558,3 +558,54 @@ Left for later, on purpose: the server picks the next server seed while it
 already knows the player's client seed (a locked rule, so it is the lead's
 decision); old idempotency keys are never removed; `reconcile()` does not
 replay rounds from their seeds.
+
+## 2026-11-20: engine tests after an independent review
+
+An independent review checked the engine (math.ts and PumpEngine.ts) two
+ways. A second engine written from the rules alone played 3.6 million
+rounds beside the real one: every result matched. Then 19 small bugs were
+planted in the engine one at a time. The tests did not notice any of the
+19.
+
+Turned out wrong: nothing in the engine, but the tests had holes. Each
+planted bug was a rule with no test behind it. The ones that would have
+cost money or a grader's trust:
+
+- A Patch bought on the pump that reaches the top rung could have been
+  given away free. The test bought that Patch and never looked at the
+  charge.
+- The Patch balance check and the quotes shown to the player could have
+  used a hard-coded 97%. Those tests ran at 9700 only, against the rule
+  that everything parametrised runs at 9400, 9700 and 9900.
+- The boot check could have looked at the first difficulty only, or
+  skipped the last pump of a ladder, a two-rung ladder, or a pump exactly
+  as risky as the one before.
+- A Patch price could have been worked out in ordinary numbers. The test
+  meant to prove it is exact used a value nowhere near a cent edge, so it
+  passed either way. It now also uses one that ordinary numbers get one
+  cent too low.
+
+How it was caught: by the review planting the bugs, not by me. Tests were
+added for all 19, and the test helpers now freeze every round they hand to
+the engine, so any change made in place throws. Then each of the 19 bugs
+was planted again in a scratch copy: all 19 are now caught. No engine code
+changed.
+
+Raised by the review and not settled, because they are rule questions for
+the lead: an RTP of 100.00% to 100.99% passes the boot check on Easy; a
+roll outside its range throws a RangeError and not an EngineError; and
+`replayBalloon` cannot express a refund.
+
+## 2026-11-20: verify page merged (web)
+
+- The provably fair chat committed verifyRound (746db0a) with the shapes
+  the page was written against, so branch `verify-page` merged into main
+  unchanged and without conflicts on top of the day's gameplay commits
+  (58e53cb). The page is at #verify, from Settings or a history row.
+- Checked after the merge: typecheck, lint and 82 web tests (40 demo rounds
+  verified by verifyRound with the new gameplay); in the browser a round
+  with a Patch and a cash-out verifies, and no game key works on the
+  verify view.
+- Still open: the page's independent review was stopped before it
+  finished; CheckedDraw.message is the block-0 message, so the page
+  rebuilds the message for the rare roll from block 1 or later.
