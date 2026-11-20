@@ -5,9 +5,9 @@
  * no state of its own. Every function takes a round and returns a new round,
  * and the same input always gives the same output. Randomness is passed in.
  *
- * The game. A round is one to three balloons, each with its own bet. Each
- * balloon climbs a ladder of multipliers, one rung per pump, until it pops or
- * is cashed out.
+ * The game. A round is one or more balloons (the config says how many), each
+ * with its own bet. Each balloon climbs a ladder of multipliers, one rung per
+ * pump, until it pops or is cashed out.
  *
  *   pump         the balloon moves up one rung, or pops
  *   Patch        bought together with a pump, after the first; if that pump
@@ -15,8 +15,24 @@
  *   cash out     pays bet x the multiplier of the balloon's rung
  *   top          a balloon that reaches its top rung cashes out by itself
  *
- * The math (chances, prices, payouts, the cap, rounding) is in math.ts, which
- * starts with the one rule it all follows from. This file is the order of
+ * The math in short. R is the RTP and m_k the multiplier on rung k. The one
+ * rule: wherever a player cashes out, the game pays back exactly R on average.
+ *
+ *   reach rung k          chance R / m_k, so cashing out there returns
+ *                         bet x m_k x R / m_k = bet x R, on every rung
+ *   pump 1 survives       chance R / m_1
+ *   pump k >= 2 survives  chance m_(k-1) / m_k
+ *   Patch for pump k      costs (pop chance of pump k) x bet x m_(k-1) / R,
+ *                         which is what it is worth divided by R, so a Patch
+ *                         returns R too
+ *
+ * Multiply the pump chances and they leave R / m_k. So the whole house edge
+ * sits in pump 1, every later pump is a fair bet, and changing the RTP only
+ * changes pump 1. Payouts round down to the cent and Patch prices round up, so
+ * the game can pay back a little under R and never over. A bet's top rung is
+ * the highest one whose payout fits under the payout cap.
+ *
+ * math.ts has each formula with a worked example. This file is the order of
  * play: what is allowed when, and what money moves. It never moves money
  * itself. It says how much, and the caller's wallet does it.
  *
@@ -358,8 +374,8 @@ export interface CashOutResult {
  * Cashes out one balloon: bet x the multiplier of its rung, rounded down to a
  * whole cent. No draw is made.
  *
- * Not allowed before the first pump: a balloon that has not been pumped has
- * no multiplier, and handing the bet back would return 100%, not the RTP.
+ * Not allowed before the first pump: every cash-out point must return the
+ * RTP, and a balloon that has not been pumped has no multiplier yet.
  */
 export function cashOut(round: Round, request: CashOutRequest): CashOutResult {
   const balloon = balloonAt(round, request.balloonIndex);

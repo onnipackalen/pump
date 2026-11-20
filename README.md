@@ -56,6 +56,10 @@ apps/web          React + Vite frontend
   src/
 ```
 
+To follow the math, read `packages/engine/src/PumpEngine.ts` first (the order
+of play, with the math in short at the top), then `packages/engine/src/math.ts`
+(each formula with a worked example).
+
 ## The API
 
 All JSON. The exact shapes are TypeScript types in `packages/contract`.
