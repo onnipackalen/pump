@@ -107,6 +107,15 @@ const HISTORY_SIZE = 10;
  */
 const MIN_PRESS_MS = 300;
 
+/**
+ * How long a pop, cash-out or top beat stays before the balloon is set back
+ * to "idle", which shows its still end picture ("popped" or "cashed"). It is
+ * longer than the longest of those motions, a win's included, so none is
+ * cut short. Without it the beat would stay, and switching the Animations
+ * setting back on would play the pop or float-away again.
+ */
+const END_BEAT_MS = 1200;
+
 const initialState: GameState = {
   phase: 'loading',
   wallet: null,
@@ -169,6 +178,27 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
   });
   const emit = useCallback((event: GameEvent) => {
     listenerRef.current?.(event);
+  }, []);
+
+  // Sets a balloon's end beat back to "idle" once its motion is over (see
+  // END_BEAT_MS), unless the round or the beat has changed since.
+  const endTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  useEffect(() => {
+    const timers = endTimers.current;
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, []);
+  const settleEndBeat = useCallback((roundId: string, balloonIndex: number, beat: Beat) => {
+    const timer = setTimeout(() => {
+      endTimers.current.delete(timer);
+      setState((s) =>
+        s.round?.id === roundId && s.beats[balloonIndex] === beat
+          ? { ...s, beats: replaceAt(s.beats, balloonIndex, 'idle') }
+          : s,
+      );
+    }, END_BEAT_MS);
+    endTimers.current.add(timer);
   }, []);
 
   const refreshHistory = useCallback(async () => {
@@ -358,6 +388,9 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           beats: replaceAt(s.beats, balloonIndex, result.outcome),
           pending: replaceAt(s.pending, balloonIndex, false),
         }));
+        if (result.outcome === 'popped' || result.outcome === 'top') {
+          settleEndBeat(round.id, balloonIndex, result.outcome);
+        }
         apply(result);
         const after = result.round.balloons[balloonIndex];
         if (after) {
@@ -371,7 +404,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         inFlight.current.delete(tag);
       }
     },
-    [apply, client, emit, handleFailure],
+    [apply, client, emit, handleFailure, settleEndBeat],
   );
 
   const cashOutAction = useCallback(
@@ -397,6 +430,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           beats: replaceAt(s.beats, balloonIndex, 'cashed'),
           pending: replaceAt(s.pending, balloonIndex, false),
         }));
+        settleEndBeat(round.id, balloonIndex, 'cashed');
         apply(result);
         const after = result.round.balloons[balloonIndex];
         if (after) emit({ kind: 'cash-out', balloon: after, round: result.round });
@@ -408,7 +442,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         inFlight.current.delete(tag);
       }
     },
-    [apply, client, emit, handleFailure],
+    [apply, client, emit, handleFailure, settleEndBeat],
   );
 
   const actions = useMemo<GameActions>(

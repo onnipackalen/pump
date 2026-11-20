@@ -128,7 +128,7 @@ export function App() {
       ? round.balloons.filter((b) => b.status === 'active').map((b) => b.index)
       : [];
   // Holding a Pump button, Space or A keeps pumping.
-  const hold = useHoldPump(round, state.pending, game.pump, panel === 'round');
+  const hold = useHoldPump(round, state.pending, state.beats, game.pump, panel === 'round');
 
   /**
    * Pump all: one ordinary pump per balloon still in play, each its own

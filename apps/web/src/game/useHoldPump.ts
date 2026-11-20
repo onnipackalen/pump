@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RoundView } from '../api/contract';
+import type { Beat } from './useGame';
 
 /**
  * Hold to pump: while a Pump button or key is held down, the balloon is
@@ -18,6 +19,18 @@ export type HoldTarget =
  * balloon's grow can be seen before the next press.
  */
 export const HOLD_GAP_MS = 250;
+
+/**
+ * The pause after a Patch stopped a pop. The balloon's "saved" motion (it
+ * swells as if to pop, shudders, and the patch tears off) takes 800 ms; a
+ * press sooner would cut it off in the middle.
+ */
+export const SAVED_GAP_MS = 800;
+
+/** How long a hold waits before pumping these balloons again. */
+export function holdGap(indexes: readonly number[], beats: readonly Beat[]): number {
+  return indexes.some((i) => beats[i] === 'saved') ? SAVED_GAP_MS : HOLD_GAP_MS;
+}
 
 /**
  * Which balloons a hold pumps now. Null: the hold is over, because the
@@ -53,6 +66,7 @@ export interface HoldPump {
 export function useHoldPump(
   round: RoundView | null,
   pending: readonly boolean[],
+  beats: readonly Beat[],
   pump: (balloonIndex: number, patch: boolean) => void,
   enabled: boolean,
 ): HoldPump {
@@ -95,9 +109,9 @@ export function useHoldPump(
     if (!step || step.length === 0) return;
     const timer = setTimeout(() => {
       for (const index of step) pump(index, false);
-    }, HOLD_GAP_MS);
+    }, holdGap(step, beats));
     return () => clearTimeout(timer);
-  }, [hold, enabled, round, pending, pump]);
+  }, [hold, enabled, round, pending, beats, pump]);
 
   useEffect(() => () => unlisten.current?.(), []);
 

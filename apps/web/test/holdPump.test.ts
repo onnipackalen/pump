@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { controlTarget } from '../src/game/controls';
-import { holdStep, type HoldTarget } from '../src/game/useHoldPump';
+import {
+  HOLD_GAP_MS,
+  holdGap,
+  holdStep,
+  SAVED_GAP_MS,
+  type HoldTarget,
+} from '../src/game/useHoldPump';
 import { balloon, round } from './fixtures';
 
 const one = (index: number): HoldTarget => ({ kind: 'one', roundId: 'round-1', index });
@@ -41,6 +47,17 @@ describe('holdStep', () => {
   it('on Pump all, ends when no balloon is in play', () => {
     const r = round([balloon({ status: 'popped' }), balloon({ status: 'cashed' })]);
     expect(holdStep(r, [false, false], all)).toBeNull();
+  });
+});
+
+describe('holdGap', () => {
+  it('waits the short gap after an ordinary survive', () => {
+    expect(holdGap([0, 1], ['survived', 'survived'])).toBe(HOLD_GAP_MS);
+  });
+
+  it('waits for the whole Patch save to play before the next pump', () => {
+    expect(holdGap([0, 1], ['survived', 'saved'])).toBe(SAVED_GAP_MS);
+    expect(SAVED_GAP_MS).toBeGreaterThan(HOLD_GAP_MS);
   });
 });
 

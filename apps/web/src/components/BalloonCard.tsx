@@ -115,7 +115,8 @@ function subText(balloon: BalloonView, beat: Beat, patched: boolean): string {
       return `Paid ${formatCents(balloon.payoutCents)}`;
     case 'active':
       if (beat === 'press' && patched) return 'Patch on';
-      if (beat === 'saved') return 'Patch used';
+      // The pump would have popped the balloon; the Patch stopped it.
+      if (beat === 'saved') return 'Patch stopped a pop';
       if (beat === 'survived' && patched) return 'Patch not needed';
       if (balloon.cashOutCents === null) return `Bet ${formatCents(balloon.betCents)}`;
       return formatCents(balloon.cashOutCents);
