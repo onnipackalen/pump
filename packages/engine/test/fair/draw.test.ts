@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
+  acceptanceLimit,
   bytesToHex,
   drawerFor,
   drawMessage,
@@ -74,6 +75,102 @@ describe('the docs/fairness.md worked example, end to end', () => {
 
   it('gives the same roll through drawerFor', () => {
     expect(drawerFor(DOCS)(DOCS_DEN)).toBe(69);
+  });
+});
+
+/**
+ * The second worked example in docs/fairness.md: a round where a Patch saves
+ * a pump. It pins down the rule the docs spell out for players: a pump's
+ * fraction comes from the rung it is trying to reach (rung before + 1), not
+ * from how many times pump was pressed. A Patch save uses a draw but leaves
+ * the rung alone, so the next press uses the same fraction with the next draw
+ * index.
+ */
+describe('the docs/fairness.md round with a Patch save', () => {
+  // What the round recorded when it was played. Verification uses the
+  // round's own copies, never the current config, so these are fixed here.
+  const ROUND_RTP_BP = 9700;
+  const ROUND_LADDER = [101, 111, 123] as const;
+  const ROUND: DrawInputs = { ...DOCS, nonce: 3 };
+
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+
+  /** num / den in lowest terms for a pump trying to reach `targetRung` (1 = first pump). */
+  function surviveFraction(targetRung: number): { num: number; den: number } {
+    const step = (k: number): number => {
+      const h = ROUND_LADDER[k - 1];
+      if (h === undefined) throw new Error(`no ladder step ${k}`);
+      return h;
+    };
+    const [num, den] =
+      targetRung === 1 ? [ROUND_RTP_BP, 100 * step(1)] : [step(targetRung - 1), step(targetRung)];
+    const common = gcd(num, den);
+    return { num: num / common, den: den / common };
+  }
+
+  type Outcome = 'survive' | 'saved' | 'pop';
+  const PRESSES: readonly {
+    rungBefore: number;
+    patched: boolean;
+    hex: string;
+    result: SampledRoll;
+    outcome: Outcome;
+  }[] = [
+    {
+      rungBefore: 0,
+      patched: false,
+      hex: '0d996f9b5485bb7ee9fd02bbc7b611e6c4bba56d68d49e6fe48b16a77d78bc38',
+      result: { roll: 84, block: 0, wordIndex: 0, word: 228159387 },
+      outcome: 'survive',
+    },
+    {
+      rungBefore: 1,
+      patched: true,
+      hex: '250c6ed4e5f5c47f46865d9c4bc3689f2adab0170490d8fb7c6f2f008b3bb63a',
+      result: { roll: 101, block: 0, wordIndex: 0, word: 621571796 },
+      outcome: 'saved',
+    },
+    {
+      rungBefore: 1,
+      patched: false,
+      hex: '1db1b8b7c3af1cb03d2652fe2af62df8769465f6ad259803f7328bfec0f2e3da',
+      result: { roll: 108, block: 0, wordIndex: 0, word: 498186423 },
+      outcome: 'pop',
+    },
+  ];
+
+  it('plays forward exactly as documented: survive, Patch save on the same rung, pop', () => {
+    let rung = 0;
+    PRESSES.forEach((press, drawIndex) => {
+      expect(rung).toBe(press.rungBefore);
+      const { num, den } = surviveFraction(rung + 1);
+      const inputs = { ...ROUND, drawIndex };
+      expect(bytesToHex(hmacSha256(inputs.serverSeed, drawMessage({ ...inputs, block: 0 })))).toBe(
+        press.hex,
+      );
+      const result = drawRoll(inputs, den);
+      expect(result).toEqual(press.result);
+      expect(nodeDraw(inputs, den)).toEqual(press.result);
+      let outcome: Outcome;
+      if (result.roll < num) {
+        outcome = 'survive';
+        rung += 1;
+      } else {
+        outcome = press.patched ? 'saved' : 'pop';
+      }
+      expect(outcome).toBe(press.outcome);
+    });
+  });
+
+  it('uses 97/101, then 101/111 twice: the press after a save repeats the fraction', () => {
+    expect(surviveFraction(1)).toEqual({ num: 97, den: 101 });
+    expect(surviveFraction(2)).toEqual({ num: 101, den: 111 });
+    expect(acceptanceLimit(111)).toBe(4294967289);
+  });
+
+  it('counting presses instead (rung 3 chance 37/41 on press 3) gives roll 15, the documented mistake', () => {
+    expect(surviveFraction(3)).toEqual({ num: 37, den: 41 });
+    expect(drawRoll({ ...ROUND, drawIndex: 2 }, 41).roll).toBe(15);
   });
 });
 
