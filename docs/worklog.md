@@ -644,10 +644,11 @@ in game-spec.json (35488f0) and the paragraph in the math document.
 
 Turned out wrong, and how it was caught:
 
-- The lead answered yes in two chats, and both started the same change in
-  math.ts at the same moment. Caught by the maths chat reading the file a
-  second time before editing and finding the rule already there. It stopped
-  and took only the parts nobody had done.
+- Two chats started the same change in math.ts at the same moment: the
+  lead's yes reached the maths chat while the lead chat was already
+  building the rule. Caught by the maths chat reading the file a second
+  time before editing and finding the rule already there. It stopped and
+  took only the parts nobody had done.
 - The rule's first test looked at Easy only. Seven small bugs were planted
   in the rule in a scratch copy, and three got past: the rule applied only
   to a ladder starting at 1.01x, only when no other RTP rule fired, or only
