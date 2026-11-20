@@ -36,6 +36,7 @@ describe('@pump/engine package', () => {
         'readWords',
         'rollFromWord',
         'sampleRoll',
+        'verifyRound',
         'verifyServerSeedHash',
       ].sort(),
     );

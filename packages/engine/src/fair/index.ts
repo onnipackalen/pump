@@ -32,6 +32,12 @@
  *
  * Checking a seed (hash.ts): its fingerprint is SHA-256 of its 64 characters
  * as ASCII, in lowercase hex.
+ *
+ * Checking a whole round (verify.ts): verifyRound takes what the server
+ * stored about a finished round, replays every balloon with the engine's own
+ * replayBalloon and draws from these seeds, and lists every place where the
+ * server's account differs. This is the one file here that imports the game
+ * rules; the rules never import this module (test/fair/boundary.test.ts).
  */
 export { asciiBytes } from './ascii';
 export { drawerFor, drawRoll, type DrawInputs, type Drawer } from './draw';
@@ -50,3 +56,12 @@ export {
   type SampledRoll,
 } from './roll';
 export { assertClientSeed, assertServerSeed, isClientSeed, isServerSeed } from './seeds';
+export {
+  verifyRound,
+  type BalloonCheck,
+  type BalloonRecord,
+  type CheckedDraw,
+  type ClaimedBalloon,
+  type RoundCheck,
+  type RoundRecord,
+} from './verify';
