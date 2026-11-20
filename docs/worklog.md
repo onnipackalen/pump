@@ -466,3 +466,43 @@ Turned out wrong, and how it was caught:
   browser; the cards now shrink and only the table scrolls.
 - The background code review of the page was stopped before it finished,
   so the branch has not been independently reviewed yet.
+
+## 2026-11-20: round checker
+
+Built:
+
+- `verifyRound` in `packages/engine/src/fair/verify.ts` (746db0a). From a
+  finished round and its revealed seed, it checks the seed hash, recomputes
+  every pump's roll, and replays each balloon with the engine's own
+  `replayBalloon`, using the RTP and ladder stored with the round. It then
+  lists every difference from what the server claims, as plain sentences.
+  It never throws for a dishonest record. The verify page calls it, so
+  there is one checker, not two.
+- `test/fair/verify.test.ts`: each kind of server cheating is caught, one
+  change at a time. Examples: a changed roll, num or den, an extra cent, a
+  missing draw, a raised top rung, a swapped RTP, a refund with actions.
+- `test/fair/engine.test.ts` (1fd415c): 2,400 rounds with real seeds at
+  RTP 9400, 9700 and 9900 on every difficulty, played through the live
+  engine with `drawerFor`. The checker agrees with every one.
+
+Turned out wrong, and how it was caught:
+
+- The web chat had started its own round checker as well. Caught by the
+  builder agent finding `apps/web/src/verify/checkRound.ts`. Settled by
+  message: the web chat uses `verifyRound` and deleted its copy.
+
+Unfinished (the review was stopped early so every chat could wrap up):
+
+- Confirmed by a second agent, not fixed:
+  - The checker doesn't check the bet range or the 3-balloon limit.
+  - Its sentences say "pump N" for the Nth press, where the docs use
+    "pump k" for the pump that reaches rung k.
+  - It builds the round's start by hand instead of through `startRound`.
+- Reported, not yet checked: the payout cap is taken from the record
+  without a check.
+- Not done: the integration review in a browser bundle, the mutation test
+  of `verify.ts`, and showing the message of the block that actually gave
+  the roll (promised to the web chat; it can rebuild it with
+  `drawMessage`).
+- The server doesn't yet send `maxPayoutCents` or each balloon's draws in
+  its verify answer. The web and server chats have agreed to add them.
