@@ -368,6 +368,22 @@ describe('boot checks', () => {
     expect(() => assertValidConfig({ ...GAME_CONFIG, rtpBp: 9_999 })).not.toThrow();
   });
 
+  it('refuse an RTP of 100% or more on every ladder, whatever its first multiplier', () => {
+    // The rule is about the RTP alone. At exactly 100% it is the only thing
+    // wrong with any of the ladders, so each difficulty reports it and nothing else.
+    expect(configProblems({ ...GAME_CONFIG, rtpBp: 10_000 })).toEqual(
+      DIFFICULTIES.map(({ id }) => `${id}: RTP must be below 100%`),
+    );
+    // A ladder that starts at 1.50x has room below its first multiplier for
+    // an RTP of up to 149.99%. The first-multiplier rule alone let that through.
+    expect(ladderProblems(14_999, [150, 300, 700], LIMITS)).toEqual(['RTP must be below 100%']);
+    expect(ladderProblems(15_000, [150, 300, 700], LIMITS)).toEqual([
+      'RTP must be below the first multiplier',
+      'RTP must be below 100%',
+    ]);
+    expect(ladderProblems(9_999, [150, 300, 700], LIMITS)).toEqual([]);
+  });
+
   it('refuse ladders that do not rise, start too low, or flatten out', () => {
     expect(ladderProblems(9700, [], LIMITS)).toEqual(['the ladder is empty']);
     expect(ladderProblems(9700, [100, 200], LIMITS)).toContain(
