@@ -1,5 +1,5 @@
 import type { BalloonView } from '../api/contract';
-import { Balloon, balloonScale } from '../balloon/Balloon';
+import { Balloon, balloonScale, type BalloonBeat } from '../balloon/Balloon';
 import type { Beat } from '../game/useGame';
 import { multiplierAt } from '../game/rules';
 import { formatCents, formatChance, formatMultiplier, formatSignedCents } from '../money';
@@ -18,9 +18,32 @@ interface BalloonCardProps {
   readonly onCashOut: () => void;
 }
 
-function svgBeat(beat: Beat): 'press' | 'survive' | undefined {
-  if (beat === 'press') return 'press';
-  if (beat === 'survived' || beat === 'saved') return 'survive';
+/**
+ * The balloon art's data-beat for this balloon. A live result plays its
+ * motion once. With no live result (say, a round restored after a refresh),
+ * a finished balloon shows only its end picture, so a pop or cash-out never
+ * plays twice.
+ */
+export function balloonBeat(balloon: BalloonView, beat: Beat): BalloonBeat | undefined {
+  switch (beat) {
+    case 'press':
+      return 'press';
+    case 'survived':
+      return 'survive';
+    case 'saved':
+      // The Patch stopped a pop: same size, no grow.
+      return 'blocked';
+    case 'popped':
+      return 'pop';
+    case 'cashed':
+    case 'top':
+      // Set only once the server has confirmed the cash-out.
+      return 'cashout';
+    case 'idle':
+      break;
+  }
+  if (balloon.status === 'popped') return 'popped';
+  if (balloon.status === 'cashed') return 'cashed';
   return undefined;
 }
 
@@ -72,10 +95,7 @@ export function BalloonCard({
         <Balloon
           slot={slot}
           scale={balloonScale(balloon.multiplierHundredths, topMultiplier)}
-          beat={svgBeat(beat)}
-          end={
-            balloon.status === 'popped' ? 'popped' : balloon.status === 'cashed' ? 'cashed' : undefined
-          }
+          beat={balloonBeat(balloon, beat)}
         />
       </div>
 
