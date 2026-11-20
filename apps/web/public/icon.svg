@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Pump</title>
+  <rect width="64" height="64" rx="14" fill="#0e1424"/>
+  <g transform="translate(32 33.4) scale(1.0) translate(-32 -33.4)">
+    <path fill="#55a6f0" d="M32 50.9C27.75 50.4 15 41 15 25.4C15 14.1 22.56 7 32 7C41.44 7 49 14.1 49 25.4C49 41 36.25 50.4 32 50.9Z"/>
+    <path fill="#3b88dc" d="M46.2 31C45.3 40.5 38.8 47.4 33.8 49.6C40.3 44.6 44.8 38.6 46.2 31Z"/>
+    <path fill="#ece6da" d="M19.4 25C18.9 17 23 11.4 29.2 9.4C25.6 13 23.9 18 23.9 24.5C23.9 27.2 19.5 27.6 19.4 25Z"/>
+    <path fill="#2f6fb8" d="M32 50.2L29.3 54.6H34.7Z"/>
+    <path fill="none" stroke="#ece6da" stroke-width="2.2" stroke-linecap="round" d="M32 54.8C30.2 56.6 33.8 57.8 32 59.8"/>
+  </g>
+</svg>
