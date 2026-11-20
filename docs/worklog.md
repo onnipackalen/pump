@@ -633,3 +633,27 @@ No engine code changed. Still for the lead to decide, unchanged from the
 entry above: whether to refuse an RTP of 100% or more at boot, and whether
 `replayBalloon` should be able to express a refund (the server and the
 verify page work round that today).
+
+## 2026-11-20: the game refuses an RTP of 100% or more
+
+The lead said yes to the rule, so the first open question above is closed.
+The game will not start with RTP_BP at 10000 or more; 9999 is the highest
+that runs. The lead chat built the rule (38595e6) and put it in CLAUDE.md
+(8e6d821). The maths chat added a test for every ladder (efe3281), the line
+in game-spec.json (35488f0) and the paragraph in the math document.
+
+Turned out wrong, and how it was caught:
+
+- The lead answered yes in two chats, and both started the same change in
+  math.ts at the same moment. Caught by the maths chat reading the file a
+  second time before editing and finding the rule already there. It stopped
+  and took only the parts nobody had done.
+- The rule's first test looked at Easy only. Seven small bugs were planted
+  in the rule in a scratch copy, and three got past: the rule applied only
+  to a ladder starting at 1.01x, only when no other RTP rule fired, or only
+  up to the first multiplier. The added test catches all seven.
+- The math document still said the game refuses an RTP of 101% or more, and
+  gave the old reason for no cash-out before the first pump. Both fixed.
+
+Still for the lead to decide: whether `replayBalloon` should be able to
+express a refund, and whether to apply the proposed ladders.
