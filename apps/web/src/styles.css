@@ -290,6 +290,24 @@ body {
   height: min(100cqh, 160cqw);
 }
 
+/*
+ * Under the numbers: the balloon's own Pump button. The row keeps its
+ * height with no button in it, so a balloon never changes size when its
+ * button comes or goes. The space at the bottom is for the picked
+ * balloon's bar.
+ */
+.slot-action {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  height: calc(var(--tap) + 10px);
+  padding: 0 4px 10px;
+}
+
+.slot-pump {
+  width: min(100%, 132px);
+}
+
 .slot-label {
   flex: none;
   display: flex;
@@ -298,7 +316,7 @@ body {
   justify-content: center;
   height: var(--label-h);
   margin: 0;
-  padding-bottom: 6px; /* room for the picked balloon's bar */
+  padding-bottom: 6px;
   font-variant-numeric: tabular-nums;
   text-align: center;
   white-space: nowrap;
@@ -720,6 +738,14 @@ input {
 }
 
 /* Round: the picked balloon's numbers, then its three buttons. */
+
+/* Which balloon the buttons act on, with Pump all beside it. */
+.round-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 
 .round-target {
   display: flex;

@@ -23,6 +23,12 @@ interface BalloonCardProps {
   readonly selectable: boolean;
   readonly selected: boolean;
   readonly onSelect: () => void;
+  /** It can be pumped by hand now: the round is played by hand and this balloon is still in play. */
+  readonly canPump: boolean;
+  /** A request for this balloon is on its way, so its Pump button waits. */
+  readonly pending: boolean;
+  /** Picks this balloon and pumps it. */
+  readonly onPump: () => void;
 }
 
 /**
@@ -110,9 +116,49 @@ function SlotLabel({
 }
 
 /**
- * One balloon in a round: its picture and two lines of numbers. Its
- * buttons are in the control panel (RoundControls), which acts on the
- * balloon the player picked.
+ * The row under a balloon's numbers that holds its own Pump button. The row
+ * is always there, even with no button in it, so a balloon never changes
+ * size when its button comes or goes.
+ */
+function SlotAction({
+  slot,
+  show,
+  pending,
+  onPump,
+}: {
+  readonly slot: number;
+  readonly show: boolean;
+  readonly pending: boolean;
+  readonly onPump: () => void;
+}) {
+  return (
+    <div className="slot-action">
+      {show && (
+        <button
+          type="button"
+          className="btn btn-outline slot-pump"
+          disabled={pending}
+          // The slot itself also picks the balloon on a click; this button
+          // picks it and pumps it, so the click stops here.
+          onClick={(event) => {
+            event.stopPropagation();
+            onPump();
+          }}
+          aria-label={`Pump balloon ${slot}`}
+          title={`Pump balloon ${slot}`}
+        >
+          Pump
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One balloon in a round: its picture, two lines of numbers and its own
+ * Pump button. Cash out and Patch + Pump are in the control panel
+ * (RoundControls), which acts on the balloon the player picked; pumping a
+ * balloon from its own button picks it too.
  */
 export function BalloonCard({
   balloon,
@@ -124,6 +170,9 @@ export function BalloonCard({
   selectable,
   selected,
   onSelect,
+  canPump,
+  pending,
+  onPump,
 }: BalloonCardProps) {
   const slot = balloon.index + 1;
   const topMultiplier = multiplierAt(ladder, balloon.topRung);
@@ -158,6 +207,7 @@ export function BalloonCard({
         won={win !== undefined}
         live={!quiet}
       />
+      <SlotAction slot={slot} show={canPump} pending={pending} onPump={onPump} />
     </article>
   );
 }
@@ -176,6 +226,7 @@ export function PreviewCard({ slot, betCents }: PreviewCardProps) {
         <Balloon slot={slot} scale={0.45} />
       </div>
       <SlotLabel main={betCents === null ? '—' : formatCents(betCents)} sub="" />
+      <SlotAction slot={slot} show={false} pending={false} onPump={() => undefined} />
     </article>
   );
 }

@@ -110,6 +110,19 @@ export function App() {
   // What the panel shows: Stop while auto-play runs, the round's buttons
   // during a round played by hand, and the bet otherwise.
   const panel = autoRunning ? 'auto-running' : roundActive ? 'round' : 'bet';
+  // The balloons a tap can pump right now: the round is played by hand, the
+  // balloon is still in play, and no request for it is on its way.
+  const pumpable =
+    panel === 'round' && round
+      ? round.balloons
+          .filter((b) => b.status === 'active' && !(state.pending[b.index] ?? false))
+          .map((b) => b.index)
+      : [];
+
+  /** Pump all: one ordinary pump per balloon still in play, each its own draw. */
+  const pumpAll = (): void => {
+    for (const index of pumpable) game.pump(index, false);
+  };
 
   const start = (): void => {
     if (!check.betsCents || autoRunning) return;
@@ -177,6 +190,10 @@ export function App() {
         case 'c':
         case 'C':
           if (!event.repeat && target !== null) game.cashOut(target);
+          break;
+        case 'a':
+        case 'A':
+          if (!event.repeat) pumpAll();
           break;
         case '1':
         case '2':
@@ -309,6 +326,12 @@ export function App() {
                         panel === 'round' && round.balloons.length > 1 && target === balloon.index
                       }
                       onSelect={() => setChosen(balloon.index)}
+                      canPump={panel === 'round' && balloon.status === 'active'}
+                      pending={state.pending[balloon.index] ?? false}
+                      onPump={() => {
+                        setChosen(balloon.index);
+                        game.pump(balloon.index, false);
+                      }}
                     />
                   ))
                 : setup.bets.map((text, index) => (
@@ -338,6 +361,8 @@ export function App() {
                 onCashOut={() => {
                   if (target !== null) game.cashOut(target);
                 }}
+                pumpableCount={pumpable.length}
+                onPumpAll={pumpAll}
               />
             )}
 

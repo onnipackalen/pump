@@ -55,7 +55,8 @@ export function GameInfo({ config, autoPlay }: GameInfoProps) {
 
       <ul className="rules keys">
         <li>
-          <kbd>Space</kbd> pump · <kbd>P</kbd> patch + pump · <kbd>C</kbd> cash out
+          <kbd>Space</kbd> pump · <kbd>P</kbd> patch + pump · <kbd>C</kbd> cash out ·{' '}
+          <kbd>A</kbd> pump all
         </li>
         <li>
           <kbd>1</kbd>–<kbd>3</kbd> pick a balloon · <kbd>Enter</kbd> bet · <kbd>M</kbd> sound

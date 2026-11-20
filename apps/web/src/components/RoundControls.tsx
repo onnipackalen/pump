@@ -11,6 +11,10 @@ interface RoundControlsProps {
   readonly onPump: () => void;
   readonly onPatchPump: () => void;
   readonly onCashOut: () => void;
+  /** How many balloons are still in play with no request on its way. */
+  readonly pumpableCount: number;
+  /** Pumps every balloon still in play, each as its own pump. */
+  readonly onPumpAll: () => void;
 }
 
 /**
@@ -29,6 +33,8 @@ function riskStep({ num, den }: Fraction): 1 | 2 | 3 | 4 {
  * The control panel during a round: the next pump's numbers for the picked
  * balloon, and its three buttons. One set of buttons for the whole round,
  * so they stay large and in the same place however many balloons there are.
+ * Each balloon also has its own Pump button under it (BalloonCard), and a
+ * round with more than one balloon has Pump all here.
  */
 export function RoundControls({
   balloon,
@@ -37,6 +43,8 @@ export function RoundControls({
   onPump,
   onPatchPump,
   onCashOut,
+  pumpableCount,
+  onPumpAll,
 }: RoundControlsProps) {
   const next = balloon?.next ?? null;
   const patchPrice = next?.patchPriceCents ?? null;
@@ -46,16 +54,27 @@ export function RoundControls({
   return (
     <section className="round" aria-label="Round controls">
       {multi && (
-        <p className="round-target" aria-live="polite">
-          {balloon ? (
-            <>
-              <span className="dot" data-slot={balloon.index + 1} aria-hidden="true" />
-              Balloon {balloon.index + 1}
-            </>
-          ) : (
-            <span className="muted">Pick a balloon</span>
-          )}
-        </p>
+        <div className="round-head">
+          <p className="round-target" aria-live="polite">
+            {balloon ? (
+              <>
+                <span className="dot" data-slot={balloon.index + 1} aria-hidden="true" />
+                Balloon {balloon.index + 1}
+              </>
+            ) : (
+              <span className="muted">Pick a balloon</span>
+            )}
+          </p>
+          <button
+            type="button"
+            className="btn btn-small btn-outline"
+            disabled={pumpableCount === 0}
+            onClick={onPumpAll}
+            title="Pump every balloon still in play (A)"
+          >
+            Pump all
+          </button>
+        </div>
       )}
 
       <dl className="readouts">
