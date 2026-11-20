@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { immediate } from '../src/db/transaction';
 import { ApiError } from '../src/errors';
 import { ledgerRepository } from '../src/repositories/ledger';
-import { reconcile } from '../src/services/reconcile';
+import { walletProblems } from '../src/services/reconcile';
 import { STARTING_BALANCE_CENTS } from '../src/settings';
 import { count, insertActiveRound, testWorld, type TestWorld } from './helpers';
 
@@ -33,7 +33,7 @@ describe('a new player', () => {
   });
 
   it('has books that add up', () => {
-    expect(reconcile(world.db)).toEqual({ players: 1, ledgerRows: 1, problems: [] });
+    expect(walletProblems(world.db)).toEqual([]);
   });
 });
 
@@ -115,7 +115,7 @@ describe('charging', () => {
 
     expect(results).toEqual(['charged', 'refused']);
     expect(wallet.balanceOf(playerId)).toBe(400);
-    expect(reconcile(world.db).problems).toEqual([]);
+    expect(walletProblems(world.db)).toEqual([]);
   });
 
   it('is undone completely if the request fails after it', () => {
@@ -160,7 +160,7 @@ describe('paying out', () => {
       wallet.credit(playerId, 'payout', 1230, balloon(0), AT);
     });
     expect(wallet.balanceOf(playerId)).toBe(1_000_230);
-    expect(reconcile(world.db).problems).toEqual([]);
+    expect(walletProblems(world.db)).toEqual([]);
   });
 
   it('can never pay the same balloon twice', () => {
@@ -178,7 +178,7 @@ describe('paying out', () => {
     ).toThrow('UNIQUE constraint failed');
 
     expect(wallet.balanceOf(playerId)).toBe(1_000_230);
-    expect(reconcile(world.db).problems).toEqual([]);
+    expect(walletProblems(world.db)).toEqual([]);
   });
 
   it('can never give a second opening grant', () => {
@@ -189,7 +189,7 @@ describe('paying out', () => {
   });
 });
 
-describe('reconcile', () => {
+describe('the wallet check', () => {
   it('passes after a mix of charges and payouts', () => {
     const { wallet } = world.services;
     immediate(world.db, () => {
@@ -200,9 +200,8 @@ describe('reconcile', () => {
       wallet.credit(playerId, 'payout', 1530, balloon(0), AT);
       wallet.credit(playerId, 'refund', 2500, balloon(1), AT);
     });
-    const report = reconcile(world.db);
-    expect(report.problems).toEqual([]);
-    expect(report.ledgerRows).toBe(7);
+    expect(walletProblems(world.db)).toEqual([]);
+    expect(count(world.db, 'ledger')).toBe(7);
     expect(wallet.balanceOf(playerId)).toBe(1_000_000 - 1000 - 2500 - 37 - 41 + 1530 + 2500);
   });
 
@@ -211,7 +210,7 @@ describe('reconcile', () => {
     world.db.exec('DROP TRIGGER players_balance_follows_ledger');
     world.db.exec('UPDATE players SET balance_cents = balance_cents + 500');
 
-    const problems = reconcile(world.db).problems.join('\n');
+    const problems = walletProblems(world.db).join('\n');
     expect(problems).toContain('balance 1000500 but ledger sums to 1000000');
     expect(problems).toContain('balance 1000500 but the last ledger row says 1000000');
   });
@@ -225,14 +224,14 @@ describe('reconcile', () => {
     world.db.exec('DROP TRIGGER ledger_no_update');
     world.db.exec("UPDATE ledger SET amount_cents = -1 WHERE kind = 'bet'");
 
-    const problems = reconcile(world.db).problems.join('\n');
+    const problems = walletProblems(world.db).join('\n');
     expect(problems).toContain('does not continue from the row before it');
     expect(problems).toContain('ledger sums to');
   });
 
   it('notices a missing opening grant', () => {
     world.db.exec("INSERT INTO players (id, token_hash, created_at) VALUES ('ghost', 'h', 'now')");
-    expect(reconcile(world.db).problems).toContain(
+    expect(walletProblems(world.db)).toContain(
       'player ghost: 0 opening grants, expected 1',
     );
   });
