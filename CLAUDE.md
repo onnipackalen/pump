@@ -23,7 +23,7 @@ They will change RTP to 94% and 99% and rerun everything, then send bugs for a 4
 - Patch: available before any pump after the first. It covers exactly that one pump and is spent whether or not the pump pops. If the pump would have popped, the balloon survives at its current rung and the next pump is a fresh draw. Price for pump k on bet B, in cents:
     price_k = ceil( p_k * B * m_(k-1) / R )
   That makes the Patch itself return exactly R.
-- Rounding always favours the house: payouts floor to the cent, Patch prices ceil to the cent. RTP can land just under R, never over. This must hold for every legal bet, not only round ones.
+- Rounding always favours the house: payouts floor to the cent, Patch prices ceil to the cent. RTP can land just under R, never over. This must hold for every legal bet, not only round ones. Random ("fair") rounding was considered and turned down on 2026-11-20: no money amount ever uses a draw, so the only draws are pump draws. The shortfall at small bets is shown in the open by `npm run rtp`, not hidden.
 - Money is integer cents everywhere. Bets are 10 to 100000 cents per balloon.
 - Max payout is 10,000,000 cents per balloon, handled in the open: for a given bet, rungs where bet * m_k exceeds the cap are locked, the highest reachable rung becomes that balloon's top, and the UI shows this before the round starts. RTP is unaffected because every rung returns R on its own.
 - Reaching the top reachable rung cashes out automatically.
