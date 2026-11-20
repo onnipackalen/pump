@@ -506,3 +506,23 @@ Unfinished (the review was stopped early so every chat could wrap up):
   `drawMessage`).
 - The server doesn't yet send `maxPayoutCents` or each balloon's draws in
   its verify answer. The web and server chats have agreed to add them.
+
+## 2026-11-20: a Pump button per balloon, and Pump all (web)
+
+Built, at the user's request after playing three balloons:
+
+- Each balloon in play has its own Pump button under it. Pressing it picks
+  that balloon, so the panel shows its Cash out and Patch, and pumps it.
+  The button row keeps its height when empty, so balloons don't resize.
+- Pump all, in the panel next to the picked balloon's name and on the A
+  key: one ordinary pump per balloon still in play, each its own request
+  with its own expected draw index.
+
+Also in this session: waited for the other chats to wrap up, pushed main
+to GitHub up to 3c850c5 (the brief asks for a public repo), and checked
+the brief against the repo.
+
+Turned out wrong, and how it was caught: nothing in the change. One process
+point: four chats were editing this folder at once, and a local test run
+in the middle showed 66 failures from half-finished edits. CI on the pushed
+commit was green. Caught by running the suite before building.
