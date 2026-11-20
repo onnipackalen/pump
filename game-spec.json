@@ -1,0 +1,127 @@
+{
+  "name": "Pump",
+  "kind": "ladder",
+  "summary": "1-3 independent balloons. Each pump is a fair bet from the current multiplier to the next rung; the house edge on a bet is charged once, on the first pump. Every cash-out point and every Patch returns exactly the configured RTP before cent rounding, and never more after it.",
+  "authority": "CLAUDE.md holds the locked project decisions. Where this file and CLAUDE.md differ, CLAUDE.md wins.",
+  "implementedIn": "packages/engine/src/math.ts (chances, prices, payouts, cap, boot checks) and packages/engine/src/PumpEngine.ts (order of play).",
+
+  "rtp": {
+    "configBp": 9700,
+    "note": "RTP enters the math in two places: the first pump's survival chance, rtpBp / (100 * ladder[0]), and every Patch price, which is divided by rtpBp.",
+    "mustPassAtBp": [9400, 9700, 9900],
+    "popChanceRisesEveryPumpFromBp": 9191
+  },
+
+  "money": {
+    "unit": "integer cents",
+    "payoutRounding": "floor",
+    "priceRounding": "ceil",
+    "why": "Both round toward the house, so rounding can push RTP under but never over. Payouts are exact for every whole-dollar bet. Decided by the user on 2026-11-20 ('Keep floor/ceil')."
+  },
+
+  "bets": {
+    "balloons": { "min": 1, "max": 3 },
+    "minCents": 10,
+    "maxCents": 100000,
+    "maxPayoutCents": 10000000,
+    "startingBalanceCents": 1000000
+  },
+
+  "ladderUnit": "multiplier x 100 (101 = 1.01x)",
+  "difficulties": [
+    {
+      "id": "easy",
+      "ladder": [101, 111, 123, 137, 153, 171, 192, 216, 244, 277, 316, 362, 416, 480, 555, 645, 752, 881, 1040, 1230, 1460, 1740, 2080, 2500]
+    },
+    {
+      "id": "medium",
+      "ladder": [106, 125, 148, 178, 218, 271, 342, 440, 575, 765, 1040, 1435, 2020, 2900, 4250, 6350, 9700, 15000]
+    },
+    {
+      "id": "hard",
+      "ladder": [120, 163, 228, 330, 490, 755, 1210, 2000, 3450, 6200, 11600, 22800, 47000, 100000]
+    },
+    {
+      "id": "expert",
+      "ladder": [150, 255, 465, 920, 2000, 4750, 12500, 37500, 125000, 500000]
+    }
+  ],
+
+  "rules": {
+    "rung": "A balloon at rung k (k = times it has moved up) shows multiplier ladder[k-1] / 100. Rung 0 has no cash-out. A pump saved by a Patch uses a draw but does not change the rung.",
+    "pump": "Pump k (taking the balloon from rung k-1 to rung k) survives with probability V[k-1] / V[k], where V[0] = rtpBp and V[k] = ladder[k-1] * 100. Reduce the fraction to num/den, draw an integer roll uniformly from [0, den), survive if roll < num. One draw per pump; nothing else in the game is random.",
+    "popChanceShown": "1 - V[k] / V[k+1] for the next pump from rung k (display only; the engine compares integers).",
+    "cashOut": "Allowed at rung >= 1. payoutCents = floor(betCents * ladder[k-1] / 100). No draw.",
+    "patch": "Available before any pump from rung k >= 1, bought together with that pump as one atomic action (charge and draw in the same request; there is no armed state). It covers exactly that one pump and is spent whether or not the pump pops. priceCents = ceil(betCents * L[k] * (L[k+1] - L[k]) * 100 / (L[k+1] * rtpBp)) with L[k] = ladder[k-1]. BigInt: the numerator can pass 2^53. The balance must cover the price, checked before the draw. If the pump would have popped, the balloon stays at rung k and the next pump is a fresh draw; a new patch for it costs the same.",
+    "top": "Reaching the last reachable rung cashes out automatically in the same request.",
+    "payoutCap": "A rung is reachable for a bet if and only if betCents * ladder[k-1] <= maxPayoutCents * 100 (exact integer comparison, as CLAUDE.md: rungs where bet * m_k exceeds the cap are locked). The highest reachable rung is that balloon's top. No RTP change because every rung returns RTP by itself. Show the player their top rung before they bet.",
+    "abandon": "As locked in CLAUDE.md: after 24h idle, pumped balloons cash out at their current multiplier and unpumped bets are refunded. Both are RTP-neutral: every cash-out point returns RTP, and a refund involves no draw."
+  },
+
+  "rng": {
+    "bytes": "The seed, nonce and block format is locked in CLAUDE.md (Provably fair) and owned by the fair package. This file only fixes how a roll decides a pump.",
+    "perDraw": "One draw per pump attempt on a balloon; drawIndex counts pumps drawn on that balloon. A patched save consumes a draw, so the retry gets a fresh one.",
+    "uniformInt": "As in CLAUDE.md: big-endian uint32 words, limit = 2^32 - (2^32 mod den), skip words >= limit, roll = word mod den. Exactly uniform; no float thresholds anywhere.",
+    "constraint": "den < 2^32 for every pump (true for any ladder up to 42,949,672x)."
+  },
+
+  "ladderValidation": [
+    "ladder[0] > 100 and strictly increasing",
+    "pop chance rises from pump 1 to pump 2: rtpBp * ladder[1] > 100 * ladder[0]^2 (integers)",
+    "pop chance rises on every later pump: ladder[k-1] * ladder[k+1] > ladder[k]^2 for every interior k (integers)",
+    "refuse to boot if rtpBp >= 100 * ladder[0], or if either rising test fails at the configured RTP",
+    "ladder[last] * minCents <= maxPayoutCents * 100, so the top prize is payable at some bet",
+    "every reduced pump denominator is below 2^32"
+  ],
+
+  "proof": [
+    "Patch price needs BigInt: the numerator exceeds 2^53 (9.375e15 for a 2000c bet at expert rung 9). Never compute it as a float ceil(p * B * m / R); that overcharges by a cent in thousands of bet/rung cases.",
+    "Assert 'Patch never over RTP' against the exact, unrounded value of the saved balloon (popChance * bet * multiplier), not its floored cash-out: pumping on can be worth more than the floored cash-out.",
+    "Scan every legal bet (10 to 100000 cents) on every rung and report the worst cash-out RTP and worst Patch RTP with the bet where each occurs. Small bets fall well under RTP from cent rounding; that is allowed and must be shown, not hidden. Do not gate Patches by bet size.",
+    "Worst cases at 9700: cash-out 90.99% (easy, 13c, rung 3), 91.51% (medium, 10c, rung 1), 91.97% (hard, 11c, rung 2), 94.06% (expert, 11c, rung 1); Patch 50.05% (easy, 11c, pump 2), 64.75% (medium, 10c, pump 3), 79.14% (hard, 10c, pump 2), 84.93% (expert, 11c, pump 2).",
+    "No strategy beats RTP: expected money returned is at most RTP times expected money paid, short by under one cent per rounded amount, and exactly equal when nothing is rounded (whole-dollar bets, no Patch). Refunded bets are void and count on neither side."
+  ],
+
+  "sim": [
+    "Pass or fail on a z-score against the exact expected value of the strategy played, including cent rounding. Raw RTP is too noisy on the high rungs: pumping expert to the top, 10 million rounds only pin RTP to about +/-4 points.",
+    "Also compare per-pump survival counts with the exact fractions. Pump-1 survival alone pins RTP to about +/-0.02 points."
+  ],
+
+  "testVectors": {
+    "rtpBp": 9700,
+    "surviveFraction": [
+      { "difficulty": "easy", "pump": 1, "num": 97, "den": 101 },
+      { "difficulty": "easy", "pump": 2, "num": 101, "den": 111 },
+      { "difficulty": "easy", "pump": 3, "num": 37, "den": 41 },
+      { "difficulty": "expert", "pump": 10, "num": 1, "den": 4 }
+    ],
+    "payoutCents": [
+      { "difficulty": "easy", "rung": 3, "betCents": 1234, "payoutCents": 1517 },
+      { "difficulty": "easy", "rung": 3, "betCents": 13, "payoutCents": 15 },
+      { "difficulty": "easy", "rung": 1, "betCents": 10, "payoutCents": 10 },
+      { "difficulty": "expert", "rung": 1, "betCents": 11, "payoutCents": 16 },
+      { "difficulty": "hard", "rung": 5, "betCents": 777, "payoutCents": 3807 },
+      { "difficulty": "expert", "rung": 6, "betCents": 99999, "payoutCents": 4749952 }
+    ],
+    "patchPriceCents": [
+      { "difficulty": "easy", "rung": 1, "betCents": 10000, "priceCents": 939 },
+      { "difficulty": "easy", "rung": 1, "betCents": 100, "priceCents": 10 },
+      { "difficulty": "easy", "rung": 1, "betCents": 11, "priceCents": 2 },
+      { "difficulty": "easy", "rung": 1, "betCents": 10, "priceCents": 1 },
+      { "difficulty": "easy", "rung": 1, "betCents": 10767, "priceCents": 1010 },
+      { "difficulty": "expert", "rung": 9, "betCents": 2000, "priceCents": 1932990 },
+      { "difficulty": "easy", "rung": 1, "betCents": 10000, "rtpBp": 9400, "priceCents": 968 },
+      { "difficulty": "easy", "rung": 1, "betCents": 10000, "rtpBp": 9900, "priceCents": 920 }
+    ],
+    "topRungForBet": [
+      { "difficulty": "medium", "betCents": 100000, "rung": 17, "payoutCents": 9700000 },
+      { "difficulty": "hard", "betCents": 100000, "rung": 10, "payoutCents": 6200000 },
+      { "difficulty": "expert", "betCents": 100000, "rung": 6, "payoutCents": 4750000 },
+      { "difficulty": "expert", "betCents": 2000, "rung": 10, "payoutCents": 10000000 }
+    ]
+  },
+
+  "consideredAndNotUsed": {
+    "fairRounding": "Unbiased random rounding (floor, plus one cent with probability equal to the leftover fraction, drawn after the player commits). Designed and attacked by three independent checkers on 2026-11-20: exact for every legal bet and no strategy beats it, provided the draw is made only when money moves and Patch eligibility is checked against the higher price before any draw. Not used: the user chose to keep floor/ceil the same day, because the brief allows it and the draw code, the player guide and their test vectors all assume one draw per pump. Worth a line in the README trade-offs."
+  }
+}
