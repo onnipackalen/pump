@@ -309,3 +309,44 @@ unchanged.
   `game-spec.json`, and all tests passed unchanged after the swap. The
   one-screen layout was re-checked at its worst cases (3 balloons on the
   Auto tab at 320x568 and 360x640): no scrolling.
+
+## 2026-11-20: the RTP check and the simulator
+
+Built:
+
+- `npm run rtp` (aa1eb14): for each ladder, every cash-out point returns
+  exactly the RTP before rounding; every legal bet on every rung is paid
+  bet x multiplier rounded down and charged the exact Patch price rounded
+  up, so nothing returns more than the RTP; and the best possible way of
+  playing, worked backwards from the top rung, never beats it. It prints
+  every rung and the worst that cent rounding does.
+- `npm run sim` (32b258c): 10 million rounds per difficulty through the
+  real `startRound`, `pump` and `cashOut`. The measured RTP is judged
+  against the exact RTP of the way the simulator plays, cent rounding
+  included, and each pump's survival count against its exact chance.
+- Both pass at 9400, 9700 and 9900. At 9700 the simulator measured 96.883%
+  (Easy), 96.915% (Medium), 96.924% (Hard) and 97.077% (Expert), each
+  within 1.1 standard errors of its exact figure. The 9400 and 9900 runs
+  were made on a copy with `RTP_BP` changed, so the shared config file was
+  not touched.
+
+Turned out wrong, and how it was caught:
+
+- `npm run sim -- --rounds=200000` ran the full 10 million rounds: the
+  root script did not pass options on to the engine's script. Caught from
+  the first line of output, which prints the round count. The root script
+  now ends in `--`.
+- The first output cut percentages off instead of rounding them, so it
+  printed 91.50% where the spec and the tests say 91.51%. Caught by
+  comparing the first run with `game-spec.json`. It now rounds to the
+  nearest, in whole numbers.
+- One test in the first draft had a title that promised more than its body
+  checked. Caught on re-reading before it was run, and rewritten.
+- The simulator used a top-level `await`, which failed when the files were
+  run from a folder without `"type": "module"`. Caught by the 9400 run on
+  the copy. It now uses an ordinary `main()`.
+- The full run took 144 seconds in one process. Each difficulty now runs in
+  its own process, and a single-process run gives the same numbers.
+
+Not done yet: nobody who did not write these two commands has reviewed
+them. Timings above were taken while other work was loading the machine.
