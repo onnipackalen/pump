@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   checkAutoPlayForm,
   describeStop,
-  MAX_AUTO_ROUNDS,
   type AutoPlayForm,
   type AutoPlaySettings,
 } from '../game/autoPlay';
@@ -29,7 +28,28 @@ const initialForm: AutoPlayForm = {
   stopOnLoss: '',
 };
 
-/** Auto-play: a number of rounds, a target pump count, and stop limits. */
+interface FieldSpec {
+  readonly name: keyof AutoPlayForm;
+  /** Short, shown inside the box. */
+  readonly label: string;
+  /** Full, for the tooltip, the error line and screen readers. */
+  readonly full: string;
+  readonly money: boolean;
+}
+
+const FIELDS: readonly FieldSpec[] = [
+  { name: 'rounds', label: 'Rounds', full: 'Rounds', money: false },
+  { name: 'targetPumps', label: 'Pumps', full: 'Pumps per balloon', money: false },
+  { name: 'stopOnProfit', label: 'Stop profit', full: 'Stop at profit', money: true },
+  { name: 'stopOnLoss', label: 'Stop loss', full: 'Stop at loss', money: true },
+];
+
+/**
+ * Auto-play: a number of rounds, a target pump count, and stop limits.
+ * It uses the bets in the bet panel above it. While it runs, this shows
+ * only the progress and the Stop button. The rules are spelled out in
+ * settings, under Game info.
+ */
 export function AutoPlayPanel({
   maxPumps,
   roundBetCents,
@@ -42,89 +62,72 @@ export function AutoPlayPanel({
   const [form, setForm] = useState<AutoPlayForm>(initialForm);
   const check = checkAutoPlayForm(form, maxPumps, roundBetCents);
   const { running, stopping, progress, settings, stopReason } = status;
+  const firstWrong = FIELDS.find((field) => check.errors[field.name] !== null);
 
-  const field = (name: keyof AutoPlayForm, label: string, props: { prefix?: string }) => {
-    const error = check.errors[name];
+  if (running && settings) {
     return (
-      <label className="auto-field">
-        <span className="bet-label">{label}</span>
-        <span className="bet-input">
-          {props.prefix !== undefined && <span aria-hidden="true">{props.prefix}</span>}
-          <input
-            type="text"
-            inputMode={props.prefix === undefined ? 'numeric' : 'decimal'}
-            autoComplete="off"
-            value={form[name]}
-            disabled={running}
-            aria-invalid={error !== null}
-            placeholder={props.prefix === undefined ? undefined : 'off'}
-            onChange={(event) => setForm({ ...form, [name]: event.target.value })}
-          />
-        </span>
-        {error !== null && <span className="bet-note error">{error}</span>}
-      </label>
+      <section className="auto" aria-label="Auto-play">
+        <p className="auto-progress" aria-live="polite">
+          Round {Math.min(progress.roundsPlayed + 1, settings.rounds)} of {settings.rounds} · net{' '}
+          <strong className={progress.netCents > 0 ? 'win' : undefined}>
+            {formatSignedCents(progress.netCents)}
+          </strong>
+        </p>
+        <button
+          type="button"
+          className="btn btn-stop"
+          disabled={stopping}
+          onClick={onStop}
+          title="Stop auto-play (Esc)"
+        >
+          {stopping ? 'Stopping…' : 'Stop'}
+        </button>
+      </section>
     );
-  };
+  }
 
   return (
-    <section className="card panel" aria-label="Auto-play">
-      <h2>Auto-play</h2>
-
-      {running && settings ? (
-        <>
-          <p className="auto-progress" aria-live="polite">
-            Round {Math.min(progress.roundsPlayed + 1, settings.rounds)} of {settings.rounds} ·
-            net{' '}
-            <strong className={progress.netCents > 0 ? 'win' : undefined}>
-              {formatSignedCents(progress.netCents)}
-            </strong>
-          </p>
-          <button
-            type="button"
-            className="btn btn-stop btn-wide"
-            disabled={stopping}
-            onClick={onStop}
-          >
-            {stopping ? 'Stopping…' : 'Stop auto-play'}
-          </button>
-          <p className="hint">
-            <kbd>Esc</kbd> also stops it. Stopping mid-round leaves the balloons for you to finish.
-          </p>
-        </>
-      ) : (
-        <>
-          <div className="auto-grid">
-            {field('rounds', 'Rounds', {})}
-            {field('targetPumps', 'Pumps per balloon', {})}
-            {field('stopOnProfit', 'Stop at profit', { prefix: '$' })}
-            {field('stopOnLoss', 'Stop at loss', { prefix: '$' })}
-          </div>
-          <p className="hint">
-            Uses the bets above. Pumps each balloon that many times, then cashes it out; a balloon
-            whose top is lower cashes out at its top. Buys no Patches. Never starts a round that
-            could take you past the loss limit. Up to {MAX_AUTO_ROUNDS} rounds.
-          </p>
-          <button
-            type="button"
-            className="btn btn-wide"
-            disabled={check.settings === null || !betsValid || roundActive}
-            onClick={() => {
-              if (check.settings) onStart(check.settings);
-            }}
-          >
-            Start auto-play
-          </button>
-          {roundActive && <p className="hint">Finish the round in play first.</p>}
-          {stopReason !== null && (
-            <p className="auto-progress" role="status">
-              {describeStop(stopReason, progress)} Net{' '}
-              <strong className={progress.netCents > 0 ? 'win' : undefined}>
-                {formatSignedCents(progress.netCents)}
-              </strong>
-              .
-            </p>
-          )}
-        </>
+    <section className="auto" aria-label="Auto-play">
+      <div className="auto-grid">
+        {FIELDS.map((field) => (
+          <label key={field.name} className="field" title={field.full}>
+            <span className="field-label">{field.label}</span>
+            <input
+              type="text"
+              inputMode={field.money ? 'decimal' : 'numeric'}
+              autoComplete="off"
+              aria-label={field.full}
+              value={form[field.name]}
+              aria-invalid={check.errors[field.name] !== null}
+              placeholder={field.money ? 'off' : undefined}
+              onChange={(event) => setForm({ ...form, [field.name]: event.target.value })}
+            />
+          </label>
+        ))}
+      </div>
+      {firstWrong && (
+        <p className="note error">
+          {firstWrong.full}: {check.errors[firstWrong.name]}
+        </p>
+      )}
+      <button
+        type="button"
+        className="btn btn-primary"
+        disabled={check.settings === null || !betsValid || roundActive}
+        onClick={() => {
+          if (check.settings) onStart(check.settings);
+        }}
+      >
+        Start auto-play
+      </button>
+      {stopReason !== null && (
+        <p className="note auto-summary" role="status">
+          {describeStop(stopReason, progress)} Net{' '}
+          <strong className={progress.netCents > 0 ? 'win' : undefined}>
+            {formatSignedCents(progress.netCents)}
+          </strong>
+          .
+        </p>
       )}
     </section>
   );

@@ -16,6 +16,8 @@ interface BetPanelProps {
   readonly check: BetCheck;
   readonly disabled: boolean;
   readonly starting: boolean;
+  /** Whether to show the Bet button. Auto-play has its own start button. */
+  readonly showBet: boolean;
   readonly onChange: (setup: BetSetup) => void;
   readonly onStart: () => void;
 }
@@ -28,13 +30,14 @@ function scaleBet(text: string, factor: 0.5 | 2, min: number, max: number): stri
   return centsToInput(Math.min(max, Math.max(min, scaled)));
 }
 
-/** Choose a difficulty, 1 to 3 balloons and a bet on each, then start. */
+/** Choose a difficulty, 1 to 3 balloons and a bet on each, then bet. */
 export function BetPanel({
   config,
   setup,
   check,
   disabled,
   starting,
+  showBet,
   onChange,
   onStart,
 }: BetPanelProps) {
@@ -45,14 +48,14 @@ export function BetPanel({
   const ladder = difficulty.ladder;
   const fullTop = multiplierAt(ladder, ladder.length);
   const counts = Array.from({ length: limits.maxBalloons }, (_, i) => i + 1);
+  const many = setup.bets.length > 1;
 
   const setBet = (index: number, text: string): void => {
     onChange({ ...setup, bets: setup.bets.map((bet, i) => (i === index ? text : bet)) });
   };
 
   return (
-    <section className="card panel" aria-label="Bet">
-      <h2>Difficulty</h2>
+    <section className="bet" aria-label="Bet">
       <div className="segmented" role="radiogroup" aria-label="Difficulty">
         {config.difficulties.map((d) => (
           <button
@@ -68,40 +71,47 @@ export function BetPanel({
           </button>
         ))}
       </div>
-      <p className="hint">
-        {ladder.length} pumps to the top of {formatMultiplier(fullTop)}. The first pump pops{' '}
-        {formatChance(popChance(config.rtpBp, ladder, 1))} of the time; each pump after is riskier.
+      <p className="note bet-info">
+        {ladder.length} pumps · top {formatMultiplier(fullTop)} · first pop{' '}
+        {formatChance(popChance(config.rtpBp, ladder, 1))}
       </p>
 
-      <h2>Balloons</h2>
-      <div className="segmented" role="radiogroup" aria-label="Number of balloons">
-        {counts.map((count) => (
-          <button
-            key={count}
-            type="button"
-            role="radio"
-            aria-checked={count === setup.bets.length}
-            className="segment"
-            disabled={disabled}
-            onClick={() => onChange(withBalloonCount(setup, count))}
-          >
-            {count}
-          </button>
-        ))}
+      <div className="row">
+        <span className="field-label" id="balloon-count-label">
+          Balloons
+        </span>
+        <div className="segmented" role="radiogroup" aria-labelledby="balloon-count-label">
+          {counts.map((count) => (
+            <button
+              key={count}
+              type="button"
+              role="radio"
+              aria-checked={count === setup.bets.length}
+              className="segment"
+              disabled={disabled}
+              onClick={() => onChange(withBalloonCount(setup, count))}
+            >
+              {count}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <h2>Bets</h2>
       <ul className="bets">
         {setup.bets.map((text, index) => {
           const error = check.errors[index] ?? null;
           const cents = error === null ? parseDollarsToCents(text) : null;
           const top = cents === null ? null : topRungForBet(ladder, cents, limits.maxPayoutCents);
+          const capped = top !== null && top < ladder.length;
           return (
             <li key={index}>
-              <label className="bet-row">
-                <span className="bet-label">Balloon {index + 1}</span>
-                <span className="bet-input">
-                  <span aria-hidden="true">$</span>
+              <div className="bet-row">
+                <label className="field field-money">
+                  {many && <span className="dot" data-slot={index + 1} aria-hidden="true" />}
+                  <span className="field-label">{many ? `Bet ${index + 1}` : 'Bet'}</span>
+                  <span className="muted" aria-hidden="true">
+                    $
+                  </span>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -111,10 +121,20 @@ export function BetPanel({
                     aria-invalid={error !== null}
                     onChange={(event) => setBet(index, event.target.value)}
                   />
-                </span>
+                  {capped && (
+                    // The payout cap is shown before the round starts, never hidden.
+                    <span
+                      className="cap"
+                      title={`At this bet the balloon tops out at rung ${top} of ${ladder.length}, because one balloon pays at most ${formatCents(limits.maxPayoutCents)}.`}
+                    >
+                      Top {formatMultiplier(multiplierAt(ladder, top))}
+                    </span>
+                  )}
+                </label>
                 <button
                   type="button"
-                  className="btn btn-small"
+                  className="btn"
+                  aria-label={`Halve bet ${index + 1}`}
                   disabled={disabled}
                   onClick={() =>
                     setBet(index, scaleBet(text, 0.5, limits.minBetCents, limits.maxBetCents))
@@ -124,7 +144,8 @@ export function BetPanel({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-small"
+                  className="btn"
+                  aria-label={`Double bet ${index + 1}`}
                   disabled={disabled}
                   onClick={() =>
                     setBet(index, scaleBet(text, 2, limits.minBetCents, limits.maxBetCents))
@@ -132,37 +153,26 @@ export function BetPanel({
                 >
                   2×
                 </button>
-              </label>
-              {error !== null ? (
-                <p className="bet-note error">{error}</p>
-              ) : top !== null && top < ladder.length ? (
-                <p className="bet-note warn">
-                  Capped: this bet tops out at rung {top} of {ladder.length} (
-                  {formatMultiplier(multiplierAt(ladder, top))}), because one balloon pays at most{' '}
-                  {formatCents(limits.maxPayoutCents)}.
-                </p>
-              ) : (
-                <p className="bet-note">Can reach the top: {formatMultiplier(fullTop)}</p>
-              )}
+              </div>
+              {error !== null && <p className="note error">{error}</p>}
             </li>
           );
         })}
       </ul>
 
-      <div className="total-row">
-        <span>Total bet</span>
-        <strong>{formatCents(check.totalCents)}</strong>
-      </div>
-      {check.problem !== null && <p className="bet-note error">{check.problem}</p>}
+      {check.problem !== null && <p className="note error">{check.problem}</p>}
 
-      <button
-        type="button"
-        className="btn btn-pump btn-wide"
-        disabled={disabled || starting || check.betsCents === null}
-        onClick={onStart}
-      >
-        {starting ? 'Starting…' : 'Start round'}
-      </button>
+      {showBet && (
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={disabled || starting || check.betsCents === null}
+          onClick={onStart}
+          title="Bet (Enter)"
+        >
+          {starting ? 'Starting…' : `Bet ${formatCents(check.totalCents)}`}
+        </button>
+      )}
     </section>
   );
 }
