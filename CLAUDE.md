@@ -17,9 +17,9 @@ They will change RTP to 94% and 99% and rerun everything, then send bugs for a 4
     survive pump 1 with probability     R / m_1          = RTP_BP / (100 * h_1)
     survive pump k >= 2 with probability m_(k-1) / m_k    = h_(k-1) / h_k
   The whole house edge sits in pump 1 and later pumps are fair. Changing RTP only changes pump 1.
-- Pop chance must rise with every pump. Test p_1 <= p_2 <= ... at 9400, 9700 and 9900. Refuse to boot if R / m_1 >= 1.
+- Pop chance must rise strictly with every pump. Test p_1 < p_2 < ... at 9400, 9700 and 9900. Refuse to boot if R / m_1 >= 1, or if the pop chance fails to rise at the configured RTP. In integers that is RTP_BP * h_2 > 100 * h_1^2, and h_(k-1) * h_(k+1) > h_k^2 for every k >= 2.
 - Probabilities are exact fractions. A pump is resolved by comparing a uniform integer in [0, denominator) with the numerator. The integer comes from unbiased rejection sampling. No floating point in any outcome or money path.
-- No cash-out before the first pump (it would return 100%).
+- No cash-out before the first pump: every cash-out point must return R, and a balloon that has not been pumped has no multiplier yet.
 - Patch: available before any pump after the first. It covers exactly that one pump and is spent whether or not the pump pops. If the pump would have popped, the balloon survives at its current rung and the next pump is a fresh draw. Price for pump k on bet B, in cents:
     price_k = ceil( p_k * B * m_(k-1) / R )
   That makes the Patch itself return exactly R.
@@ -30,7 +30,9 @@ They will change RTP to 94% and 99% and rerun everything, then send bugs for a 4
 
 ## Provably fair (locked)
 - Per player: an active server seed (only its SHA-256 hash is shown), a client seed the player can edit, and a nonce that increments once per round.
-- Draw bytes = HMAC-SHA256(serverSeed, `${clientSeed}:${nonce}:${balloonIndex}:${drawIndex}`), extended with a block counter if rejection sampling runs out of bytes. drawIndex counts draws on that balloon, so a balloon's outcomes don't depend on click order.
+- The nonce belongs to the server seed. It starts at 0 when a server seed becomes active and only ever goes up. Editing the client seed never resets it. A (server seed, nonce) pair is used by at most one round, enforced by a unique index. Otherwise a player could switch client seeds back and forth and replay rounds whose results they already know.
+- Draw bytes come in 32-byte blocks. Block b = HMAC-SHA256(serverSeed, `${clientSeed}:${nonce}:${balloonIndex}:${drawIndex}:${b}`) for b = 0, 1, 2, ... The block number is always part of the message, starting at 0. Later blocks are read only if rejection sampling runs out of bytes. drawIndex counts draws on that balloon, so a balloon's outcomes don't depend on click order.
+- A client seed is 1 to 64 characters from A-Z, a-z, 0-9, _ and -. It cannot contain ':', so two different draws can never share a message.
 - A draw is computed only when the player pumps. No response may contain a future outcome or an unrevealed server seed.
 - The server seed is revealed only when the player rotates to a new one. Seeds can't change mid-round. A round becomes verifiable once its seed is revealed.
 - The verify page recomputes rounds in the browser using the same engine package.
@@ -40,10 +42,10 @@ They will change RTP to 94% and 99% and rerun everything, then send bugs for a 4
 - Balance is a stored column changed only in the same transaction as its ledger row, guarded so it can't go negative. Invariant: balance == sum(ledger) at all times.
 - SQLite, a single server process, every state change in one synchronous immediate transaction with no await inside it.
 - One active round per player, enforced by a partial unique index.
-- Every mutating request carries a client idempotency key; a repeat returns the stored original response.
-- Pump and cash-out on the same balloon are conditional on the balloon's current state; the loser gets a 409.
+- Every mutating request carries a client idempotency key; a repeat returns the stored original response. The key lookup, and the insert of the key with its full response, happen inside the same transaction as the state and ledger change, so a crash can never leave an action applied but unrecorded.
+- Pump and cash-out on the same balloon are conditional on the balloon's current state; the loser gets a 409. "Current state" means the state the client last saw: every pump, patch + pump and cash-out request carries that balloon's expected draw index (the number of draws made on it so far). If it does not match, or the balloon is no longer active, the request changes nothing and gets a 409 with the current state. The rung is not enough for this check, because a pump saved by a Patch uses a draw without moving the rung.
 - Patch + pump is one atomic request: charge and draw together.
-- Abandoned rounds: after 24h idle, pumped balloons cash out at their current multiplier and unpumped bets are refunded, applied lazily on the player's next request and by a periodic sweep.
+- Abandoned rounds: after 24h idle, pumped balloons cash out at their current multiplier and unpumped bets are refunded, applied lazily on the player's next request and by a periodic sweep. A refunded bet is a void bet: no draw was made on it, so it is not a cash-out and it is left out of turnover and RTP figures.
 - Players are anonymous: created on first visit, identified by an httpOnly cookie.
 
 ## Structure
