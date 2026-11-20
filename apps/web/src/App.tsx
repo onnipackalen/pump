@@ -44,9 +44,6 @@ export function App() {
   const balance = state.wallet?.balanceCents ?? 0;
   const check = checkBets(setup, config.limits, balance);
   const target = keyboardTarget(round, chosen);
-  const roundDifficulty = round
-    ? config.difficulties.find((d) => d.id === round.difficultyId)
-    : undefined;
 
   const start = (): void => {
     if (!check.betsCents) return;
@@ -121,19 +118,17 @@ export function App() {
       {state.phase !== 'loading' && (
         <main className="layout">
           <section className="play" aria-label="Balloons">
-            {round && roundDifficulty && round.status === 'finished' && (
-              <RoundResult round={round} />
-            )}
+            {round?.status === 'finished' && <RoundResult round={round} />}
             <div
               className="stage"
               style={{ gridTemplateColumns: `repeat(${round?.balloons.length ?? setup.bets.length}, minmax(0, 1fr))` }}
             >
-              {round && roundDifficulty
+              {round
                 ? round.balloons.map((balloon) => (
                     <BalloonCard
                       key={`${round.id}-${balloon.index}`}
                       balloon={balloon}
-                      ladder={roundDifficulty.ladder}
+                      ladder={round.ladder}
                       beat={state.beats[balloon.index] ?? 'idle'}
                       pending={state.pending[balloon.index] ?? false}
                       selected={chosen === balloon.index && round.balloons.length > 1}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { FairnessView, RevealedSeed } from '../api/contract';
+import { CLIENT_SEED_PATTERN } from '../game/clientSeed';
 
 interface FairnessPanelProps {
   readonly fairness: FairnessView;
@@ -9,8 +10,6 @@ interface FairnessPanelProps {
   readonly onSaveClientSeed: (clientSeed: string) => Promise<boolean>;
   readonly onRotate: () => void;
 }
-
-const CLIENT_SEED = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
  * Provably fair seeds. Before a round the player sees only the hash of the
@@ -33,8 +32,8 @@ export function FairnessPanel({
 
       {/* Keyed by the saved seed, so the box resets when it changes. */}
       <ClientSeedForm
-        key={fairness.clientSeed}
-        saved={fairness.clientSeed}
+        key={fairness.clientSeed ?? ''}
+        saved={fairness.clientSeed ?? ''}
         locked={locked}
         onSave={onSaveClientSeed}
       />
@@ -77,7 +76,7 @@ interface ClientSeedFormProps {
 function ClientSeedForm({ saved, locked, onSave }: ClientSeedFormProps) {
   const [text, setText] = useState(saved);
   const [saving, setSaving] = useState(false);
-  const valid = CLIENT_SEED.test(text);
+  const valid = CLIENT_SEED_PATTERN.test(text);
 
   return (
     <form

@@ -9,6 +9,7 @@ import type {
   RoundView,
   WalletView,
 } from '../api/contract';
+import { makeClientSeed } from './clientSeed';
 
 /**
  * What a balloon's picture is doing right now. The balloon art reads it:
@@ -116,12 +117,18 @@ export function useGame(client: GameClient): Game {
           client.getHistory(HISTORY_SIZE),
         ]);
         if (cancelled) return;
+        // A new player has no client seed yet: this browser makes the first one.
+        const fairness =
+          session.fairness.clientSeed === null
+            ? await send((key) => client.setClientSeed(makeClientSeed(), key))
+            : session.fairness;
+        if (cancelled) return;
         const round = session.activeRound;
         setState((s) => ({
           ...s,
           phase: 'ready',
           wallet: session.wallet,
-          fairness: session.fairness,
+          fairness,
           round,
           history,
           beats: round ? round.balloons.map(() => 'idle') : [],

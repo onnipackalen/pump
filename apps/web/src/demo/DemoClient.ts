@@ -17,6 +17,7 @@
 
 import { GAME_CONFIG, type Difficulty, type GameConfig } from '@pump/engine';
 import { ApiFailure, type GameClient } from '../api/client';
+import { CLIENT_SEED_PATTERN } from '../game/clientSeed';
 import type {
   ActionResult,
   ApiErrorBody,
@@ -57,6 +58,8 @@ interface DemoBalloon {
 interface DemoRound {
   readonly id: string;
   readonly difficulty: Difficulty;
+  /** This round's own copy of the RTP, as the real server keeps one. */
+  readonly rtpBp: number;
   readonly serverSeedHash: string;
   readonly clientSeed: string;
   readonly nonce: number;
@@ -102,7 +105,8 @@ export class DemoClient implements GameClient {
   private balanceCents = STARTING_BALANCE_CENTS;
   private serverSeed = randomHex(32);
   private serverSeedHash: Promise<string>;
-  private clientSeed = randomHex(8);
+  /** Null until the browser sends the first one. */
+  private clientSeed: string | null = null;
   private nonce = 0;
   private round: DemoRound | null = null;
   private history: RoundSummary[] = [];
@@ -133,6 +137,10 @@ export class DemoClient implements GameClient {
     return this.once(key, async () => {
       await sleep(this.latencyMs);
       if (this.round) fail({ code: 'round_active', message: 'Finish the current round first.' });
+      const clientSeed = this.clientSeed;
+      if (clientSeed === null) {
+        fail({ code: 'invalid_request', message: 'Set a client seed first.' });
+      }
 
       const difficulty = this.config.difficulties.find((d) => d.id === request.difficultyId);
       if (!difficulty) fail({ code: 'invalid_request', message: 'Unknown difficulty.' });
@@ -156,8 +164,9 @@ export class DemoClient implements GameClient {
       this.round = {
         id: crypto.randomUUID(),
         difficulty,
+        rtpBp: this.config.rtpBp,
         serverSeedHash: await this.serverSeedHash,
-        clientSeed: this.clientSeed,
+        clientSeed,
         nonce: this.nonce,
         startedAt: new Date().toISOString(),
         balloons: bets.map((betCents) => ({
@@ -186,7 +195,7 @@ export class DemoClient implements GameClient {
         if (balloon.rung === 0) {
           fail({ code: 'invalid_request', message: 'No Patch before the first pump.' });
         }
-        const price = patchPriceCents(this.config.rtpBp, ladder, balloon.betCents, pump);
+        const price = patchPriceCents(round.rtpBp, ladder, balloon.betCents, pump);
         if (price > this.balanceCents) {
           fail({ code: 'insufficient_funds', message: 'Not enough balance for the Patch.' });
         }
@@ -194,7 +203,7 @@ export class DemoClient implements GameClient {
         balloon.patchesCents += price;
       }
 
-      const survive = surviveChance(this.config.rtpBp, ladder, pump);
+      const survive = surviveChance(round.rtpBp, ladder, pump);
       const survived = uniformInt(survive.den) < survive.num;
       balloon.drawIndex += 1;
 
@@ -237,7 +246,7 @@ export class DemoClient implements GameClient {
   setClientSeed(clientSeed: string, key: string): Promise<FairnessView> {
     return this.once(key, async () => {
       await sleep(this.latencyMs);
-      if (!/^[A-Za-z0-9_-]{1,64}$/.test(clientSeed)) {
+      if (!CLIENT_SEED_PATTERN.test(clientSeed)) {
         fail({ code: 'invalid_request', message: 'Use 1 to 64 of A-Z, a-z, 0-9, _ and -.' });
       }
       if (this.round) fail({ code: 'round_active', message: 'Seeds are locked during a round.' });
@@ -341,6 +350,8 @@ export class DemoClient implements GameClient {
     return {
       id: round.id,
       difficultyId: round.difficulty.id,
+      rtpBp: round.rtpBp,
+      ladder: round.difficulty.ladder,
       status: active ? 'active' : 'finished',
       serverSeedHash: round.serverSeedHash,
       clientSeed: round.clientSeed,
@@ -352,7 +363,7 @@ export class DemoClient implements GameClient {
 
   private balloonView(round: DemoRound, balloon: DemoBalloon, index: number): BalloonView {
     const ladder = round.difficulty.ladder;
-    const { rtpBp } = this.config;
+    const { rtpBp } = round;
     const isActive = balloon.status === 'active';
     const pump = balloon.rung + 1;
     return {

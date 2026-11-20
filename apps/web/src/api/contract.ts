@@ -87,6 +87,12 @@ export type RoundStatus = 'active' | 'finished';
 export interface RoundView {
   readonly id: string;
   readonly difficultyId: string;
+  /**
+   * The RTP and ladder this round was played with. Each round keeps its own
+   * copy, so it still shows and verifies correctly after the config changes.
+   */
+  readonly rtpBp: number;
+  readonly ladder: readonly number[];
   readonly status: RoundStatus;
   /** The seeds this round uses. The server seed itself stays hidden. */
   readonly serverSeedHash: string;
@@ -114,7 +120,12 @@ export interface RoundSummary {
 export interface FairnessView {
   /** SHA-256 of the active server seed. The seed is revealed on rotate. */
   readonly serverSeedHash: string;
-  readonly clientSeed: string;
+  /**
+   * Null for a new player. The browser makes the first client seed and
+   * sends it, so even a player who never edits it isn't using one the
+   * server picked. A round can't start until it is set.
+   */
+  readonly clientSeed: string | null;
   /** The nonce the next round will use. */
   readonly nextNonce: number;
 }
