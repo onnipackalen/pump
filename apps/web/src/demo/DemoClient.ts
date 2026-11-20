@@ -4,8 +4,8 @@
  * Plays the game inside the browser so the screen can be built and clicked
  * before the API is written. It is not the real game:
  * - its draws come from crypto.getRandomValues, not from the seeds, so it
- *   is not provably fair;
- * - its rules come from placeholderMath.ts, not the engine;
+ *   is not provably fair (the chances, payouts and Patch prices do come from
+ *   the engine's math in @pump/engine);
  * - nothing is saved: a page refresh starts over.
  * The brief says a browser-only game does not count, so the screen shows a
  * "Demo" badge whenever this client is in use.
@@ -15,7 +15,18 @@
  * fixed during a round.
  */
 
-import { GAME_CONFIG, type Difficulty, type GameConfig } from '@pump/engine';
+import {
+  cashOutCents,
+  GAME_CONFIG,
+  multiplierAt,
+  patchPriceCents,
+  popChance,
+  pumpSurvives,
+  surviveChance,
+  topRungForBet,
+  type Difficulty,
+  type GameConfig,
+} from '@pump/engine';
 import { ApiFailure, type GameClient } from '../api/client';
 import { CLIENT_SEED_PATTERN } from '../game/clientSeed';
 import type {
@@ -34,14 +45,6 @@ import type {
   SessionView,
   StartRoundRequest,
 } from '../api/contract';
-import {
-  cashOutCents,
-  multiplierAt,
-  patchPriceCents,
-  popChance,
-  surviveChance,
-  topRungForBet,
-} from './placeholderMath';
 
 const STARTING_BALANCE_CENTS = 1_000_000;
 
@@ -210,7 +213,7 @@ export class DemoClient implements GameClient {
       }
 
       const survive = surviveChance(round.rtpBp, ladder, pump);
-      const survived = uniformInt(survive.den) < survive.num;
+      const survived = pumpSurvives(survive, uniformInt(survive.den));
       balloon.drawIndex += 1;
 
       let outcome: PumpOutcome;
