@@ -202,3 +202,43 @@ Turned out wrong, and how it was caught:
 Not done yet: the server side (seed storage, nonce, rotation, the unique
 index), the per-round copy of RTP and ladder, and the verify page. These
 need the engine and the server first.
+
+## 2026-11-20: auto-play, sound, review fixes and graphics (web)
+
+Built, in `apps/web`:
+
+- Auto-play: rounds, pumps per balloon, stop at profit, stop at loss. The
+  loss check looks ahead, so a round starts only if losing all its bets
+  stays within the limit. No Patches. Any failed action stops it. A
+  per-market switch (`VITE_MARKET=gb`) turns it off and fails closed for
+  unknown markets.
+- Sound made with Web Audio, no files. Pitch climbs toward the top; a pop
+  is short and quiet; mute is saved.
+- The balloon art from `graphics/balloon` (floor pump, hose, multiplier on
+  the balloon, burst on pop, float-away on cash-out), the app icons and a
+  manifest, session net and time in the top bar, a Total bet readout, and
+  an Animations on/off setting.
+
+Turned out wrong, and how it was caught:
+
+- A multi-agent review (four angles, each finding re-checked by a skeptic)
+  confirmed 12 bugs. The worst: a pump's answer, held for its 300 ms press
+  beat, could land after a newer cash-out answer and undo it on screen,
+  with a wrong balance and a locked screen. Reproduced in a test before the
+  fix; answers are now ranked by draws used plus balloons ended. Also:
+  Space on a focused Stop, Sound or Cash out button pumped instead; sound
+  never unlocked on iPhone taps; `VITE_MARKET=GB` turned auto-play back on;
+  two demo starts at the same moment could both charge.
+- The user asked that only signs the gambling industry actually uses ship.
+  Each graphic was checked against live games and UK and Ontario rules,
+  with a skeptic re-checking every claim. No product was found using the
+  strain cues, the top seal, the odds dot grid, the ghost outline and scrap
+  after a pop, the cash-out tick, or the Patch tape sticker, so they are
+  off. The Patch shows in words instead.
+- That check also caught a rule break in my sound: a balloon cashed at a
+  profit played a win chime even when its 2-3 balloon round lost overall,
+  which UK RTS 14F bans. Wins are now judged over the whole round, for
+  both effects and sound, with a test for that exact case.
+- My own fix for a demo race first paired a revealed seed with the wrong
+  hash when two rotations raced. Caught by thinking through the await gap
+  before committing; the check now sits right before the change.
