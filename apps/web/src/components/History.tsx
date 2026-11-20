@@ -5,6 +5,8 @@ import { formatCents, formatSignedCents } from '../money';
 interface HistoryProps {
   readonly config: GameConfig;
   readonly rounds: readonly RoundSummary[];
+  /** Opens a round on the verify page. */
+  readonly onVerify: (roundId: string) => void;
 }
 
 const timeOfDay = new Intl.DateTimeFormat(undefined, {
@@ -14,7 +16,7 @@ const timeOfDay = new Intl.DateTimeFormat(undefined, {
 });
 
 /** The last rounds, newest first. */
-export function History({ config, rounds }: HistoryProps) {
+export function History({ config, rounds, onVerify }: HistoryProps) {
   const label = (id: string): string =>
     config.difficulties.find((d) => d.id === id)?.label ?? id;
 
@@ -42,6 +44,9 @@ export function History({ config, rounds }: HistoryProps) {
                 <th scope="col" className="num">
                   Net
                 </th>
+                <th scope="col">
+                  <span className="visually-hidden">Verify</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -56,6 +61,17 @@ export function History({ config, rounds }: HistoryProps) {
                     <td className="num">{formatCents(spent)}</td>
                     <td className="num">{formatCents(round.payoutCents)}</td>
                     <td className={net > 0 ? 'num win' : 'num muted'}>{formatSignedCents(net)}</td>
+                    <td>
+                      {round.seedRevealed ? (
+                        <button type="button" className="btn btn-small" onClick={() => onVerify(round.id)}>
+                          Verify
+                        </button>
+                      ) : (
+                        <span className="muted" title="Rotate your server seed to reveal it, then verify">
+                          After rotate
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
