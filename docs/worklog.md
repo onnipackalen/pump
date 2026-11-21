@@ -1438,3 +1438,48 @@ record and should be read in the owner's own words before submitting. The
 README intro on main ("is live") and on `cashout-reveal` ("Not live yet")
 already clash when merged; the new sections add no clash of their own
 (checked with `git merge-file`).
+
+## 2026-11-20: review of the after-round reveal, and a guard against going back
+
+The newest version (297760c) was put live by hand after its checks passed.
+It changes no database step; the same player kept their balance and history.
+
+Then the cashout-reveal branch (09319e2) was checked before its merge, as
+agreed with the chat that built it:
+
+- Its own checks in a clean copy: lint, typecheck, 1,448 tests, the build,
+  the RTP check and the hammer all pass.
+- An upgrade shaped like the live site: a database made by the live
+  version's server, with three rounds left in progress, then the branch's
+  server started on the same file. Balances and open rounds came back as
+  left; the old rounds were finished by cash-out and by the 24-hour rule;
+  every round, old and new, passed `verifyRound`; reconcile was clean,
+  also after the hammer had been run against the upgraded database.
+- Four reviewers (leaks, database, engine and fairness, wallet), each
+  finding attacked by a second reader. All four passed the code.
+
+Turned out wrong, and how it was caught:
+
+- All four reviewers ran the opposite direction, which nobody had tried:
+  the OLD server started again on the upgraded database. It starts without
+  complaint, cannot start or close rounds, and, worse, a pump that would end
+  the round answers 500 and is rolled back, so the same draw is still
+  waiting. A player can then send it again with a Patch. One reader took a
+  $1 balloon from rung 1 to rung 14 that way. The ledger stayed exact; the
+  money was real. Nothing in the branch is wrong: old code on a new
+  database is.
+- So `migrate()` now refuses to start on a database that holds a step the
+  code does not know (6f5e3ff), with words that say not to delete the file.
+  It was run on the very database the branch had upgraded and refuses it.
+  The README says never to put an older version back on the live site.
+  This guard version has to be live before the reveal version is, so that
+  the version just behind the reveal refuses instead of running.
+- My first upgrade run "failed" for a reason of my own making: I had given
+  the reviewers the same port range I then used, and my script talked to a
+  reviewer's server. Seen from "address already in use" in the log; rerun
+  on a free port.
+
+A note for whoever touches the round-ending code: a reveal that throws
+rolls back the action that ends the round. That is right, but it means any
+bug that throws only when a round ends tells the player the outcome, the
+same way. Never swallow such an error to "fix" it.
