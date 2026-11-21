@@ -6,6 +6,13 @@ import { CHART_HEIGHT, CHART_WIDTH, nearestIndex, profitLine } from './profitLin
 interface ProfitChartProps {
   /** The running net after each round, oldest first, as the server sends it. */
   readonly profit: readonly ProfitPoint[];
+  /**
+   * The small chart in the live stats panel: no line of round numbers under
+   * it, and the net of a pointed-at round shows over the chart's corner only
+   * while pointing (the panel shows the latest net already). Its height
+   * comes from the panel.
+   */
+  readonly compact?: boolean;
 }
 
 /**
@@ -15,7 +22,7 @@ interface ProfitChartProps {
  * at the chart, or using the arrow keys on it, shows the net after that
  * round; otherwise it shows the latest.
  */
-export function ProfitChart({ profit }: ProfitChartProps) {
+export function ProfitChart({ profit, compact = false }: ProfitChartProps) {
   const line = useMemo(() => profitLine(profit), [profit]);
   const [picked, setPicked] = useState<number | null>(null);
   const clipId = useId();
@@ -48,18 +55,24 @@ export function ProfitChart({ profit }: ProfitChartProps) {
   };
 
   const description =
-    `Net after each round, rounds 1 to ${String(last.round)}. ` +
-    `Highest ${formatSignedCents(line.highCents)}, lowest ${formatSignedCents(line.lowCents)}, ` +
-    `now ${formatSignedCents(last.netCents)}.`;
+    last.round === 0
+      ? 'No rounds yet.'
+      : `Net after each round, rounds 1 to ${String(last.round)}. ` +
+        `Highest ${formatSignedCents(line.highCents)}, lowest ${formatSignedCents(line.lowCents)}, ` +
+        `now ${formatSignedCents(last.netCents)}.`;
 
   return (
-    <figure className="profit-chart">
-      <p className="profit-readout">
-        <span className="muted">{shown.round === 0 ? 'Start' : `Round ${String(shown.round)}`}</span>
-        <span className={shown.netCents > 0 ? 'win' : undefined}>
-          {formatSignedCents(shown.netCents)}
-        </span>
-      </p>
+    <figure className={compact ? 'profit-chart profit-chart-compact' : 'profit-chart'}>
+      {(!compact || picked !== null) && (
+        <p className="profit-readout">
+          <span className="muted">
+            {shown.round === 0 ? 'Start' : `Round ${String(shown.round)}`}
+          </span>
+          <span className={shown.netCents > 0 ? 'win' : undefined}>
+            {formatSignedCents(shown.netCents)}
+          </span>
+        </p>
+      )}
       <div
         className="profit-plot"
         role="img"
@@ -103,10 +116,12 @@ export function ProfitChart({ profit }: ProfitChartProps) {
         <span className="profit-axis profit-axis-high">{formatSignedCents(line.highCents)}</span>
         <span className="profit-axis profit-axis-low">{formatSignedCents(line.lowCents)}</span>
       </div>
-      <div className="profit-x muted">
-        <span>Start</span>
-        <span>Round {last.round}</span>
-      </div>
+      {!compact && (
+        <div className="profit-x muted">
+          <span>Start</span>
+          <span>Round {last.round}</span>
+        </div>
+      )}
     </figure>
   );
 }
