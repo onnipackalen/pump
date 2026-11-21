@@ -167,9 +167,10 @@ Start from how the balloon ended:
 - `d`: its draw count, the draws it used. Patch saves count, so `d` is `r`
   plus the number of Patch saves.
 - `T`: its top rung. That is the highest rung `k` where
-  `bet * h_k <= 10,000,000 * 100` (bet in cents, `h_k` in hundredths), so
-  its payout fits under the $100,000 cap. Rungs above `T` are locked for
-  that bet.
+  `bet * h_k <= cap * 100` (bet and cap in cents, `h_k` in hundredths), so
+  its payout fits under the cap. `cap` is the payout cap saved with the
+  round (10,000,000 cents, $100,000, for every round so far). Rungs above
+  `T` are locked for that bet.
 
 Then:
 

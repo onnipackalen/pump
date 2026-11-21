@@ -759,7 +759,7 @@ describe('a database made by the branch before reveals were merged', () => {
     const tablesBefore = db.prepare('SELECT name, sql FROM sqlite_schema ORDER BY name').all();
 
     expect(() => migrate(db)).toThrow(
-      /step 2 is "reveals at round end, and the payout cap per round".*Delete the database file/,
+      /step 2 is "reveals at round end, and the payout cap per round".*If it holds real wallets, do NOT delete it/,
     );
     expect(db.prepare('SELECT name, sql FROM sqlite_schema ORDER BY name').all()).toEqual(tablesBefore);
     expect(count(db, 'schema_migrations')).toBe(2);

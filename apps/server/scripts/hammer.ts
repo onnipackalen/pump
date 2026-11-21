@@ -131,7 +131,13 @@ let inFlight = 0;
 let peakInFlight = 0;
 const statusCounts = new Map<number, number>();
 const failures: string[] = [];
-const checks = { pairs: 0, repeats: 0, starts: 0, refusedSeedChanges: 0, rounds: 0, reveals: 0 };
+const checks = { pairs: 0, repeats: 0, starts: 0, refusedSeedChanges: 0, rounds: 0 };
+/**
+ * Each reveal seen on a finished round, once: round id and balloon index. The
+ * same reveal comes back in the winning answer, its repeat and every late 409,
+ * so counting answers would count it several times.
+ */
+const revealsSeen = new Set<string>();
 
 function fail(message: string): void {
   if (failures.length < 25) failures.push(message);
@@ -191,7 +197,11 @@ function roundIn(answer: Answer): RoundView | null {
     if (round.status === 'active' && shown > 0) {
       fail(`round ${round.id}: a reveal was shown while the round was in progress`);
     }
-    if (round.status === 'finished') checks.reveals += shown;
+    if (round.status === 'finished') {
+      for (const balloon of round.balloons) {
+        if (balloon.afterRound !== null) revealsSeen.add(`${round.id}:${String(balloon.index)}`);
+      }
+    }
   }
   return round;
 }
@@ -504,7 +514,7 @@ async function run(): Promise<number> {
   line(
     'No reveal was shown while its round was in progress',
     !failures.some((f) => f.includes('reveal was shown')),
-    `${checks.rounds.toLocaleString('en-US')} rounds seen, ${checks.reveals.toLocaleString('en-US')} reveals on finished ones`,
+    `${checks.rounds.toLocaleString('en-US')} rounds seen, ${revealsSeen.size.toLocaleString('en-US')} reveals on finished ones`,
   );
   line('No balance is below zero', negative !== undefined && int(negative, 'n') === 0, '');
   line(

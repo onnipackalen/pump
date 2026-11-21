@@ -1,5 +1,5 @@
 import type { Db } from './database';
-import { text } from './rows';
+import { int, text } from './rows';
 import { immediate } from './transaction';
 
 /**
@@ -589,6 +589,10 @@ export function migrate(db: Db, upTo = Number.POSITIVE_INFINITY): void {
       ) STRICT
     `);
   });
+  // Two refusals, both before anything is changed: a step this code doesn't
+  // know (a newer server used this file, so this is a rollback), and a known
+  // step recorded under another name (other, unreleased code made the file).
+  refuseANewerDatabase(db);
   const recordedName = db.prepare('SELECT name FROM schema_migrations WHERE id = :id');
   const record = db.prepare(
     'INSERT INTO schema_migrations (id, name, applied_at) VALUES (:id, :name, :at)',
@@ -604,7 +608,8 @@ export function migrate(db: Db, upTo = Number.POSITIVE_INFINITY): void {
         `This database's step ${String(migration.id)} is "${name}", but this server's step ` +
           `${String(migration.id)} is "${migration.name}". The database was made by other, ` +
           'unreleased code, so its tables are not the ones this server expects. Nothing was ' +
-          'changed. Delete the database file (and its -wal and -shm files) to start afresh.',
+          'changed. If this is a test database on your own computer, delete it (and its -wal ' +
+          'and -shm files) to start afresh. If it holds real wallets, do NOT delete it.',
       );
     }
   }
@@ -616,4 +621,30 @@ export function migrate(db: Db, upTo = Number.POSITIVE_INFINITY): void {
       record.run({ id: migration.id, name: migration.name, at: new Date().toISOString() });
     });
   }
+}
+
+/**
+ * Refuses a database that a NEWER version of the server has changed.
+ *
+ * A step recorded in the database that this code does not know means a newer
+ * version ran on this file, and an older one is now being started on it (a
+ * rollback). That is not safe to play on. The newer step may add rules this
+ * code cannot follow, so some actions fail half way and are rolled back. If a
+ * pump fails only when it would end the round, the failure tells the player
+ * what that pump would do, and the same draw is still waiting: they can send
+ * it again with a Patch. So the server does not start at all.
+ */
+function refuseANewerDatabase(db: Db): void {
+  const known = new Set(MIGRATIONS.map((migration) => migration.id));
+  const recorded = db.prepare('SELECT id, name FROM schema_migrations ORDER BY id').all();
+  const unknown = recorded.filter((row) => !known.has(int(row, 'id')));
+  if (unknown.length === 0) return;
+  const steps = unknown
+    .map((row) => `step ${String(int(row, 'id'))} ("${text(row, 'name')}")`)
+    .join(', ');
+  throw new Error(
+    `This database was changed by a newer version of the server: it holds ${steps}, which ` +
+      'this version does not know. An older version must not run on it. Start the newer ' +
+      'version again. Do NOT delete or change the database file: it holds every wallet.',
+  );
 }
