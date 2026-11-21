@@ -1954,3 +1954,56 @@ Not built, not checked:
   approved plan, not built.
 - Chromium only. The rows use container queries, `:has()` and a mask; none
   has been tried in Safari or on a real iPhone.
+
+## 2026-11-20: the hose falls as one line, pops leave nothing, start fixes
+
+Three requests from the user, then the coordinator's live check of the
+start animation.
+
+- "make it after you cash out. The pipe will also fall into the same
+  position as it would if it would break": after a cash-out the hose now
+  falls to the floor like after a pop (it used to curl back to the pump),
+  so every new balloon starts on the floor and its first pump lifts it.
+- "I don't like the torn rubber bits on the hose nor them on the floor.
+  Just make it pop like blast into oblivion", then "gray into shards and
+  then floats down": the torn neck and the floor bits are gone from the
+  art. The grey shards fly out, float down and fade (900 ms). A popped
+  and a cashed-out pump now end as the same picture; the label under the
+  balloon says which it was.
+- "It falls and then when it hits the floor it crumples. It's not fluid":
+  the fall was the standing hose turned over as a stiff piece and swapped
+  for the lying shape as it landed. Now the hose line itself bends, frame
+  by frame (`balloon/hoseShape.ts`, drawn by `useHoseMotion` in
+  Balloon.tsx): at each moment it is the standing hose turned partway
+  around the nozzle, blended more and more into the lying shape and kept
+  above the floor. Safari (iPhones included) cannot animate a path's
+  shape in CSS, so this is done in code; it works everywhere. The air
+  pocket's lines are hose lines too, so the pocket runs along whatever
+  shape the hose has, and the fitting and the flat balloon ride its end.
+
+The live check found, and this fixes:
+- (blocker) the bet's set-up replayed on the second pump, because
+  data-setup stayed for the balloon's whole life. It now ends at the
+  first answer.
+- the lift replayed after a reload or a return from another page. It now
+  plays only when this screen sees the first pump hold (`useFirstLift`).
+- a quick next pump or cash-out cut the lift short with a jump. The lift
+  is now kept for its whole length (FIRST_LIFT_MS, 900 ms) whatever comes
+  next, and runs on layers nothing else moves (the blow-up on the grow
+  layer's own scale, the view on the scene).
+- with motion off a first-pump pop showed a blown-up balloon for 200 ms;
+  a 24-hour refund jumped to a blown-up balloon on a standing hose. Both
+  now stay flat on the floor ("floor-void" for the refund).
+- smaller: the flat balloon now sits on the floor line; no push-in with
+  2 or 3 balloons (balloon-app.css); a slot that had no balloon before
+  gets the "idle" set-up; with motion off the balloon fades in at once.
+- auto-play pumped during the set-up: `SET_UP_MS` (320) is exported from
+  game/setUp.ts for the auto-bet branch to wait out.
+
+Checked in headless Chrome against the branch's own server (the session's
+browser pane was hidden, so it would not draw): two rounds on Easy and
+four on Expert, every frame recorded. The set-up never ran after a first
+answer; the lift ran once per first pump and cleared after about 900 ms;
+the hose moved in 12 to 18 frames per fall or lift, ending exactly in
+the lying or standing shape; the cash-out fall waited for the release.
+Tests now pin the unhappy paths too (findings 1 to 3).
