@@ -25,6 +25,9 @@
  *   GET  /api/history?limit=10            -> { rounds: RoundSummary[] }
  *   GET  /api/stats                       -> PlayerStats
  *        The player's results over every round they have finished.
+ *   GET  /api/wins                        -> PublicWinsResponse
+ *        Other players' latest, largest and luckiest wins. Needs no player
+ *        and no cookie. Empty lists when the server has it switched off.
  *   POST /api/rounds                      StartRoundRequest -> ActionResult
  *   POST /api/rounds/:roundId/pump        PumpBody          -> PumpResult
  *        With patch: true this buys a Patch and pumps in one atomic step.
@@ -342,6 +345,48 @@ export interface VerifiableRound {
 /** The shape of every error response. */
 export interface ApiErrorResponse {
   readonly error: ApiErrorBody;
+}
+
+/**
+ * One win that everyone may see: a finished round that paid out more than
+ * went in. Nothing here identifies a player or lets anyone look the round
+ * up: there is no player id, no round id, no seed and no cookie.
+ */
+export interface PublicWin {
+  /**
+   * A short tag in place of the player. All of one player's wins carry the
+   * same tag. It is a one-way hash and cannot be turned back into anything.
+   */
+  readonly playerTag: string;
+  readonly difficultyId: string;
+  /** Bets that were played plus Patches. Refunded (void) bets are left out. */
+  readonly wageredCents: number;
+  readonly payoutCents: number;
+  /** The gain: payoutCents minus wageredCents. Always above 0. */
+  readonly netCents: number;
+  /** The highest multiplier a balloon in this round cashed out at. */
+  readonly multiplierHundredths: number;
+  /** ISO 8601. */
+  readonly finishedAt: string;
+}
+
+/**
+ * The response of GET /api/wins. Each list holds at most ten wins, and the
+ * same win can be in more than one list. The server reuses one answer for a
+ * few seconds, so a win can take that long to show.
+ */
+export interface PublicWinsResponse {
+  /**
+   * False when the server has this switched off for its market. The three
+   * lists are then empty and the screen should not show the panel at all.
+   */
+  readonly enabled: boolean;
+  /** The latest wins, newest first. */
+  readonly recent: readonly PublicWin[];
+  /** The largest gains (netCents), largest first. */
+  readonly biggest: readonly PublicWin[];
+  /** The highest multipliers, highest first. */
+  readonly luckiest: readonly PublicWin[];
 }
 
 /** The response of GET /api/history. */
