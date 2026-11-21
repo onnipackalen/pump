@@ -1997,3 +1997,50 @@ Not built, not checked:
   approved plan, not built.
 - Chromium only. The rows use container queries, `:has()` and a mask; none
   has been tried in Safari or on a real iPhone.
+
+## 2026-11-20: a player can keep their wins private (branch public-wins)
+
+The owner's answer to "past wins of people who already played become visible
+to everyone" was: "You can keep your wins private." So each player now has
+that choice.
+
+Built:
+
+- Database step 3: one column on `players`, `wins_private`, 0 or 1, starting
+  at 0 for everyone, also for players who were there before the step.
+- `GET /api/settings` and `PUT /api/settings` with `{ winsPrivate }`. The
+  change needs the player's cookie and an idempotency key like every other
+  change, and moves no money.
+- The public lists leave out every win of a player who chose private, past
+  wins included. It takes effect at once: the answer being reused has that
+  player's rows taken out of it in memory, with no new read of the rounds,
+  so switching it on and off cannot be used to make the server read more
+  often. Showing them again takes until the next read, a few seconds.
+
+Checked:
+
+- Tests at 9400, 9700 and 9900: two players win, one goes private and is
+  gone from all three lists with no time passed, stays gone after the next
+  read and for a new win, still sees their own stats, and is back after
+  switching it off. The change is refused without a cookie, without a key,
+  with a wrong body; a repeat gets the same answer; the ledger does not move.
+- An older database (steps 1 and 2 with a player in it) is brought up to
+  step 3 and that player starts with wins shown.
+- On a database made by the live version (8562809) with rounds left in
+  progress, started the way the host starts it: the server came up, steps 2
+  and 3 were applied, the old rounds were finished and all verify, a player
+  from before the upgrade switched to private and was out of the lists in
+  the next answer, and reconcile found no problems.
+- 27 bugs were planted one at a time in the public wins and settings code
+  (a private player still listed, the change not stored, not applied until
+  the next read, hiding everyone, no cookie needed, the body unchecked, and
+  the 21 from before). The tests caught all 27.
+
+Turned out wrong, and how it was caught: two tests of the reveal work
+counted the database steps as exactly 2 and failed when the third was
+added. They now compare with a fresh database's count instead of a number,
+so the next step will not break them.
+
+For the owner to decide: wins are shown unless a player chooses private. If
+it should be private unless a player chooses to show them, it is the default
+of that one column.

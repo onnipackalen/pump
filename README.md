@@ -204,6 +204,8 @@ All JSON. The exact shapes are TypeScript types in `packages/contract`.
 | `GET /api/session` | Wallet, seeds and the round in progress, so a page refresh restores it. A first visit creates the player with $10,000 and sets the cookie. It is the only request that creates a player, so the screen loads it first. |
 | `GET /api/history?limit=10` | The player's latest finished rounds. |
 | `GET /api/stats` | The player's own results over every finished round: profit over time, best win, rounds by difficulty. |
+| `GET /api/settings` | The player's own choices: `{ winsPrivate }`. |
+| `PUT /api/settings` | Changes them: `{ winsPrivate: true }` keeps all of the player's wins, past ones too, out of the public lists, at once. |
 | `GET /api/wins` | All players' latest, largest and luckiest wins, ten of each (the viewer's own are among them). Needs no cookie. No player id, round id or seed is sent; a player is a short tag that changes every day. Empty when the server is started with `PUBLIC_WINS=off`. |
 | `POST /api/rounds` | Starts a round: `{ difficultyId, betsCents }`, one bet per balloon. Charges the bets. |
 | `POST /api/rounds/:id/pump` | One pump: `{ balloonIndex, expectedDrawIndex, patch }`. With `patch: true` the Patch is bought and the pump made in one step. The answer says `survived`, `saved`, `popped` or `top`. If it ends the round, each balloon cashed out below its top gets `afterRound`: where it would have popped. |
@@ -222,6 +224,13 @@ it says `public wins: ON` or `public wins: OFF` in its log at every start.
 Read that line after changing the setting. On Render the setting is one more
 entry under `envVars` in `render.yaml`; write the value in quotes (`"off"`),
 because a bare `off` in a YAML file can be read as `false`.
+
+A player can keep their own wins private. `PUT /api/settings` with
+`{ "winsPrivate": true }` takes every win of theirs out of the three lists,
+past wins too, and it happens at once, not after the five seconds. Their own
+history and stats are not touched by it. Every player starts with their wins
+shown; that is one default in one place (the `wins_private` column, database
+step 3) if it should be the other way round.
 
 What the lists give away, in plain words. A win there is a finished round that
 paid out more than its bets and Patches, shown with its time, stake and
