@@ -35,6 +35,7 @@ import { soundBoard } from './sound/SoundBoard';
 import { LiveStats, LiveStatsOpener } from './stats/LiveStats';
 import { StatsPage } from './stats/StatsPage';
 import { useLiveStats } from './stats/useLiveStats';
+import { PublicWins } from './wins/PublicWins';
 
 const config = GAME_CONFIG;
 
@@ -666,6 +667,15 @@ export function App() {
         )}
       </main>
       )}
+
+      {/* Everyone's wins, at the very end of the page, under the game. Kept
+          while another page shows, so it does not ask the server again. */}
+      <PublicWins
+        client={gameClient}
+        config={config}
+        latestRoundId={state.history[0]?.id ?? null}
+        shown={view === 'game'}
+      />
     </div>
   );
 }
