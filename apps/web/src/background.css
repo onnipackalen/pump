@@ -11,9 +11,9 @@
  *   4. the floor: a thin horizon line that fades at both ends, and a pool
  *                 of light where the balloons stand.
  *
- * The balloons' shadows and their numbers sit on the floor, so --floor is
- * the height of the number block under a balloon plus a little room for
- * the shadow.
+ * The pumps stand on the floor, and the numbers and Pump buttons under them
+ * sit on it, so --floor is the height of those two rows plus a little room
+ * for the pump's shadow.
  *
  * The scene is centred on the stage but drawn a full screen wider on each
  * side, so it runs edge to edge behind the control panel with no seam,
@@ -30,8 +30,13 @@ body {
     var(--stage);
 }
 
+/*
+ * Everything under a balloon's picture stands on the floor: its numbers and
+ * its Pump button row. Both heights come from styles.css, so if either row
+ * changes, the horizon moves with it.
+ */
 .stage {
-  --floor: calc(var(--label-h) + 8px);
+  --floor: calc(var(--label-h) + var(--action-h) + 8px);
 }
 
 /* The sky above the horizon: hills in front of the glow. */
