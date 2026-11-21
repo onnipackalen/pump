@@ -2659,3 +2659,45 @@ GitHub's own check on the push (green, 1m 5s) before any deploy.
 Turned out wrong: my first test round reused an idempotency key, because
 `$RANDOM` inside a zsh `$(...)` gives the same number each time. The server
 rightly refused it as `key_reused`. Fixed by using `uuidgen` for keys.
+
+## 2026-11-21: the stage follows the settings at once
+
+The user: "make it when you switch in setting to 3 pumps or other
+difficulty it instantly changes to them on the screen."
+
+Why it did not: the stage showed the next round's set-up only when there
+had never been a round. After the first round it kept that round's
+balloons until the next bet, so picking 3 balloons or another difficulty
+changed nothing on screen. Only the pump's colour followed (stageLevelId),
+and the step row still showed the old ladder.
+
+Built on `claude/instant-settings-7f5ff1` (95512e2), screen only:
+
+- `game/stage.ts`, `stageRound`: a round in play always stays on the
+  stage. A round that is over stays until the bet panel picks another
+  number of balloons or another difficulty; then the set-up shows at once
+  (pumps, level rings, step row of that ladder, each bet's top). Bet
+  amounts alone do not swap it.
+- Picking the round's own set-up again (say 3, then back to 1) brings the
+  finished round and its Net back. A choice, not an accident: the stage is
+  worked out from the round and the panel, with nothing to keep in step.
+- The next round's set-up starts from empty pumps when the set-up was on
+  screen, not from the old round's ends, which were no longer shown.
+- `stageLevelId` is gone: a finished round now shows only while its own
+  difficulty is picked, so it had nothing left to do.
+- Test: `apps/web/test/stagePreview.test.ts`.
+
+Checked in the browser against a local server built from the branch, at
+1440 x 900 and 390 x 844, with 1 and 3 balloons and all four
+difficulties: every click changed the stage before the next frame and
+sent no request. A 3-balloon round started from the set-up hid the bet
+panel until it was over.
+
+Turned out wrong, in my checks, not the game: my first read of the page
+came straight after the click and saw no change. React applies a click's
+change a moment later (still before the next frame), so the check now
+waits that moment and also proves no frame passed. And two clicks fired
+by script in the same moment use the old settings for the second one, as
+React has not drawn between them; a real player cannot click that fast.
+
+Not checked: real phones, Safari, the live site.
