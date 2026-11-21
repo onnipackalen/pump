@@ -1680,3 +1680,51 @@ it is in the motion-off list now.
 
 `balloonLook.test.ts` asked for the old grey scrap; it now checks the
 torn neck's colours on every balloon and that the number is not dimmed.
+
+## 2026-11-20: a new balloon starts flat on the floor until its first pump
+
+Item 2 of the user's competitor list, the start animation. Two of the
+user's notes pulled different ways: from Stake, "starts from a flat, empty
+balloon that pumps up by itself, and it zooms out slowly"; from SmartSoft,
+"starts at the bottom: lying on the floor, then rises slowly"; and, later
+while playing, "attach a new undeflated, very small balloon, and then the
+first pump will pump it up". Asked in this chat, the user chose: the
+balloon appears at the bet, "have to pump seperately to get off florr",
+and it stays flat until the first pump.
+
+What it does now (balloon.css "First pump" and "Set-up";
+`game/setUp.ts` balloonFirst):
+
+- Before any bet the pump stands with its hose on the floor, no balloon.
+- At the bet a small flat balloon goes onto the end of the hose, on the
+  floor, and the view moves a little closer (8%). After a pop the torn
+  neck and bits go first; after a cash-out the shrunk hose lays itself
+  down first.
+- The first press runs its air pocket along the lying hose (a second
+  pocket, on FLAT_HOSE_PATH, with the same keyframes).
+- If the first pump holds, its answer lifts the hose off the floor, the
+  flat balloon comes up with it and blows up to its first size, and the
+  view eases back out over 900 ms: the Stake zoom. If it pops, the flat
+  balloon bursts on the floor: no fall (the hose is already down) and no
+  pieces in the air, just the burst, the torn neck and the bits.
+- The first pump's answer is never shown early: the lift and the burst
+  only come with the answer. The handle and the press timing (PRESS_MS)
+  are unchanged.
+
+Kept inside the layout's rules: the viewBox is still 0 0 200 320, nothing
+is added under the floor, and the closer view is anchored at the right
+edge of the pump's shadow (174, 314), so the drawing only grows left and
+up; its leftmost point, the hose fitting at x 41, comes to x 30.4, inside
+the 14% (x 28). A test measures this. With motion off: no zoom, no
+movement; the blown-up balloon fades in.
+
+Decided on the way: the lift is quick (280 ms) and the slow part is the
+zoom, so a held Pump button's next press (about 250 ms after the answer)
+finds the hose already up. The "lift" state lasts the whole first rung
+so it plays once and is never cut; a balloon restored after a page load
+shows the floor picture at once, with no set-up.
+
+Not seen yet: a live round on this branch. All five preview slots in the
+folder were taken by other chats, so the frames were checked from the
+branch's real markup and CSS in headless Chrome, with the animations
+stepped.
