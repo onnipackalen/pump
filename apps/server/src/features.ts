@@ -3,15 +3,17 @@
  * regulator allows, not about the game's math, so they do not live in the
  * engine's configuration.
  *
- * Each is set by an environment variable when the server starts. A value the
- * server does not know switches the feature OFF and says so: a typo must
- * never switch on something a market does not allow.
+ * Each is set by an environment variable when the server starts. A word the
+ * server does not know switches the feature OFF and says so: a typo in the
+ * value must never switch on something a market does not allow. Nothing set,
+ * or an empty value, means ON. A typo in the variable's NAME cannot be seen
+ * from here, so the server says at every start whether each feature is on.
  */
 export interface Features {
   /**
-   * Whether GET /api/wins lists other players' wins. Showing other players'
-   * results is not allowed everywhere. Set PUBLIC_WINS=off to switch it off;
-   * the server then reads nothing for it and sends empty lists.
+   * Whether GET /api/wins lists players' wins to everyone. Showing other
+   * players' results is not allowed everywhere. Set PUBLIC_WINS=off to switch
+   * it off; the server then reads nothing for it and sends empty lists.
    */
   readonly publicWins: boolean;
 }
@@ -25,7 +27,7 @@ export interface FeaturesFromEnv {
 /** Everything on: what the server does when nothing is set. */
 export const ALL_FEATURES: Features = { publicWins: true };
 
-/** Reads one on/off setting. Nothing set means on; an unknown word means off. */
+/** Reads one on/off setting. Nothing set, or only spaces, means on; an unknown word means off. */
 function onUnlessOff(name: string, value: string | undefined, warnings: string[]): boolean {
   const word = value?.trim().toLowerCase() ?? '';
   if (word === '' || word === 'on') return true;

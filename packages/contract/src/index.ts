@@ -26,8 +26,9 @@
  *   GET  /api/stats                       -> PlayerStats
  *        The player's results over every round they have finished.
  *   GET  /api/wins                        -> PublicWinsResponse
- *        Other players' latest, largest and luckiest wins. Needs no player
- *        and no cookie. Empty lists when the server has it switched off.
+ *        All players' latest, largest and luckiest wins (the viewer's own
+ *        are among them). Needs no player and no cookie. Empty lists when
+ *        the server has it switched off.
  *   POST /api/rounds                      StartRoundRequest -> ActionResult
  *   POST /api/rounds/:roundId/pump        PumpBody          -> PumpResult
  *        With patch: true this buys a Patch and pumps in one atomic step.
@@ -349,13 +350,16 @@ export interface ApiErrorResponse {
 
 /**
  * One win that everyone may see: a finished round that paid out more than
- * went in. Nothing here identifies a player or lets anyone look the round
- * up: there is no player id, no round id, no seed and no cookie.
+ * went in. There is no player id, no round id, no seed and no cookie in it,
+ * so nobody can look the round up or learn who the player is.
  */
 export interface PublicWin {
   /**
-   * A short tag in place of the player. All of one player's wins carry the
-   * same tag. It is a one-way hash and cannot be turned back into anything.
+   * A short tag in place of the player: six characters of a one-way hash of
+   * the player and the day (UTC). One player's wins of one day carry the
+   * same tag, so they can be seen to belong together; the next day the tag
+   * is another. Two players can share a tag by chance. The player asking is
+   * not told which tag is theirs.
    */
   readonly playerTag: string;
   readonly difficultyId: string;

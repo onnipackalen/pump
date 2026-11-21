@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { GAME_CONFIG, type GameConfig } from '@pump/engine';
 import type { Db } from './db/database';
-import { ALL_FEATURES, type Features } from './features';
+import type { Features } from './features';
 
 /**
  * Everything the services need from the outside world: the database, the
@@ -24,7 +24,7 @@ export interface Runtime {
 }
 
 /** The real thing: the system clock and the operating system's secure random source. */
-export function systemRuntime(db: Db, features: Features = ALL_FEATURES): Runtime {
+export function systemRuntime(db: Db, features: Features): Runtime {
   return {
     db,
     config: GAME_CONFIG,

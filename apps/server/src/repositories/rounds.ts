@@ -306,27 +306,37 @@ export function roundsRepository(db: Db) {
   // stats page does. The top multiplier is read from the round's own stored
   // ladder (a JSON list): rung k is item k - 1. A round can only have paid
   // out through a cashed balloon, so a win always has one.
-  const publicWinsSql = (order: string): string => `
-    SELECT r.player_id, r.difficulty_id, r.finished_at,
-           SUM(CASE WHEN b.status = 'refunded' THEN 0 ELSE b.bet_cents END) AS staked_cents,
-           SUM(b.patches_cents) AS patch_cents,
-           SUM(b.payout_cents)  AS paid_cents,
-           MAX(CASE WHEN b.status = 'cashed'
-                    THEN json_extract(r.ladder, '$[' || (b.rung - 1) || ']') END)
-                                AS top_hundredths
-    FROM rounds r
-    JOIN balloons b ON b.round_id = r.id
-    WHERE r.status = 'finished'
-    GROUP BY r.id
-    HAVING paid_cents > staked_cents + patch_cents
-    ORDER BY ${order}, r.finished_at DESC, r.id DESC
-    LIMIT :limit
-  `;
-  const selectPublicWins = {
-    recent: db.prepare(publicWinsSql('r.finished_at DESC')),
-    biggest: db.prepare(publicWinsSql('(paid_cents - staked_cents - patch_cents) DESC')),
-    luckiest: db.prepare(publicWinsSql('top_hundredths DESC')),
-  } as const;
+  //
+  // The wins are worked out once (the MATERIALIZED part) and the three lists
+  // are cut from that one result, so the finished rounds are read once, not
+  // three times. Each list is the first :limit rows in its own order.
+  const publicWinsList = (list: PublicWinOrder, order: string): string => `
+    SELECT * FROM (
+      SELECT '${list}' AS list, wins.* FROM wins
+      ORDER BY ${order}, finished_at DESC, round_id DESC
+      LIMIT :limit
+    )`;
+  const selectPublicWins = db.prepare(`
+    WITH wins AS MATERIALIZED (
+      SELECT r.id AS round_id, r.player_id, r.difficulty_id, r.finished_at,
+             SUM(CASE WHEN b.status = 'refunded' THEN 0 ELSE b.bet_cents END) AS staked_cents,
+             SUM(b.patches_cents) AS patch_cents,
+             SUM(b.payout_cents)  AS paid_cents,
+             MAX(CASE WHEN b.status = 'cashed'
+                      THEN json_extract(r.ladder, '$[' || (b.rung - 1) || ']') END)
+                                  AS top_hundredths
+      FROM rounds r
+      JOIN balloons b ON b.round_id = r.id
+      WHERE r.status = 'finished'
+      GROUP BY r.id
+      HAVING paid_cents > staked_cents + patch_cents
+    )
+    ${publicWinsList('recent', 'finished_at DESC')}
+    UNION ALL
+    ${publicWinsList('biggest', '(paid_cents - staked_cents - patch_cents) DESC')}
+    UNION ALL
+    ${publicWinsList('luckiest', 'top_hundredths DESC')}
+  `);
   const selectExpired = db.prepare(`
     SELECT id FROM rounds WHERE status = 'active' AND last_action_at <= :cutoff
     ORDER BY last_action_at
@@ -448,9 +458,15 @@ export function roundsRepository(db: Db) {
       }));
     },
 
-    /** Up to `limit` wins across all players, in the order asked for. */
-    publicWins(order: PublicWinOrder, limit: number): PublicWinRow[] {
-      return selectPublicWins[order].all({ limit }).map((row) => ({
+    /** The three public lists, each with up to `limit` wins, read in one go. */
+    publicWins(limit: number): Record<PublicWinOrder, PublicWinRow[]> {
+      interface Listed extends PublicWinRow {
+        readonly list: string;
+        readonly roundId: string;
+      }
+      const rows: Listed[] = selectPublicWins.all({ limit }).map((row) => ({
+        list: text(row, 'list'),
+        roundId: text(row, 'round_id'),
         playerId: text(row, 'player_id'),
         difficultyId: text(row, 'difficulty_id'),
         betCents: int(row, 'staked_cents'),
@@ -459,6 +475,34 @@ export function roundsRepository(db: Db) {
         topMultiplierHundredths: int(row, 'top_hundredths'),
         finishedAt: text(row, 'finished_at'),
       }));
+      // The database picked each list's rows in the right order; the order of
+      // rows across a UNION is not promised, so each list is put in order
+      // again here, by the same rule: its own measure, then newest first.
+      const newestFirst = (x: Listed, y: Listed): number =>
+        x.finishedAt === y.finishedAt
+          ? y.roundId.localeCompare(x.roundId)
+          : y.finishedAt.localeCompare(x.finishedAt);
+      const gain = (row: Listed): number => row.payoutCents - row.betCents - row.patchesCents;
+      const measure: Record<PublicWinOrder, (row: Listed) => number> = {
+        recent: () => 0,
+        biggest: gain,
+        luckiest: (row) => row.topMultiplierHundredths,
+      };
+      const cut = (list: PublicWinOrder): PublicWinRow[] =>
+        rows
+          .filter((row) => row.list === list)
+          .sort((x, y) => measure[list](y) - measure[list](x) || newestFirst(x, y))
+          // Only the win itself leaves this file: not the round's id.
+          .map((row) => ({
+            playerId: row.playerId,
+            difficultyId: row.difficultyId,
+            betCents: row.betCents,
+            patchesCents: row.patchesCents,
+            payoutCents: row.payoutCents,
+            topMultiplierHundredths: row.topMultiplierHundredths,
+            finishedAt: row.finishedAt,
+          }));
+      return { recent: cut('recent'), biggest: cut('biggest'), luckiest: cut('luckiest') };
     },
 
     /** Rounds still in progress that nobody has touched since `cutoff`. */
