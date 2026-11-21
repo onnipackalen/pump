@@ -40,6 +40,11 @@ export function GameInfo({ config, autoPlay }: GameInfoProps) {
           either way.
         </li>
         <li>
+          A Patch is paid on top of the bet, so the bet limits above do not cap it. Its price rises
+          with every pump and late on can be many times the bet. The price is on the button before
+          you buy.
+        </li>
+        <li>
           A bet that could pay more than the max payout has a lower top. The top is shown before
           you bet, and reaching it cashes out by itself.
         </li>
@@ -55,7 +60,8 @@ export function GameInfo({ config, autoPlay }: GameInfoProps) {
 
       <ul className="rules keys">
         <li>
-          <kbd>Space</kbd> pump · <kbd>P</kbd> patch + pump · <kbd>C</kbd> cash out ·{' '}
+          <kbd>Space</kbd> pump · <kbd>Shift</kbd>+<kbd>P</kbd> patch + pump · <kbd>C</kbd> cash
+          out ·{' '}
           <kbd>A</kbd> pump all
         </li>
         <li>Hold Space, A or a Pump button to keep pumping</li>
