@@ -1276,5 +1276,6 @@ database from the old branch code refused at start, and the built screen at
 round, no scrolling. On the verify page an honest round checks out, and one
 whose saved top was changed by hand is flagged.
 
-Not done: main moved again during this work (d33e4d3, balloon art only). It
-merges into this branch with no conflict but was not merged here.
+Not done: main moved again during this work (to 297760c: the balloon art and
+the air pocket in the hose). It merges with this branch with no conflict but
+was not merged here.
