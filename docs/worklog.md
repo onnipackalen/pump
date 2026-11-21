@@ -892,6 +892,14 @@ Turned out wrong, and how it was caught:
   have caught it: it looked for scrolling and cut text, not for where the
   pump stands. It now measures the gap between the pump's base and the
   horizon.
+- Main was moving every few minutes, and another chat merged this branch
+  into main while it was being merged here. One of the merges kept another
+  chat's worklog entry twice: the two sides had it in different places, so
+  git saw no clash, and main carried the double entry for about three
+  minutes. Caught by reading line by line what main gained from the move,
+  which should have been one sentence. The copies were identical; one was
+  removed in a commit of its own. Before moving main, the worklog is now
+  checked for repeated headings.
 
 Found and left alone, because they are not these two fixes:
 
