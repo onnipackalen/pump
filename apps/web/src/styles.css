@@ -304,8 +304,17 @@ body {
   padding: 0 4px 10px;
 }
 
+/* Solid like every Pump button (a soft fill, so three of them don't
+   outshine the panel's main button), never an outline like Cash out. */
 .slot-pump {
   width: min(100%, 132px);
+  border-color: rgba(244, 242, 238, 0.28);
+  background: rgba(244, 242, 238, 0.18);
+  font-weight: 700;
+}
+
+.slot-pump:hover:not(:disabled) {
+  background: rgba(244, 242, 238, 0.26);
 }
 
 .slot-label {
@@ -512,6 +521,40 @@ summary:focus-visible,
 
 .btn-two strong {
   font-size: 15px;
+}
+
+/*
+ * The three round buttons differ by shape, not only colour, so none can be
+ * taken for another: Pump is solid, Cash out is a plain outline, and
+ * Patch + Pump looks like the patch the balloon wears: a stitched (dashed)
+ * edge, faint tape stripes and a tape icon.
+ */
+.btn-patch {
+  border: 1.5px dashed #8a8f9a;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(244, 242, 238, 0.06) 0 5px,
+      rgba(244, 242, 238, 0) 5px 10px
+    ),
+    var(--panel-raised);
+}
+
+.btn-patch:hover:not(:disabled) {
+  border-color: var(--pearl);
+}
+
+.patch-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.patch-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--pearl);
 }
 
 .icon-btn {

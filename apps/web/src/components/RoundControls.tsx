@@ -3,6 +3,28 @@ import { riskStep } from '../game/risk';
 import { formatCents, formatChance, formatMultiplier } from '../money';
 import { HoldButton } from './HoldButton';
 
+/** A small piece of tape with stitches: the same patch the balloon wears. */
+function PatchIcon() {
+  return (
+    <svg className="patch-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <g transform="rotate(-18 8 8)">
+        <rect x="1.5" y="4.5" width="13" height="7" rx="1.6" fill="currentColor" />
+        <rect
+          x="3.2"
+          y="6.1"
+          width="9.6"
+          height="3.8"
+          rx="0.8"
+          fill="none"
+          stroke="#8a8f9a"
+          strokeWidth="0.9"
+          strokeDasharray="1.5 1.2"
+        />
+      </g>
+    </svg>
+  );
+}
+
 interface RoundControlsProps {
   /** The balloon the buttons act on, or null if the picked one is over. */
   readonly balloon: BalloonView | null;
@@ -96,14 +118,19 @@ export function RoundControls({
           <span>Cash out</span>
           <strong>{cashOut === null ? '—' : formatCents(cashOut)}</strong>
         </button>
+        {/* Made to look like the patch itself (stitched edge, tape icon), so
+            it can't be taken for Cash out (a plain outline) or Pump (solid). */}
         <button
           type="button"
-          className="btn btn-two"
+          className="btn btn-two btn-patch"
           disabled={off || patchPrice === null}
           onClick={onPatchPump}
           title="Buy a Patch for this pump, then pump (P). If it would pop, the Patch is used up and the balloon stays."
         >
-          <span>Patch + Pump</span>
+          <span className="patch-name">
+            <PatchIcon />
+            Patch + Pump
+          </span>
           <strong>{patchPrice === null ? '—' : formatCents(patchPrice)}</strong>
         </button>
         {/* Never greyed out while a pump is on its way, so a hold doesn't
