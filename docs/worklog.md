@@ -685,3 +685,41 @@ Known and not done: the math document on Claude Docs still shows the old
 ladders in its examples and tables; it will be redone once the ladders
 settle. The rule that the pop chance rises holds from an RTP of 93.59%
 with these ladders (91.91% before), so 94% starts and 93% does not.
+
+## 2026-11-20: the simulator measured the engine against itself
+
+An independent review of `npm run rtp` and `npm run sim` found that every
+line they print today is true, but that the simulator could not be trusted
+to notice a wrong engine.
+
+Turned out wrong, and how it was caught (all by the review, which planted
+bugs in the engine and ran both programs):
+
+- The simulator took each pump's "exact chance" and its expected RTP from
+  the engine. So an engine drawing pump 1 five points under the RTP
+  printed "92.581% simulated; 92.737% is the exact figure ... PASS" at a
+  configured 97%. A doubled Patch price passed too. Every yardstick now
+  comes from `cli/rules.ts`, which works the rules out from the
+  configuration and never calls the engine (34c0b3f, 8d21551).
+- One-cent mistakes in PumpEngine.ts passed both programs: payouts rounded
+  up, payouts one cent short, a Patch one cent too cheap. The total hides
+  them, and the RTP check never calls the play functions. The simulator
+  now checks every draw's chance, every outcome, every payout, every Patch
+  charge and every top rung against the rules, with no luck involved.
+- The top of each ladder was hardly played, and a bet stopped by the cap
+  never was. A second, smaller run now takes every balloon to its top
+  rung, with the largest bet included.
+- Two lines of the RTP check, "No cash-out returns more than the RTP" and
+  the same for Patches, could not fail by themselves. They now work out
+  the real return from the engine's own chances (12b19fa). A cap test
+  written with "<" was caught by nothing; it is now.
+
+How the fix was checked: the review's bugs were planted again in a scratch
+copy, seven of them. The simulator says FAIL for all seven, and the RTP
+check for the four that sit in math.ts (it does not call the play
+functions, so the other three are the simulator's to catch). Both say PASS
+for the real engine at 9400, 9700 and 9900. The tests now hand the
+simulator engines that are wrong on purpose.
+
+Left as it is: the volatility printed for Expert moves from run to run,
+because rare huge wins decide it. The line now says so.
