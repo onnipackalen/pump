@@ -158,10 +158,13 @@ its next pumps would have used, starting at its draw count (not its rung),
 until a pump would pop or it reaches its top rung. These draws decide
 nothing and move no money. The verify page works them out again from the
 revealed seed and checks them against the reveal on record and, when this
-browser kept it, the line its screen showed. A balloon that popped, reached
-its top or was refunded has no reveal. A round that ended before the server
-stored reveals gets its reveal worked out when it is checked, from its
-by-then public seed.
+browser kept them, the line its screen showed and each balloon's top rung as
+the screen first showed the round. (A reveal stops at the top rung, and the
+record's top comes from the record's own payout cap, so a record with a lower
+cap could carry a shorter reveal that still checks out against itself.) A
+balloon that popped, reached its top or was refunded has no reveal. A round
+that ended before the server stored reveals gets its reveal worked out when
+it is checked, from its by-then public seed.
 
 **Why this keeps "no pop result before the player pumps".** Nothing about a
 pump the player did not make is worked out or sent until the whole round is
