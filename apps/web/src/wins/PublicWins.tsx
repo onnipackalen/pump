@@ -165,8 +165,11 @@ export function PublicWinsPanel({
                   <th scope="col" className="num" title="Bets plus Patches">
                     Bet
                   </th>
-                  <th scope="col" className="num">
-                    Multiplier
+                  {/* A round can have up to three balloons: this is its best one's
+                      multiplier, so Bet times it is not the payout. */}
+                  <th scope="col" className="num" title="The best balloon's multiplier">
+                    <span aria-hidden="true">Best ×</span>
+                    <span className="visually-hidden">Best multiplier</span>
                   </th>
                   <th scope="col" className="num pw-payout">
                     Payout

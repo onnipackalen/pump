@@ -228,9 +228,14 @@ describe('Public wins panel', () => {
   it('has a heading, column headers and a caption naming the list', () => {
     const html = panel(lists, 'recent');
     expect(html).toMatch(/<section[^>]*aria-labelledby="([^"]+)"[^>]*>.*<h2 id="\1"[^>]*>Wins<\/h2>/);
-    for (const name of ['Player', 'Difficulty', 'Bet', 'Multiplier', 'Payout', 'Gain']) {
+    for (const name of ['Player', 'Difficulty', 'Bet', 'Payout', 'Gain']) {
       expect(html).toMatch(new RegExp(`<th scope="col"[^>]*>${name}</th>`));
     }
+    // A round's best balloon: Bet times it is not the payout with two or three.
+    expect(html).toContain(
+      '<th scope="col" class="num" title="The best balloon&#x27;s multiplier"><span aria-hidden="true">Best ×</span><span class="visually-hidden">Best multiplier</span></th>',
+    );
+    expect(html).not.toContain('>Multiplier<');
     expect(html).toContain('<caption class="visually-hidden">Recent wins</caption>');
     // No live region: the lists change every few seconds.
     expect(html).not.toContain('aria-live');
