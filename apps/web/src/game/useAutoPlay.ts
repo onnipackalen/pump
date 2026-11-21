@@ -179,11 +179,17 @@ export async function runAutoPlay(
 
       if (hooks.shouldStop()) {
         // Stop leaves the balloons to the player, but a Cash out they have
-        // already pressed still goes, rather than being lost.
-        const theirs = steps.filter(
-          (step) => step.kind === 'cash-out' && handCashOuts.has(step.balloonIndex),
-        );
-        if (theirs.length > 0) {
+        // already pressed still goes, rather than being lost. That includes
+        // one pressed while these cash-outs are on their way (the button
+        // said "queued"), so the list is read again after each send until
+        // it has nothing new. Each send ends at least one balloon, so this
+        // runs at most once per balloon.
+        for (let sends = 0; sends < round.balloons.length; sends += 1) {
+          const asked = hooks.handCashOuts(round.id);
+          const theirs = nextSteps(round, settings.targetPumps, asked).filter(
+            (step) => step.kind === 'cash-out' && asked.has(step.balloonIndex),
+          );
+          if (theirs.length === 0) break;
           const newest = await sendBeat(actions, round, theirs);
           if (!newest) return end('error');
           round = newest.round;

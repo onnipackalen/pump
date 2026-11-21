@@ -265,6 +265,54 @@ describe('auto-play with a cash-out by hand, scripted', () => {
     expect(game.sent.filter((r) => r.kind === 'start')).toHaveLength(1);
   });
 
+  it('Stop, then a cash-out pressed while the first one is on its way: both go', async () => {
+    const game = scriptedGame(1_000_000, () => false);
+    let stop = false;
+    const you = player({ shouldStop: () => stop });
+    // Both balloons at rung 1: the player presses Cash out on balloon 1,
+    // then Stop. Auto-play sends that cash-out on its way out...
+    const pressing = onPump(game.actions, (seen, i) => {
+      if (seen.id === 'round-1' && i === 1 && seen.balloons[1]?.drawIndex === 1) {
+        you.press(seen, [0]);
+        stop = true;
+      }
+    });
+    // ...and while it is on its way, the player presses balloon 2 (the
+    // button said "queued"). That press must go too, not be dropped.
+    let pressedSecond = false;
+    const actions: GameActions = {
+      ...pressing,
+      cashOut: (seen, i) => {
+        if (i === 0 && !pressedSecond) {
+          pressedSecond = true;
+          you.press(seen, [1]);
+        }
+        return pressing.cashOut(seen, i);
+      },
+    };
+    const end = await runAutoPlay(
+      {
+        settings: settings({ rounds: 5 }),
+        difficultyId: 'easy',
+        betsCents: [100, 100],
+        balanceCents: 1_000_000,
+        limits,
+      },
+      actions,
+      you.hooks,
+      NO_PAUSES,
+    );
+    expect(pressedSecond).toBe(true);
+    expect(end.reason).toBe('player');
+    expect(requestsFor(game.sent, 'round-1', 0)).toEqual(['pump@0', 'pump@1', 'cash-out@2']);
+    expect(requestsFor(game.sent, 'round-1', 1)).toEqual(['pump@0', 'pump@1', 'cash-out@2']);
+    // Those were the last balloons in play, so the round counts.
+    expect(end.progress.roundsPlayed).toBe(1);
+    expect(game.balanceCents() - 1_000_000).toBe(end.progress.netCents);
+    expect(game.sent.filter((r) => r.kind === 'start')).toHaveLength(1);
+    expectNoDoubleSend(game.sent);
+  });
+
   it('counts the round when the pressed cash-out was the last balloon in play', async () => {
     const game = scriptedGame(1_000_000, () => false);
     let stop = false;
