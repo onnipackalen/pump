@@ -41,9 +41,10 @@
  *
  * Checking a whole round (verify.ts): verifyRound takes what the server
  * stored about a finished round, replays every balloon with the engine's own
- * replayBalloon and draws from these seeds, and lists every place where the
- * server's account differs. This is the one file here that imports the game
- * rules; the rules never import this module (test/fair/boundary.test.ts).
+ * replayBalloon and draws from these seeds, works out each reveal again with
+ * the engine's revealAfterCashOut, and lists every place where the server's
+ * account differs. This is the one file here that imports the game rules;
+ * the rules never import this module (test/fair/boundary.test.ts).
  */
 export { asciiBytes } from './ascii';
 export {
@@ -74,6 +75,7 @@ export {
   type BalloonCheck,
   type BalloonRecord,
   type CheckedDraw,
+  type CheckedReveal,
   type ClaimedBalloon,
   type RoundCheck,
   type RoundRecord,

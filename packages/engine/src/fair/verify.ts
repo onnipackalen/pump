@@ -32,6 +32,14 @@
  *      payoutCents).
  *   f. A replay the engine refuses (an action that could not have happened)
  *      becomes a problem for that balloon, naming the action.
+ *   g. Reveal, per balloon. A balloon cashed out below its top rung shows,
+ *      once the round is over, where it would have popped. That is worked
+ *      out again with the engine's own revealAfterCashOut, from the REPLAYED
+ *      balloon (its rung and draw count from the replay, its top rung from
+ *      the bet and the round's cap), never from what the server claims about
+ *      it. The server's reveal must match it: outcome, rung reached, and each
+ *      draw. A reveal missing where one is due, or shown where none is due,
+ *      is a problem too.
  *
  * Every problem is collected; checking does not stop at the first one.
  *
@@ -45,14 +53,18 @@
 import { LIMITS } from '../config';
 import { ladderProblems, pumpSurvives, topRungForBet } from '../math';
 import {
+  canReveal,
   EngineError,
   replayBalloon,
+  revealAfterCashOut,
   settleAbandoned,
   type Balloon,
   type BalloonAction,
   type BalloonStatus,
+  type CashOutReveal,
   type DrawRecord,
   type ReplayedBalloon,
+  type RevealOutcome,
   type Round,
 } from '../PumpEngine';
 import { drawRoll } from './draw';
@@ -67,7 +79,7 @@ import { isClientSeed, isServerSeed } from './seeds';
 
 /**
  * What the server says one balloon ended as: the engine's Balloon fields,
- * plus the draws it recorded. Every field is checked.
+ * plus the draws it recorded and its reveal. Every field is checked.
  */
 export interface ClaimedBalloon {
   readonly status: BalloonStatus;
@@ -76,8 +88,16 @@ export interface ClaimedBalloon {
   readonly topRung: number;
   readonly patchesCents: number;
   readonly payoutCents: number;
-  /** The draw of every pump on this balloon, in order, as the server recorded it. */
+  /**
+   * The draw of every pump on this balloon, in order, as the server recorded
+   * it. The reveal's draws are not in here: they are in `afterRound`.
+   */
   readonly draws: readonly DrawRecord[];
+  /**
+   * Where the server says the balloon would have popped, with its draws. Set
+   * for a balloon cashed out below its top rung, null for every other one.
+   */
+  readonly afterRound: CashOutReveal | null;
 }
 
 /**
@@ -141,10 +161,19 @@ export interface CheckedDraw {
   readonly message: string;
 }
 
+/** A reveal worked out again from the seeds, with every step of each draw. */
+export interface CheckedReveal {
+  readonly outcome: RevealOutcome;
+  /** The highest rung it would have reached (see CashOutReveal). */
+  readonly reachedRung: number;
+  /** Its draws, in order. None is patched; each survives except a final pop. */
+  readonly draws: readonly CheckedDraw[];
+}
+
 export interface BalloonCheck {
   /** 0-based, as in the draw message. The player sees it as Balloon balloonIndex + 1. */
   readonly balloonIndex: number;
-  /** True when this balloon's own checks (c to f) found nothing. */
+  /** True when this balloon's own checks (c to g) found nothing. */
   readonly ok: boolean;
   /** This balloon's problems; each also appears in RoundCheck.problems. */
   readonly problems: readonly string[];
@@ -155,6 +184,12 @@ export interface BalloonCheck {
   readonly balloon: Balloon | null;
   /** Every recomputed draw, in order (up to a refused action, if any). */
   readonly draws: readonly CheckedDraw[];
+  /**
+   * The reveal worked out again from the seeds. Set whenever the replayed
+   * balloon has one, even if the server showed none, so the page can always
+   * show the true one. Null when it has none, or could not be replayed.
+   */
+  readonly afterRound: CheckedReveal | null;
 }
 
 export interface RoundCheck {
@@ -196,6 +231,24 @@ function statusWords(status: string): string {
     default:
       return `has a status the game does not have (${JSON.stringify(status)})`;
   }
+}
+
+/** What a reveal says, for "the server says that after cash-out it ___". */
+function revealWords(outcome: string): string {
+  switch (outcome) {
+    case 'popped':
+      return 'would have popped';
+    case 'top':
+      return 'would have reached its top rung';
+    default:
+      return `would have done something the game does not have (${JSON.stringify(outcome)})`;
+  }
+}
+
+/** Why a balloon has no reveal, for "but it ___, so there is nothing to show". */
+function noRevealWords(balloon: Balloon): string {
+  if (balloon.status === 'cashed') return 'cashed out at its top rung';
+  return statusWords(balloon.status);
 }
 
 function actionWords(action: BalloonAction): string {
@@ -357,7 +410,57 @@ function isPump(action: BalloonAction): action is PumpAction {
   return action.kind === 'pump';
 }
 
-/** Checks c to f for one balloon. `topRung` is its top rung under the cap, or why there is none. */
+/** One draw as the page shows it: the draw, plus every step from the seeds. */
+function checkedDraw(
+  record: RoundRecord,
+  balloonIndex: number,
+  seeded: SeededDraws,
+  draw: DrawRecord,
+  patched: boolean,
+): CheckedDraw {
+  const { block, wordIndex, word } = seeded.sample(draw.drawIndex, draw.den);
+  return {
+    ...draw,
+    survived: pumpSurvives(draw, draw.roll),
+    patched,
+    block,
+    wordIndex,
+    word,
+    message: drawMessage({
+      clientSeed: record.clientSeed,
+      nonce: record.nonce,
+      balloonIndex,
+      drawIndex: draw.drawIndex,
+      block: 0,
+    }),
+  };
+}
+
+/** Compares one recomputed draw with the server's; `where` starts each sentence. */
+function compareDraw(
+  where: string,
+  theirs: DrawRecord,
+  mine: DrawRecord,
+  problems: string[],
+): void {
+  if (theirs.drawIndex !== mine.drawIndex) {
+    problems.push(`${where}: the server gives it draw index ${String(theirs.drawIndex)}.`);
+  }
+  if (theirs.num !== mine.num || theirs.den !== mine.den) {
+    problems.push(
+      `${where}: the server says the survival chance was ` +
+        `${String(theirs.num)}/${String(theirs.den)}, the round's RTP and ladder give ` +
+        `${String(mine.num)}/${String(mine.den)}.`,
+    );
+  }
+  if (theirs.roll !== mine.roll) {
+    problems.push(
+      `${where}: the server says roll ${String(theirs.roll)}, the seeds give ${String(mine.roll)}.`,
+    );
+  }
+}
+
+/** Checks c to g for one balloon. `topRung` is its top rung under the cap, or why there is none. */
 function checkBalloon(
   context: BalloonContext,
   stored: BalloonRecord,
@@ -369,12 +472,17 @@ function checkBalloon(
   const claimed: ClaimedBalloon = stored;
   const name = `Balloon ${String(balloonIndex + 1)}`;
   const problems: string[] = [];
-  const done = (balloon: Balloon | null, draws: readonly CheckedDraw[] = []): BalloonCheck => ({
+  const done = (
+    balloon: Balloon | null,
+    draws: readonly CheckedDraw[] = [],
+    afterRound: CheckedReveal | null = null,
+  ): BalloonCheck => ({
     balloonIndex,
     ok: problems.length === 0,
     problems,
     balloon,
     draws,
+    afterRound,
   });
 
   // c. The top rung the bet allows under the round's cap. Without one, the
@@ -429,24 +537,9 @@ function checkBalloon(
   const seeded = seededDraws(record, balloonIndex);
   const { result, refused } = replayAsFarAsAllowed(started, balloonIndex, actions, seeded);
   const pumps = actions.filter(isPump);
-  const checkedDraws = result.draws.map((draw, i): CheckedDraw => {
-    const { block, wordIndex, word } = seeded.sample(draw.drawIndex, draw.den);
-    return {
-      ...draw,
-      survived: pumpSurvives(draw, draw.roll),
-      patched: pumps[i]?.patch ?? false,
-      block,
-      wordIndex,
-      word,
-      message: drawMessage({
-        clientSeed: record.clientSeed,
-        nonce: record.nonce,
-        balloonIndex,
-        drawIndex: draw.drawIndex,
-        block: 0,
-      }),
-    };
-  });
+  const checkedDraws = result.draws.map((draw, i) =>
+    checkedDraw(record, balloonIndex, seeded, draw, pumps[i]?.patch ?? false),
+  );
 
   // e. Each draw the replay made against the one the server recorded. Draws
   // the server left out or added are counted further down.
@@ -454,21 +547,7 @@ function checkBalloon(
     const theirs = claimed.draws[i];
     if (theirs === undefined) return;
     const where = `${name}, pump ${String(i + 1)} (draw index ${String(mine.drawIndex)})`;
-    if (theirs.drawIndex !== mine.drawIndex) {
-      problems.push(`${where}: the server gives it draw index ${String(theirs.drawIndex)}.`);
-    }
-    if (theirs.num !== mine.num || theirs.den !== mine.den) {
-      problems.push(
-        `${where}: the server says the survival chance was ` +
-          `${String(theirs.num)}/${String(theirs.den)}, the round's RTP and ladder give ` +
-          `${String(mine.num)}/${String(mine.den)}.`,
-      );
-    }
-    if (theirs.roll !== mine.roll) {
-      problems.push(
-        `${where}: the server says roll ${String(theirs.roll)}, the seeds give ${String(mine.roll)}.`,
-      );
-    }
+    compareDraw(where, theirs, mine, problems);
   });
 
   // f. An action the engine refused. Nothing after it was replayed, so the
@@ -537,7 +616,90 @@ function checkBalloon(
         `the replay gives ${String(balloon.payoutCents)} cents.`,
     );
   }
-  return done(balloon, checkedDraws);
+
+  // g. The reveal, from the replayed balloon. A record from before reveals
+  // existed has no field at all; that counts as showing none.
+  const claimedReveal = claimed.afterRound ?? null;
+  const afterRound = checkReveal(context, balloonIndex, balloon, claimedReveal, seeded, problems);
+  return done(balloon, checkedDraws, afterRound);
+}
+
+/**
+ * Check g for one balloon: works its reveal out again and compares it with
+ * the server's. `balloon` is the replayed one, so its rung, draw count and
+ * top rung (from the bet and the cap) are the true ones, whatever the server
+ * claims. Returns the true reveal, or null if the balloon has none.
+ */
+function checkReveal(
+  context: BalloonContext,
+  balloonIndex: number,
+  balloon: Balloon,
+  claimed: CashOutReveal | null,
+  seeded: SeededDraws,
+  problems: string[],
+): CheckedReveal | null {
+  const { record, started } = context;
+  const name = `Balloon ${String(balloonIndex + 1)}`;
+  if (!canReveal(balloon)) {
+    if (claimed !== null) {
+      problems.push(
+        `${name}: the server shows where it would have popped, but it ` +
+          `${noRevealWords(balloon)}, so there is nothing to show.`,
+      );
+    }
+    return null;
+  }
+
+  // The engine's own rule. It is given a round of just this balloon: the
+  // reveal needs the round to be over, and the other balloons are checked on
+  // their own. The draws come from this balloon's seeds either way.
+  let mine: CashOutReveal;
+  try {
+    mine = revealAfterCashOut({ ...started, balloons: [balloon] }, 0, seeded.drawAt);
+  } catch (error) {
+    problems.push(`${name}: where it would have popped cannot be worked out. ${reason(error)}`);
+    return null;
+  }
+  const checked: CheckedReveal = {
+    outcome: mine.outcome,
+    reachedRung: mine.reachedRung,
+    draws: mine.draws.map((draw) => checkedDraw(record, balloonIndex, seeded, draw, false)),
+  };
+
+  if (claimed === null) {
+    problems.push(
+      `${name}: it cashed out on rung ${String(balloon.rung)}, below its top rung ` +
+        `${String(balloon.topRung)}, so the round should show where it would have popped, ` +
+        'but the server shows nothing.',
+    );
+    return checked;
+  }
+  if (claimed.outcome !== mine.outcome) {
+    problems.push(
+      `${name}: the server says that after cash-out it ${revealWords(claimed.outcome)}, ` +
+        `the seeds say it ${revealWords(mine.outcome)}.`,
+    );
+  }
+  if (claimed.reachedRung !== mine.reachedRung) {
+    problems.push(
+      `${name}: the server says that after cash-out it would have reached rung ` +
+        `${String(claimed.reachedRung)}, the seeds say rung ${String(mine.reachedRung)}.`,
+    );
+  }
+  mine.draws.forEach((draw, i) => {
+    const theirs = claimed.draws[i];
+    if (theirs === undefined) return;
+    const where =
+      `${name}, pump ${String(i + 1)} after cash-out (draw index ${String(draw.drawIndex)})`;
+    compareDraw(where, theirs, draw, problems);
+  });
+  if (claimed.draws.length !== mine.draws.length) {
+    problems.push(
+      `${name}: after cash-out the server lists ${count(claimed.draws.length, 'draw')}, ` +
+        `the seeds make ${String(mine.draws.length)}.`,
+    );
+  }
+  return checked;
 }
 
 // ---------------------------------------------------------------------------
@@ -585,7 +747,7 @@ export function verifyRound(record: RoundRecord): RoundCheck {
     }),
   };
 
-  // c to f, balloon by balloon.
+  // c to g, balloon by balloon.
   const context: BalloonContext = { record, started, drawable };
   const balloons = record.balloons.map((stored, i) =>
     checkBalloon(context, stored, i, topRungs[i] ?? { error: null }),
