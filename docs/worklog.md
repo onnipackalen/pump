@@ -1716,3 +1716,58 @@ Known and left: the three lists are read with a full pass over finished
 rounds. That is fine for a demo and is why the answer is reused for five
 seconds. With real traffic it wants an index or a small table kept up to
 date when a round finishes.
+
+## 2026-11-20: public wins after its review (branch public-wins)
+
+Three reviewers (privacy and abuse, correctness, whether the tests can fail),
+each finding attacked by a second reader. The lists themselves were right in
+every case they built; an independent recount of 160 hammered rounds matched
+the answer byte for byte. What turned out wrong, and how it was caught:
+
+- The check that a round in progress never shows could not fail. The round
+  in my test had two bets of 1000 and one balloon cashed for 1180, so it was
+  not ahead by the numbers and was hidden for that reason, not because it was
+  still open. A reviewer deleted the "finished only" line from the query and
+  all 15 tests still passed. The open round now has bets of 1000 and 10 with
+  5000 cashed, so only its being open keeps it out.
+- No test bought a Patch, so leaving Patches out of the stake passed. And
+  "ten", "five seconds" and the tag recipe were only ever compared with the
+  constants and the function under test. There are now hand-made rounds for
+  Patches, for the highest of two cashed multipliers and for the finishing
+  time, and the promised numbers are written out in the tests. The tests are
+  also worked out from whatever the first ladder is, because four valid
+  retunes of the ladders broke the first version.
+- I had written that nothing identifies a player. A reviewer played as a
+  player, matched one own win to its public row by time, stake and payout,
+  and from the tag followed every other win of that player. The id, cookie
+  and seeds were never exposed (none of 349 secrets was in any answer), but a
+  tag that never changes is a pseudonym. The tag now changes every day, and
+  the README says what the lists give away.
+- A fresh answer was three full reads of every finished round, and SQLite is
+  synchronous, so nothing else is served meanwhile: about 0.4 s at 100,000
+  rounds on a laptop, and the five seconds of reuse were counted from before
+  the read, so a read of five seconds or more would have been repeated on
+  every request. The three lists are now cut from one read, and the answer is
+  kept from the END of the read for five seconds or twenty times the read,
+  whichever is longer.
+- The switch failed open on the likeliest mistake: an empty value, or a typo
+  in the variable's NAME, left it on with nothing in the log. The server now
+  says "public wins: ON" or "OFF" at every start with the value it read, and
+  the switch has to be handed to the runtime (leaving it out is a type
+  error; before, the server could have ignored the setting unnoticed).
+
+Left as it is, on purpose:
+
+- One visitor's script can fill the "recent" list with tiny wins from free
+  wallets. Every row is still a real win; it is a question of what the list
+  should be worth, for the owner to decide (a floor on the gain is one line).
+- Any visitor can make the table of rounds grow, for free. The longer rest
+  after a slow read bounds what that costs. The real cure is an index and a
+  small table of wins written as a round finishes, which is a database step.
+- It is on unless switched off. That is right for someone running the game
+  from the repo. On the live site it shows past wins of existing players
+  with no notice on the screen yet, so going live with it is the owner's
+  call, to be made when the screen half exists.
+- One engine test (the sweep over every bet in math.test.ts) timed out once
+  while this Mac was running many agents at a load of 18. It passes alone
+  and on GitHub. Nothing in it was changed.

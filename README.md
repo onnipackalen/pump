@@ -204,7 +204,7 @@ All JSON. The exact shapes are TypeScript types in `packages/contract`.
 | `GET /api/session` | Wallet, seeds and the round in progress, so a page refresh restores it. A first visit creates the player with $10,000 and sets the cookie. It is the only request that creates a player, so the screen loads it first. |
 | `GET /api/history?limit=10` | The player's latest finished rounds. |
 | `GET /api/stats` | The player's own results over every finished round: profit over time, best win, rounds by difficulty. |
-| `GET /api/wins` | Other players' latest, largest and luckiest wins, ten of each. Needs no cookie, and sends nothing that identifies a player or a round. Empty when the server is started with `PUBLIC_WINS=off`. |
+| `GET /api/wins` | All players' latest, largest and luckiest wins, ten of each (the viewer's own are among them). Needs no cookie. No player id, round id or seed is sent; a player is a short tag that changes every day. Empty when the server is started with `PUBLIC_WINS=off`. |
 | `POST /api/rounds` | Starts a round: `{ difficultyId, betsCents }`, one bet per balloon. Charges the bets. |
 | `POST /api/rounds/:id/pump` | One pump: `{ balloonIndex, expectedDrawIndex, patch }`. With `patch: true` the Patch is bought and the pump made in one step. The answer says `survived`, `saved`, `popped` or `top`. If it ends the round, each balloon cashed out below its top gets `afterRound`: where it would have popped. |
 | `POST /api/rounds/:id/cash-out` | Cashes out one balloon: `{ balloonIndex, expectedDrawIndex }`. If it ends the round, each balloon cashed out below its top gets `afterRound`, as with a pump. |
@@ -212,14 +212,26 @@ All JSON. The exact shapes are TypeScript types in `packages/contract`.
 | `PUT /api/fairness/client-seed` | Sets the client seed. Never resets the nonce. |
 | `POST /api/fairness/rotate` | Retires the server seed, reveals it, and starts a new one. Refused during a round. |
 
-Showing other players' wins is not allowed in every market, so it has an off
-switch. Start the server with `PUBLIC_WINS=off` and `GET /api/wins` answers
-`"enabled": false` with empty lists, and the server reads nothing for it. A
-value that is neither `on` nor `off` also switches it off, with a warning in
-the log: a typo never switches it on. On Render that is one more entry under
-`envVars` in `render.yaml`. A win there is a finished round that paid out more
-than its bets and Patches; a player is shown only as a six-character tag made
-by a one-way hash.
+Showing players' wins to everyone is not allowed in every market, so it has
+an off switch. Start the server with `PUBLIC_WINS=off` and `GET /api/wins`
+answers `"enabled": false` with empty lists, and the server reads nothing for
+it. A word that is neither `on` nor `off` also switches it off, with a warning
+in the log: a typo in the value never switches it on. Nothing set, or an empty
+value, means on, and the server cannot see a typo in the variable's name, so
+it says `public wins: ON` or `public wins: OFF` in its log at every start.
+Read that line after changing the setting. On Render the setting is one more
+entry under `envVars` in `render.yaml`; write the value in quotes (`"off"`),
+because a bare `off` in a YAML file can be read as `false`.
+
+What the lists give away, in plain words. A win there is a finished round that
+paid out more than its bets and Patches, shown with its time, stake and
+payout. A player is shown as a six-character tag: a one-way hash of the player
+and the day. It cannot be turned back into anything, and it changes every
+day. But someone who knows one of a player's wins (say from a screenshot) can
+find that row, and with it that player's other listed wins of the same day.
+Two players can also share a tag by chance. A fresh answer reads every
+finished round, so one answer is reused for at least five seconds, and for
+longer the slower the read was.
 
 Every request that changes something needs an `Idempotency-Key` header. Errors
 always look like `{ "error": { "code", "message" } }`:
