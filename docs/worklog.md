@@ -1438,3 +1438,54 @@ record and should be read in the owner's own words before submitting. The
 README intro on main ("is live") and on `cashout-reveal` ("Not live yet")
 already clash when merged; the new sections add no clash of their own
 (checked with `git merge-file`).
+
+## 2026-11-20: the phone's bet panel is a sheet you swipe up
+
+The user, in the layout chat: "Make it so you can like swipe up on it.
+Like on an iphone opening an page or something on iphone also make sure
+like iphone and webbrowser are not identical."
+
+Built on the branch `one-screen-layout`, in `styles.css` only, on top of
+"upright screens scroll down to bet":
+
+- On an upright screen the panel is a sheet: docked at the bottom, as wide
+  as the phone (560 px in the middle on a tablet), rounded at the top, with
+  a shadow and a handle. With the sheet down, its top is on screen: the
+  handle, Bet and the amount.
+- Swipe up and it slides up over the balloons; swipe down and it goes back.
+  The swipe is the page's own scroll, so it moves the way every sheet on
+  the phone does and needs no script. The stage is stuck in place under
+  the top bar (`position: sticky`), so the scroll moves only the sheet. The
+  page comes to rest in one of two places (`scroll-snap`): sheet down or
+  sheet up.
+- The handle shows only while there is something to pull: not in a round
+  and not while auto-play runs.
+- A wide screen (a desktop browser, a phone on its side) is deliberately
+  different: the panel is a card beside the stage, nothing scrolls, there
+  is no sheet and no handle.
+
+Checked on the real server, 32 sizes, the same nine states as the entry
+before. 31 pass; 568x320 on its side fails as before. New in what "pass"
+means: on an upright screen the sheet is the full width (or 560 px and
+centred); in a round it is docked at the bottom and has no handle; with
+the sheet up the stage has not moved or changed size, the top bar is still
+at the top, the sheet's end is at the bottom of the screen, its last
+control is on screen and it does not go under the top bar; a wide screen
+has no handle. At 375x812 by hand: a nudge of 40 px falls back to sheet
+down, a nudge of 100 px goes on to sheet up (135 px), and with the sheet
+up the stage is at the same place and size (558 px) with the sheet over
+its lowest 125 px.
+
+Known limits:
+
+- Checked in Chromium only. The swipe itself, the snap, and how a phone's
+  browser hides its bars while the page scrolls are exactly the things
+  that differ in Safari on a real iPhone, and they have not been tried
+  there. The stage's height is taken from the screen at its smallest
+  (`svh`) so that it should not grow when the bars hide; that is by the
+  rules of the browser, not by a test on a phone.
+- The handle is a picture, not a button: tapping it does nothing. The
+  sheet is moved by swiping, by the Tab key (the browser brings the focused
+  control into view) or by any scroll.
+- With the sheet up the lower part of the balloons is covered (up to 341
+  of 558 px on the Auto form with three bets). That is what a sheet does.
