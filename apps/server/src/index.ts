@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app';
 import { openDatabase } from './db/database';
+import { databasePlace, runningOnHost } from './db/location';
 import { migrate } from './db/migrations';
 import { systemRuntime } from './runtime';
 import { buildServices } from './services';
@@ -23,8 +24,14 @@ function portFromEnv(): number {
 
 const port = portFromEnv();
 const host = process.env.HOST ?? '0.0.0.0';
-// The SQLite file. On a host, point this at a disk that survives restarts.
-const databasePath = process.env.DATABASE_PATH ?? inPackage('data/pump.db');
+// The SQLite file that holds every wallet. On a host it must be on the disk
+// that survives deploys; the server will not start otherwise (db/location.ts).
+const database = databasePlace({
+  chosen: process.env.DATABASE_PATH,
+  onHost: runningOnHost(process.env),
+  fallback: inPackage('data/pump.db'),
+  folderExists: existsSync,
+});
 // The built game screen. If it has been built (npm run build), the server
 // hands it out too, so one address serves the game and its API.
 const builtScreen = process.env.WEB_ROOT ?? inPackage('../web/dist');
@@ -36,11 +43,13 @@ const apiOnly = process.argv.includes('--api-only');
 const webRoot =
   !apiOnly && existsSync(join(builtScreen, 'index.html')) ? builtScreen : undefined;
 
-const db = openDatabase(databasePath);
+const db = openDatabase(database.path, { createFolder: database.createFolder });
 migrate(db);
 
 const runtime = systemRuntime(db);
 const app = buildApp({ runtime, logger: true, ...(webRoot === undefined ? {} : { webRoot }) });
+// Said once at every start, so a host's log shows where the wallets are kept.
+app.log.info(`the database file is ${database.path}`);
 if (webRoot !== undefined) app.log.info(`serving the game screen from ${webRoot}`);
 else if (apiOnly) app.log.info('serving the API only (the game screen has its own address: npm run dev)');
 else app.log.info('serving the API only (the game screen has not been built: npm start)');
