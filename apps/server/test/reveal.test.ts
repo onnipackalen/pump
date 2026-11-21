@@ -620,7 +620,12 @@ describe.each(RTPS)('a database from before reveals existed, at RTP %i', (rtpBp)
 
     migrate(db);
 
-    expect(count(db, 'schema_migrations')).toBe(2);
+    // Every step this code knows is now recorded: as many as on a fresh
+    // database. (Not a fixed number, so a later step does not break this.)
+    const fresh = openDatabase(':memory:');
+    migrate(fresh);
+    expect(count(db, 'schema_migrations')).toBe(count(fresh, 'schema_migrations'));
+    expect(count(db, 'schema_migrations')).toBeGreaterThan(1);
     expect(reconcile(db).problems).toEqual([]);
     const game = buildServices({ ...runtime, db }).game;
     const verifiable = game.verifiable('p1', 'old');
@@ -770,10 +775,12 @@ describe('a database this code made', () => {
   it('opens again and again, with each step applied once', () => {
     const db = openDatabase(':memory:');
     migrate(db);
+    const steps = count(db, 'schema_migrations');
+    expect(steps).toBeGreaterThan(1);
     expect(() => {
       migrate(db);
       migrate(db);
     }).not.toThrow();
-    expect(count(db, 'schema_migrations')).toBe(2);
+    expect(count(db, 'schema_migrations')).toBe(steps);
   });
 });
