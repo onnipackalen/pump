@@ -2007,3 +2007,17 @@ answer; the lift ran once per first pump and cleared after about 900 ms;
 the hose moved in 12 to 18 frames per fall or lift, ending exactly in
 the lying or standing shape; the cash-out fall waited for the release.
 Tests now pin the unhappy paths too (findings 1 to 3).
+
+## 2026-11-20: the balloon grows more in its early pumps
+
+"We have a lot of space at the top. Zoom out, the balloon needs to grow
+more" (relayed from the layout chat). The picture already had the whole
+stage height; the size curve was the limit. The layout chat suggested
+0.45 + 0.55 * p^0.4, but on its own that broke the floor under late pumps
+(a test from an earlier fix: no pump may grow the balloon by less than
+half an even share; p^0.4 gives 0.40 at the top). The approved blend,
+0.45 + 0.55 * (0.2p + 0.8p^0.4), keeps 0.52 there and most of the early
+growth: Easy 0.56 / 0.63 / 0.68 / 0.76 after 1 / 3 / 5 / 10 pumps (was
+0.51 / 0.56 / 0.60 / 0.69), Expert 0.64 after one. Full size is still
+the top rung only, so the biggest balloon, its top at y = 22 and three
+balloons side by side at their biggest are unchanged.
