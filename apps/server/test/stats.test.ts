@@ -219,8 +219,8 @@ describe('GET /api/stats', () => {
     });
   });
 
-  it('agrees with the wallet and the ledger after real play', async () => {
-    const { app, db } = testWorld();
+  it.each([9400, 9700, 9900])('agrees with the wallet and the ledger after real play at RTP %i', async (rtpBp) => {
+    const { app, db } = testWorld({ ...GAME_CONFIG, rtpBp });
     const seat = await Seat.join(app);
     const difficulties = GAME_CONFIG.difficulties.map((difficulty) => difficulty.id);
 
