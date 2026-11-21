@@ -1907,3 +1907,57 @@ Not built, not checked:
   approved plan, not built.
 - Chromium only. The rows use container queries, `:has()` and a mask; none
   has been tried in Safari or on a real iPhone.
+
+## 2026-11-21: Bet and Pump in one spot
+
+The user: "Bet and pump must be on top of each other". The player presses
+Bet and keeps pressing in the same place to pump.
+
+Built on `bet-pump-spot`:
+
+- The round panel now starts with the big button (Pump, or Pump all with
+  two or three balloons) in exactly the Bet button's box. Under it Cash
+  out | Patch + Pump, then Cash out all, then the numbers. Patch + Pump
+  keeps its filled panel, tape icon and stitches; with three buttons in a
+  row it sits between the two outline Cash outs.
+- Auto-play: the progress line moved under Stop, so Stop sits where
+  Start auto-play was.
+- A guard (`BET_GUARD_MS` = 350 in game/controls.ts, tested as a pure
+  `pressGuard`): the button that appears in that spot ignores any press
+  that began before it appeared or less than 350 ms after. It is on the
+  big Pump (so the second tap of a double-tap on Bet never pumps) and on
+  Bet and Start auto-play (so a quick tap on Pump as the balloon pops
+  never places a bet). Stop has none: stopping always works at once.
+  Enter still bets and Space still pumps, so the keys can't double up.
+- BetPanel.tsx and AutoPlayPanel.tsx changed by one tag each
+  (`<button>` to `<GuardedButton>`) plus its import; nothing else there.
+
+What turned out wrong, and how it was caught:
+
+- Moving only the button was not enough: on a phone the sheet's handle
+  is hidden in a round, which put Pump 9 px above where Bet was. Caught
+  by measuring both boxes; the handle now keeps its place, hidden.
+- Cash out all on a row of its own does not fit the phone's round room
+  (192 px): the page scrolled. It joins the Cash out and Patch + Pump row
+  on upright screens only. The first try also left 10 px between Pump and
+  the row, 1 px too many at 192 px; the buttons are back in one grid with
+  6 px between them.
+- At 320 px wide with three balloons, "Patch + Pump" wrapped and "$1,090.00"
+  ran into the button's edge. A narrow Patch + Pump drops its colour dot
+  and uses 11 px text; the cash-out amounts shrink to fit by length, as
+  the Patch price already did.
+- Found while planning, not in the brief: the same spot works both ways.
+  Without a guard on Bet, quick Pump taps as the balloon pops would land
+  on Bet and start a new round.
+
+Checked: the panel and stage rendered statically (renderToStaticMarkup
+with the real CSS) and measured in headless Chrome at 1440x900, 1280x720,
+1024x768, 390x844, 375x667, 430x932, 320x568, 768x1024, 667x375 and
+640x360, with 1, 2 and 3 balloons and $1 and $1,000 bets. In all 90
+bet/round pairs the big button's box is the same as Bet's (0 px apart),
+the stage is the same in both states, nothing scrolls and no button's
+text spills. Start and Stop: the same box in all 30 pairs.
+
+Not checked: the live game (no server was free). The guard's timing with
+real taps on a phone, the round's answer time on Render, and Safari or a
+real iPhone (`:has()`, container queries and event time stamps).
