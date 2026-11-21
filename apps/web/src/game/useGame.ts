@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ApiFailure, NetworkFailure, type GameClient } from '../api/client';
+import { ApiFailure, type GameClient } from '../api/client';
 import type {
   ActionResult,
   BalloonView,
@@ -11,9 +11,32 @@ import type {
   RoundView,
   WalletView,
 } from '../api/contract';
-import { makeClientSeed } from './clientSeed';
+import { rememberShownHash } from '../verify/shownHashes';
+import {
+  canQueueCashOut,
+  cashOutsToSend,
+  cashOutWaiting,
+  dropQueued,
+  queueCashOut,
+  type QueuedCashOut,
+} from './cashOutQueue';
+import {
+  afterFailure,
+  describeFailure,
+  failureNotice,
+  finishedRefusal,
+  LOST_SESSION_TEXT,
+} from './refusal';
 import { pressMs } from './risk';
 import { isOlder } from './roundOrder';
+import {
+  ensureClientSeed,
+  fairnessAfterStart,
+  HISTORY_SIZE,
+  openGame,
+  send,
+  type OpenedGame,
+} from './session';
 import { roundWinTier } from './winTier';
 
 /**
@@ -121,19 +144,30 @@ export interface Game {
   /** Button and key handlers: act on the round currently on screen. */
   readonly startRound: (difficultyId: string, betsCents: readonly number[]) => void;
   readonly pump: (balloonIndex: number, patch: boolean) => void;
+  /**
+   * Cashes out a balloon. If its pump is still on its way, the cash-out
+   * waits and is sent once that answer is in and its survive motion has
+   * played, if the balloon is still in play (see cashOutQueue). Only for a
+   * balloon that already has a cash-out value: during its first pump this
+   * does nothing.
+   */
   readonly cashOut: (balloonIndex: number) => void;
+  /**
+   * Per balloon index of the round on screen: a cash-out pressed while it
+   * was busy is waiting to go (or on its way).
+   */
+  readonly waitingCashOuts: readonly boolean[];
   readonly setClientSeed: (clientSeed: string) => Promise<boolean>;
   readonly rotateSeed: () => void;
   readonly dismissNotice: () => void;
 }
 
-const HISTORY_SIZE = 10;
-
 /*
- * A pump keeps its "press" pose at least pressMs(its published pop chance),
+ * A pump keeps its "press" pose at least pressMs(the balloon as pressed),
  * even if the server answers sooner: the time the air pocket takes to run
- * up the hose. It depends only on the chance shown before the pump, so every
- * pump at the same risk has the same beat whatever the outcome.
+ * up the hose. It depends only on what was shown before the pump (the
+ * published pop chance, placed in that balloon's own range), so every pump
+ * at the same tension has the same beat whatever the outcome.
  */
 
 /**
@@ -188,6 +222,21 @@ export function shouldSettle(
  */
 export function busyAfter(outcome: PumpOutcome): boolean {
   return outcome === 'saved';
+}
+
+/**
+ * How long a pump's answer keeps its balloon busy (pending), in ms:
+ * - a Patch save, for its whole motion (SAVED_MS);
+ * - a pump that survived while a cash-out waits for it, for its survive
+ *   beat (SURVIVE_BEAT_MS). The spring, the new number's punch, the air
+ *   going in and a spent Patch peeling off all play before the balloon
+ *   cashes out, instead of being cut after a few milliseconds;
+ * - otherwise not at all.
+ */
+export function busyForMs(outcome: PumpOutcome, cashOutWaits: boolean): number {
+  if (busyAfter(outcome)) return SAVED_MS;
+  if (outcome === 'survived' && cashOutWaits) return SURVIVE_BEAT_MS;
+  return 0;
 }
 
 /**
@@ -259,6 +308,37 @@ const initialState: GameState = {
   session: null,
 };
 
+/**
+ * The state once the game has been opened (see openGame): the first load, or
+ * a fresh start after the server lost this browser's session. Everything
+ * from before goes: the round (a restored round in progress comes back from
+ * the session), the history list, the revealed seeds, and the session net
+ * and time, which start again from this balance.
+ */
+export function openedState(s: GameState, opened: OpenedGame, nowMs: number): GameState {
+  const { session, fairness, history } = opened;
+  const round = session.activeRound;
+  const each = <T>(value: T): T[] => (round ? round.balloons.map(() => value) : []);
+  return {
+    ...s,
+    phase: 'ready',
+    wallet: session.wallet,
+    session: { startedAt: nowMs, startBalanceCents: session.wallet.balanceCents },
+    fairness,
+    round,
+    history,
+    revealed: [],
+    beats: each<Beat>('idle'),
+    pending: each(false),
+    patched: each(false),
+    pressed: each<BalloonView | null>(null),
+    outcomes: each<PumpOutcome | null>(null),
+    held: each(false),
+    winShownFor: null,
+    starting: false,
+  };
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -267,25 +347,6 @@ function replaceAt<T>(items: readonly T[], index: number, value: T): T[] {
   const copy = [...items];
   copy[index] = value;
   return copy;
-}
-
-/**
- * Sends one player action. The key is made once and reused if the request
- * has to be retried, so the server applies the action at most once.
- */
-async function send<T>(action: (key: string) => Promise<T>): Promise<T> {
-  const key = crypto.randomUUID();
-  try {
-    return await action(key);
-  } catch (error) {
-    if (error instanceof NetworkFailure) return action(key);
-    throw error;
-  }
-}
-
-function describeFailure(error: unknown): string {
-  if (error instanceof ApiFailure || error instanceof NetworkFailure) return error.message;
-  return 'Something went wrong. Please try again.';
 }
 
 /**
@@ -299,6 +360,23 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
   // Actions in flight, by "start" or balloon index. A ref, not state, so a
   // second click in the same moment sees the first one at once.
   const inFlight = useRef<Set<string>>(new Set());
+
+  // Cash-outs pressed while their balloon was busy, sent once it is free
+  // (see cashOutQueue and the effect below cashOutAction).
+  const queued = useRef<readonly QueuedCashOut[]>([]);
+  // The same presses as state, so the panel can show that a cash-out is
+  // waiting. Changed only by presses and answers, never by the effect that
+  // sends them: an entry it sends stays here, and stops counting once its
+  // balloon is no longer in play (see waitingCashOuts below).
+  const [waitingShown, setWaitingShown] = useState<readonly QueuedCashOut[]>([]);
+
+  // The server-seed hash on screen now: the one a new round is bet against.
+  // It is saved for each round, so the verify page can later check the
+  // revealed seed against what this browser showed (verify/shownHashes).
+  const shownHash = useRef<string | null>(null);
+  useEffect(() => {
+    shownHash.current = state.fairness?.serverSeedHash ?? null;
+  }, [state.fairness]);
 
   const listenerRef = useRef(listener);
   useEffect(() => {
@@ -359,45 +437,21 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
   // Load the session once. If a round was in progress, this restores it.
   useEffect(() => {
     let cancelled = false;
-    async function load(): Promise<void> {
-      try {
-        const [session, history] = await Promise.all([
-          client.getSession(),
-          client.getHistory(HISTORY_SIZE),
-        ]);
+    openGame(client).then(
+      (opened) => {
         if (cancelled) return;
-        // A new player has no client seed yet: this browser makes the first one.
-        const fairness =
-          session.fairness.clientSeed === null
-            ? await send((key) => client.setClientSeed(makeClientSeed(), key))
-            : session.fairness;
-        if (cancelled) return;
-        const round = session.activeRound;
-        setState((s) => ({
-          ...s,
-          phase: 'ready',
-          wallet: session.wallet,
-          session: { startedAt: Date.now(), startBalanceCents: session.wallet.balanceCents },
-          fairness,
-          round,
-          history,
-          beats: round ? round.balloons.map(() => 'idle') : [],
-          pending: round ? round.balloons.map(() => false) : [],
-          patched: round ? round.balloons.map(() => false) : [],
-          pressed: round ? round.balloons.map(() => null) : [],
-          outcomes: round ? round.balloons.map(() => null) : [],
-          held: round ? round.balloons.map(() => false) : [],
-        }));
-      } catch (error) {
+        const nowMs = Date.now();
+        setState((s) => openedState(s, opened, nowMs));
+      },
+      (error: unknown) => {
         if (cancelled) return;
         setState((s) => ({
           ...s,
           phase: 'failed',
           notice: { tone: 'error', text: describeFailure(error) },
         }));
-      }
-    }
-    void load();
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -421,6 +475,9 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
   const resync = useCallback(async () => {
     try {
       const session = await client.getSession();
+      // A player with no client seed could never start a round ("Set a
+      // client seed"): make the first one here too, as the first load does.
+      const fairness = await ensureClientSeed(client, session.fairness);
       setState((s) => {
         const active = session.activeRound;
         // With no active round left, keep a finished round on screen, but
@@ -430,7 +487,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         return {
           ...s,
           wallet: session.wallet,
-          fairness: session.fairness,
+          fairness,
           round,
           beats: sameRound ? s.beats : (round?.balloons.map(() => 'idle' as const) ?? []),
           patched: sameRound ? s.patched : (round?.balloons.map(() => false) ?? []),
@@ -446,14 +503,52 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     }
   }, [client, refreshHistory]);
 
-  /** Shows what went wrong. On a 409 the server sends the state as it is now; show that. */
+  /**
+   * The server no longer knows this browser's player (the cookie has gone,
+   * or the server's data was reset): start over the way the first visit does,
+   * with a new player, and say so. Everything from the old session goes.
+   * One at a time, however many requests were refused at once.
+   */
+  const startingOver = useRef(false);
+  const startOver = useCallback(async () => {
+    if (startingOver.current) return;
+    startingOver.current = true;
+    queued.current = [];
+    setWaitingShown([]);
+    try {
+      const opened = await openGame(client);
+      const nowMs = Date.now();
+      setState((s) => ({
+        ...openedState(s, opened, nowMs),
+        notice: { tone: 'info', text: LOST_SESSION_TEXT },
+      }));
+    } catch (error) {
+      // Say why, in the server's words (it says when cookies are needed).
+      setState((s) => ({ ...s, notice: { tone: 'error', text: describeFailure(error) } }));
+    } finally {
+      startingOver.current = false;
+    }
+  }, [client]);
+
+  /**
+   * Shows what went wrong (see refusal.ts). On a 409 the server sends the
+   * state as it is now; show that. A refusal carrying a finished round (the
+   * 24-hour rule closed it, or it ended elsewhere) is shown calmly, with no
+   * win effect: nothing was won by this click.
+   */
   const handleFailure = useCallback(
     (error: unknown, balloonIndex: number | null) => {
+      // A cash-out waiting behind this balloon's request is dropped: the
+      // request failed, so the screen can no longer be sure of its state.
+      if (balloonIndex !== null) {
+        queued.current = dropQueued(queued.current, balloonIndex);
+        setWaitingShown((w) => dropQueued(w, balloonIndex));
+      }
+      const then = afterFailure(error);
+      const finished = finishedRefusal(error);
+      const nowMs = Date.now();
       setState((s) => {
-        let next: GameState = {
-          ...s,
-          notice: { tone: 'error', text: describeFailure(error) },
-        };
+        let next: GameState = { ...s, notice: failureNotice(error, s.round, nowMs) };
         if (balloonIndex !== null) {
           next = {
             ...next,
@@ -466,35 +561,42 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           const { round, wallet } = error.body;
           if (round && !isOlder(round, s.round)) {
             next = { ...next, round, ...(wallet ? { wallet } : {}) };
+            // Its win effects never play: they belong to a click that won.
+            if (round.status === 'finished') next = { ...next, winShownFor: round.id };
           } else if (!round && wallet) {
             next = { ...next, wallet };
           }
         }
         return next;
       });
+      if (finished) void refreshHistory();
+      if (then === 'start-over') void startOver();
       // The server may have applied an action whose answer never arrived, or
       // refused one because of a round the screen doesn't show. Catch up.
-      const lost = error instanceof NetworkFailure;
-      const refusedForUnseenState =
-        error instanceof ApiFailure &&
-        (error.code === 'round_active' || (error.code === 'conflict' && !error.body.round));
-      if (lost || refusedForUnseenState) void resync();
+      if (then === 'resync') void resync();
     },
-    [resync],
+    [refreshHistory, resync, startOver],
   );
 
   const startRoundAction = useCallback(
     async (difficultyId: string, betsCents: readonly number[]): Promise<ActionResult | null> => {
       if (inFlight.current.has('start')) return null;
       inFlight.current.add('start');
+      // The hash on screen as the bet goes out: the one this round is bet against.
+      const hashBefore = shownHash.current;
       setState((s) => ({ ...s, starting: true, notice: null }));
       try {
         const result = await send((key) => client.startRound({ difficultyId, betsCents }, key));
+        if (hashBefore !== null) rememberShownHash(result.round.id, hashBefore);
+        queued.current = [];
+        setWaitingShown([]);
         setState((s) => ({
           ...s,
           starting: false,
           round: result.round,
           wallet: result.wallet,
+          // The round used the next nonce of these seeds: the panel moves on.
+          fairness: fairnessAfterStart(result.round),
           beats: result.round.balloons.map(() => 'idle'),
           pending: result.round.balloons.map(() => false),
           patched: result.round.balloons.map(() => false),
@@ -520,6 +622,9 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
       const balloon = round.balloons[balloonIndex];
       if (round.status !== 'active' || !balloon || balloon.status !== 'active') return null;
       if (patch && balloon.next?.patchPriceCents == null) return null;
+      // A cash-out is waiting for this balloon: the player wants out, so no
+      // new pump goes before it.
+      if (cashOutWaiting(queued.current, round.id, balloonIndex)) return null;
       const tag = String(balloonIndex);
       if (inFlight.current.has(tag)) return null;
       inFlight.current.add(tag);
@@ -542,11 +647,14 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           ),
           // The same view the art is drawn from during the press (`pressed`),
           // so the game's wait and the art's press length are one number.
-          sleep(pressMs(balloon.next?.popChance)),
+          sleep(pressMs(round, balloon)),
         ]);
         const after = result.round.balloons[balloonIndex];
         const drawIndex = after?.drawIndex ?? balloon.drawIndex + 1;
-        const busy = busyAfter(result.outcome);
+        const busyMs = busyForMs(
+          result.outcome,
+          cashOutWaiting(queued.current, round.id, balloonIndex),
+        );
         setState((s) => ({
           ...s,
           beats: replaceAt(s.beats, balloonIndex, result.outcome),
@@ -558,8 +666,9 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
             balloonIndex,
             result.outcome === 'top' && roundWinTier(result.round) !== null,
           ),
-          // A Patch save keeps the balloon busy until its motion is over.
-          pending: busy ? s.pending : replaceAt(s.pending, balloonIndex, false),
+          // A Patch save, or a survive with a cash-out waiting, keeps the
+          // balloon busy until its motion is over (see busyForMs).
+          pending: busyMs > 0 ? s.pending : replaceAt(s.pending, balloonIndex, false),
         }));
         const settleMs =
           result.outcome === 'survived'
@@ -573,8 +682,8 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         if (after) {
           emit({ kind: 'pump', outcome: result.outcome, balloon: after, round: result.round });
         }
-        if (busy) {
-          await sleep(SAVED_MS);
+        if (busyMs > 0) {
+          await sleep(busyMs);
           // Always free the balloon, even if a resync has put another round on
           // screen meanwhile: its pending flag came from this request
           // (inFlight), which ends in the finally below.
@@ -641,6 +750,24 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     [apply, client, emit, handleFailure, settleBeat, settleWin],
   );
 
+  // Sends each waiting cash-out once its balloon is free: its pump answered,
+  // and its survive or Patch save motion is over. It runs after every change to the
+  // round or to what is busy, on the newest round the screen has. A balloon
+  // that popped, reached its top or is in another round is dropped, never
+  // sent (see cashOutsToSend).
+  const { round: realRound, pending: realPending } = state;
+  useEffect(() => {
+    if (queued.current.length === 0) return;
+    const { send: ready, keep } = cashOutsToSend(
+      queued.current,
+      realRound,
+      (index) => inFlight.current.has(String(index)) || (realPending[index] ?? false),
+    );
+    queued.current = keep;
+    if (!realRound) return;
+    for (const index of ready) void cashOutAction(realRound, index);
+  }, [realRound, realPending, cashOutAction]);
+
   const actions = useMemo<GameActions>(
     () => ({ startRound: startRoundAction, pump: pumpAction, cashOut: cashOutAction }),
     [startRoundAction, pumpAction, cashOutAction],
@@ -668,11 +795,37 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     [pumpAction, round, pending],
   );
 
+  const pressed = state.pressed;
+
   const cashOut = useCallback(
     (balloonIndex: number) => {
-      if (round && !pending[balloonIndex]) void cashOutAction(round, balloonIndex);
+      if (!round) return;
+      const busy = pending[balloonIndex] ?? false;
+      if (busy || inFlight.current.has(String(balloonIndex))) {
+        // Its pump is still on its way: wait for the answer, then cash out
+        // if it is still in play. Only for a balloon that, as the player
+        // sees it (as pressed), already has a cash-out value.
+        if (canQueueCashOut(round, pressed[balloonIndex] ?? round.balloons[balloonIndex])) {
+          queued.current = queueCashOut(queued.current, round.id, balloonIndex);
+          setWaitingShown(queued.current);
+        }
+        return;
+      }
+      void cashOutAction(round, balloonIndex);
     },
-    [cashOutAction, round, pending],
+    [cashOutAction, round, pending, pressed],
+  );
+
+  // Which balloons of the round on screen have a cash-out waiting: pressed
+  // while busy, and the balloon still in play (sent or not yet).
+  const waitingCashOuts = useMemo<readonly boolean[]>(
+    () =>
+      round
+        ? round.balloons.map(
+            (b) => b.status === 'active' && cashOutWaiting(waitingShown, round.id, b.index),
+          )
+        : [],
+    [round, waitingShown],
   );
 
   const setClientSeed = useCallback(
@@ -731,6 +884,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     startRound,
     pump,
     cashOut,
+    waitingCashOuts,
     setClientSeed,
     rotateSeed,
     dismissNotice,

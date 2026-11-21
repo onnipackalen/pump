@@ -14,12 +14,17 @@ import { SoundToggle } from './components/SoundToggle';
 import { VerifyPage } from './components/VerifyPage';
 import type { AutoPlaySettings } from './game/autoPlay';
 import { checkBets, type BetSetup } from './game/betSetup';
-import { controlTarget, SWITCH_PAUSE_MS } from './game/controls';
+import { controlTarget, panelActivity, showOwnPump, SWITCH_PAUSE_MS } from './game/controls';
 import { useAutoPlay } from './game/useAutoPlay';
 import { useGame, type GameEvent } from './game/useGame';
 import { useHoldPump } from './game/useHoldPump';
 import { useSessionClock } from './game/useSessionClock';
-import { roundWinTier } from './game/winTier';
+import {
+  roundPayoutCents,
+  roundRefundedCents,
+  roundStakeCents,
+  roundWinTier,
+} from './game/winTier';
 import { market } from './market';
 import { formatCents, formatElapsed, formatSignedCents, parseDollarsToCents } from './money';
 import { useMotionSetting } from './motion';
@@ -150,7 +155,9 @@ export function App() {
 
   /**
    * Cash out all: ends any hold first, so a held Pump all cannot pump again,
-   * then cashes out each balloon in play that has a cash-out value.
+   * then cashes out each balloon in play that has a cash-out value. One whose
+   * pump is still on its way cashes out once that answer is in, if it is
+   * still in play (useGame queues it).
    */
   const cashOutAll = (): void => {
     hold.stop();
@@ -160,6 +167,18 @@ export function App() {
         game.cashOut(balloon.index);
       }
     }
+  };
+
+  /**
+   * Cash out (the button or C): ends any hold first, so the hold cannot pump
+   * this balloon again. If its pump is still on its way, the cash-out goes
+   * once that answer is in and its motion has played, if it is still in
+   * play. During a balloon's first pump there is nothing to cash out yet, so
+   * this only ends the hold (the button shows no amount then either).
+   */
+  const cashOutTarget = (): void => {
+    hold.stop();
+    if (target !== null) game.cashOut(target);
   };
 
   const holdOne = (index: number): void => {
@@ -265,7 +284,9 @@ export function App() {
           break;
         case 'c':
         case 'C':
-          if (!event.repeat && target !== null && !switchPause) game.cashOut(target);
+          // C always ends a hold, even when there is nothing to cash out.
+          if (event.repeat || switchPause) hold.stop();
+          else cashOutTarget();
           break;
         case 'a':
         case 'A':
@@ -409,6 +430,7 @@ export function App() {
                     <BalloonCard
                       key={`${round.id}-${balloon.index}`}
                       balloon={balloon}
+                      rtpBp={round.rtpBp}
                       ladder={round.ladder}
                       beat={state.beats[balloon.index] ?? 'idle'}
                       patched={state.patched[balloon.index] ?? false}
@@ -427,7 +449,9 @@ export function App() {
                         panel === 'round' && round.balloons.length > 1 && target === balloon.index
                       }
                       onSelect={() => setChosen(balloon.index)}
-                      canPump={panel === 'round' && balloon.status === 'active'}
+                      // Its own Pump only while two or more balloons are in
+                      // play: with one left, the panel's big button is Pump.
+                      canPump={panel === 'round' && showOwnPump(round, balloon)}
                       onPump={() => {
                         setChosen(balloon.index);
                         game.pump(balloon.index, false);
@@ -455,7 +479,20 @@ export function App() {
               <RoundControls
                 balloon={targetBalloon}
                 multi={round.balloons.length > 1}
-                pending={(target !== null && (state.pending[target] ?? false)) || switchPause}
+                // The pause after the controls move on greys Cash out and
+                // Patch + Pump.
+                pending={switchPause}
+                // What each balloon is doing. A pump on its way greys Patch +
+                // Pump (a press then would be ignored), but not Cash out: it
+                // shows no amount then, and waits for that answer (useGame
+                // queues it).
+                activity={round.balloons.map((b) =>
+                  panelActivity(
+                    state.pending[b.index] ?? false,
+                    state.beats[b.index] ?? 'idle',
+                    game.waitingCashOuts[b.index] ?? false,
+                  ),
+                )}
                 onPump={() => {
                   if (target !== null) game.pump(target, false);
                 }}
@@ -465,9 +502,7 @@ export function App() {
                 onPatchPump={() => {
                   if (target !== null) game.pump(target, true);
                 }}
-                onCashOut={() => {
-                  if (target !== null) game.cashOut(target);
-                }}
+                onCashOut={cashOutTarget}
                 balloons={round.balloons}
                 onCashOutAll={cashOutAll}
                 liveCount={live.length}
@@ -536,16 +571,23 @@ export function App() {
   );
 }
 
-/** The round's net result, shown over the stage once the round is over. */
+/**
+ * The round's net result, shown over the stage once the round is over. A
+ * refunded bet (the round was left 24 hours before that balloon was pumped)
+ * is void: it is neither spent nor paid, so it is left out of the net.
+ */
 function RoundResult({ round }: { readonly round: RoundView }) {
-  const spent = round.balloons.reduce((sum, b) => sum + b.betCents + b.patchesCents, 0);
-  const paid = round.balloons.reduce((sum, b) => sum + b.payoutCents, 0);
+  const spent = roundStakeCents(round);
+  const paid = roundPayoutCents(round);
+  const returned = roundRefundedCents(round);
   const net = paid - spent;
   return (
     <div
       className={net > 0 ? 'round-result win' : 'round-result'}
       role="status"
-      title={`Spent ${formatCents(spent)}, paid ${formatCents(paid)}`}
+      title={`Spent ${formatCents(spent)}, paid ${formatCents(paid)}${
+        returned > 0 ? `, ${formatCents(returned)} in bets returned unplayed` : ''
+      }`}
     >
       Net <strong>{formatSignedCents(net)}</strong>
     </div>

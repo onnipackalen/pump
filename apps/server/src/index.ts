@@ -2,8 +2,10 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app';
-import { openDatabase } from './db/database';
+import { openDatabase, type Db } from './db/database';
+import { databasePlace, runningOnHost } from './db/location';
 import { migrate } from './db/migrations';
+import { playersRepository } from './repositories/players';
 import { systemRuntime } from './runtime';
 import { buildServices } from './services';
 import { ABANDONED_SWEEP_EVERY_MS } from './settings';
@@ -23,8 +25,14 @@ function portFromEnv(): number {
 
 const port = portFromEnv();
 const host = process.env.HOST ?? '0.0.0.0';
-// The SQLite file. On a host, point this at a disk that survives restarts.
-const databasePath = process.env.DATABASE_PATH ?? inPackage('data/pump.db');
+// The SQLite file that holds every wallet. On a host it must be on the disk
+// that survives deploys; the server will not start otherwise (db/location.ts).
+const database = databasePlace({
+  chosen: process.env.DATABASE_PATH,
+  onHost: runningOnHost(process.env),
+  fallback: inPackage('data/pump.db'),
+  folderExists: existsSync,
+});
 // The built game screen. If it has been built (npm run build), the server
 // hands it out too, so one address serves the game and its API.
 const builtScreen = process.env.WEB_ROOT ?? inPackage('../web/dist');
@@ -36,11 +44,36 @@ const apiOnly = process.argv.includes('--api-only');
 const webRoot =
   !apiOnly && existsSync(join(builtScreen, 'index.html')) ? builtScreen : undefined;
 
-const db = openDatabase(databasePath);
+// Looked at before the file is opened, because opening it makes it.
+const databaseWasThere = existsSync(database.path);
+
+function openOrExplain(): Db {
+  try {
+    return openDatabase(database.path, { createFolder: database.createFolder });
+  } catch (error) {
+    // SQLite only says "unable to open database file", without the path.
+    throw new Error(
+      `Could not open the database file "${database.path}". It must be a file, not a ` +
+        'folder, and its folder must be writable.',
+      { cause: error },
+    );
+  }
+}
+
+const db = openOrExplain();
 migrate(db);
 
 const runtime = systemRuntime(db);
 const app = buildApp({ runtime, logger: true, ...(webRoot === undefined ? {} : { webRoot }) });
+// Said at every start, so a host's log shows where the wallets are kept and
+// whether they were found. The folder check in db/location.ts cannot tell the
+// host's disk from any other folder that exists. This line can: on a site that
+// has been played on, "a NEW, EMPTY file" means the wallets were not found.
+app.log.info(
+  databaseWasThere
+    ? `the database file is ${database.path}: opened the existing file, ${String(playersRepository(db).count())} players`
+    : `the database file is ${database.path}: made a NEW, EMPTY file`,
+);
 if (webRoot !== undefined) app.log.info(`serving the game screen from ${webRoot}`);
 else if (apiOnly) app.log.info('serving the API only (the game screen has its own address: npm run dev)');
 else app.log.info('serving the API only (the game screen has not been built: npm start)');
@@ -58,9 +91,14 @@ const sweep = setInterval(() => {
 }, ABANDONED_SWEEP_EVERY_MS);
 sweep.unref();
 
-// Finish the request in hand, then close the database cleanly.
+// Finish the request in hand, then close the database cleanly. A host may
+// send the stop signal more than once; the later ones must not cut the first
+// short, so they are taken and ignored.
+let stopping = false;
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.once(signal, () => {
+  process.on(signal, () => {
+    if (stopping) return;
+    stopping = true;
     clearInterval(sweep);
     void app.close().then(() => {
       db.close();

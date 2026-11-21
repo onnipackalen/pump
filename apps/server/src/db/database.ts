@@ -10,11 +10,13 @@ import { DatabaseSync } from 'node:sqlite';
 export type Db = DatabaseSync;
 
 /**
- * Opens the database file, creating its folder if needed. Pass ':memory:' for
- * a throwaway database in tests.
+ * Opens the database file. Pass ':memory:' for a throwaway database in tests.
+ *
+ * The file's folder is made only when asked. Where the file may live, and
+ * why its folder is usually NOT made, is decided in location.ts.
  */
-export function openDatabase(path: string): Db {
-  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
+export function openDatabase(path: string, options: { createFolder?: boolean } = {}): Db {
+  if (options.createFolder === true) mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   // WAL: readers never block the writer, and a crash cannot leave half a commit.
   db.exec('PRAGMA journal_mode = WAL');

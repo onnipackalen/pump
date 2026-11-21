@@ -1,9 +1,5 @@
-/* Started as a copy of graphics/balloon/balloon.css (2026-11-20 snapshot with
- * the multiplier on the balloon and the tied neck). The motion was then tuned
- * here, in the game, so this file is now AHEAD of graphics/balloon/balloon.css:
- * fixed pivots, the hose after a pop, the Patch save, the sway that no longer
- * restarts, and the shorter survive beat. Copy this file back to graphics/
- * before re-copying anything the other way. */
+/* The balloon's colours and animations. This file is the original; there is
+ * no other copy. */
 
 /*
  * Pump balloon: colours, layer pivots and size.
@@ -119,12 +115,17 @@
 }
 
 /* The multiplier on the balloon. It squashes and stretches with the body
- * and never shows smaller than half its full size. Five characters
- * ("1.01x") still fit inside the smallest balloon; the thin outline in the
- * balloon's colour keeps edge letters readable. Dark on pearl and azure,
- * white on violet: at least 5.3 to 1 contrast against each colour. */
+ * and never shows smaller than a floor: --pb-value-floor, a share of its
+ * full size, half unless the page says otherwise. (A page that draws the
+ * balloon small raises the floor so the number stays readable; the game
+ * does that in balloon-app.css.) Five characters ("1.01x") still fit
+ * inside the smallest balloon that has a number, up to a floor of 0.8;
+ * the thin outline in the balloon's colour keeps edge letters readable.
+ * Dark on pearl and azure, white on violet: at least 5.3 to 1 contrast
+ * against each colour. */
 .pump-balloon {
   --balloon-ink: #0e1424;
+  --pb-value-floor: 0.5;
 }
 .pump-balloon[data-slot="3"] {
   --balloon-ink: #ffffff;
@@ -139,7 +140,7 @@
   text-anchor: middle;
   transform-box: fill-box;
   transform-origin: 50% 50%;
-  transform: scale(max(1, calc(0.5 / var(--balloon-scale))));
+  transform: scale(max(1, calc(var(--pb-value-floor) / var(--balloon-scale))));
   stroke: var(--balloon-base);
   stroke-width: 4px;
   stroke-linejoin: round;
@@ -332,11 +333,12 @@
  *      the balloon grows or pops. So the result is never seen before the
  *      pocket goes in, and never long after.
  *
- * Press length. It grows with data-strain, which is the PUBLISHED chance
- * that this pump pops and nothing else: 300, 360, 420, 480 ms for strain
- * 0, 1, 2, 3. The same four numbers are in game/risk.ts (PRESS_MS), which
- * the game waits on; a test checks that the two lists match. A riskier
- * pump is slower and the swell in the hose is bigger.
+ * Press length. It grows with data-strain: 300, 360, 420, 480 ms for
+ * strain 0, 1, 2, 3. data-strain is the tension from game/risk.ts
+ * (balloonTension), worked out from the PUBLISHED chance that this pump
+ * pops and nothing else; the game waits on the same number, and the same
+ * four lengths are in game/risk.ts (PRESS_MS). A test checks that the two
+ * lists match. A tenser pump is slower and the swell in the hose is bigger.
  *
  * Rhythm. A held Pump button sends the next "press" about 250 ms after
  * each "survive". So everything in the answer is over, or as good as
@@ -659,8 +661,9 @@
  *
  * After the same press and hold, your code sets data-beat to:
  *   "pop"     when the pump popped. The body and its neck vanish at
- *             once, 8 pieces fly out and fall, and the hose, with
- *             nothing left to hold it up, drops to the floor.
+ *             once, 8 grey pieces fly out and fall, and the hose, with
+ *             nothing left to hold it up, drops to the floor with a
+ *             torn scrap of rubber still on its end.
  *   "popped"  the same end picture with no movement. Use it when a
  *             round is restored after a page refresh, so the pop does
  *             not play again.
@@ -669,6 +672,10 @@
 
 .pump-balloon {
   --pb-popped: #6f7789; /* neutral grey for what is left after a pop */
+  /* The torn scrap is a paler grey: it lies on the hose, which is close
+   * to --pb-popped, and has to stand out from it (3.1 to 1) and from the
+   * dark floor (9.4 to 1). */
+  --pb-scrap: #b4bac6;
   --pb-shard-ms: 480ms;
   --pb-ghost-ms: 300ms;
   --pb-hose-drop-ms: 440ms;
@@ -687,11 +694,19 @@
   stroke-width: 2;
   stroke-dasharray: 6 7;
 }
+/* The pop mark: a torn scrap of rubber still stuck on the end of the
+ * hose. It is drawn inside the hose layer, so it falls to the floor with
+ * the hose and lies there. A cashed-out balloon never has it. */
 .pump-balloon .pb-remnant {
-  fill: var(--pb-popped);
+  fill: var(--pb-scrap);
+  stroke: var(--pb-popped);
+  stroke-width: 0.8;
+  stroke-linejoin: round;
 }
+/* The pieces are the quiet grey, not the balloon's colour: coloured
+ * pieces flying out read as confetti, and a loss is never a party. */
 .pump-balloon .pb-shard {
-  fill: var(--balloon-base);
+  fill: var(--pb-popped);
   transform-box: fill-box;
   transform-origin: 50% 50%;
 }
@@ -719,9 +734,10 @@
 .pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-neck {
   opacity: 0;
 }
-/* The hose lies on the floor: clearly let go, clearly not a cash-out
- * (there it curls back to the pump). This is the end picture; the fall
- * below only plays into it, so "Animations off" gets the same picture. */
+/* The hose lies on the floor with the torn scrap on its end: clearly a
+ * pop, clearly not a cash-out (there the hose curls back to the pump,
+ * clean). This is the end picture; the fall below only plays into it,
+ * so "Animations off" gets the same picture. */
 .pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-hose {
   transform: var(--pb-hose-down);
 }
@@ -1052,7 +1068,7 @@
  *      only thing holding it.
  *   3. 330 ms on: the swell lets go, the balloon drops back to the size
  *      it had, and the patch, used up, tears in two and falls.
- * White, grey and the balloon's own colour only. Nothing here is mint,
+ * Off-white, dark slate and grey only. Nothing here is mint,
  * nothing sparkles, and the balloon does not grow.
  * Leave "blocked" set for at least 800 ms before the next press, or the
  * story is cut off half way.
@@ -1068,21 +1084,33 @@
   --pb-blocked-ms: 800ms;
 }
 
-/* Look: off-white tape with grey stitches, a thin grey edge and a soft
- * shadow, so it reads on pearl, azure and violet alike. */
+/* Look: a dark repair patch with an off-white edge and off-white
+ * stitches, and a soft shadow. No single colour stands out on all three
+ * balloons, so the patch uses two. Contrast against each balloon:
+ *            dark tape   off-white edge
+ *   pearl    11.9 to 1    1.1 to 1
+ *   azure     5.7 to 1    2.3 to 1
+ *   violet    2.8 to 1    4.8 to 1
+ * and the edge against the tape is 14 to 1, so the outline is always
+ * sharp. (The old off-white tape was 1.1 to 1 on pearl: nearly invisible.)
+ * Neutral on purpose: a paid repair, never the win mint. */
+.pump-balloon {
+  --pb-patch-tape: #1f2740;
+  --pb-patch-edge: #f4f2ee;
+}
 .pump-balloon .pb-patch-tape {
-  fill: #f4f2ee;
+  fill: var(--pb-patch-tape);
 }
 .pump-balloon .pb-patch-stitch {
   fill: none;
-  stroke: #8a8f9a;
+  stroke: var(--pb-patch-edge);
   stroke-width: 1.4;
   stroke-dasharray: 2.6 2.4;
   stroke-linecap: round;
 }
 .pump-balloon .pb-patch-edge {
-  fill: #f4f2ee;
-  stroke: #9aa0ad;
+  fill: var(--pb-patch-tape);
+  stroke: var(--pb-patch-edge);
   stroke-width: 2;
 }
 .pump-balloon .pb-patch-shadow {
@@ -1362,9 +1390,17 @@
  *
  * Your code sets data-strain on the balloon svg element, from "0" to "3".
  * The level comes ONLY from the published chance that the NEXT pump
- * pops (the engine's exact fraction). Suggested mapping:
- *   below 25%  -> "0"     25% to 40% -> "1"
- *   40% to 60% -> "2"     60% and up -> "3"
+ * pops (the engine's exact fraction). The game works it out in one place,
+ * game/risk.ts balloonTension, and the press length the game waits on
+ * reads the same number, so the art must never work out its own. It is
+ * the higher of two readings of that chance:
+ *   - where it sits in this balloon's own range (its pump 1 to its top
+ *     pump, at the RTP and ladder the round was played with), in quarters:
+ *     the first quarter "0" up to the last quarter "3". So every
+ *     difficulty climbs, Easy too;
+ *   - a floor that is the same everywhere: below 25% "0", 25% to 40% "1",
+ *     40% to 60% "2", 60% and up "3". So a steep ladder's early pumps are
+ *     never drawn calm.
  * Never use the hidden draw, and never react to how close a draw was.
  *
  * Higher level = wider sway; a little taller; deeper breathing; brighter,

@@ -1,0 +1,60 @@
+# Render reads this file and sets up the live site from it: one web service
+# with one disk. Nothing here is typed in by hand on Render's pages, because
+# the one mistake that matters, the database ending up off the disk, is a
+# typing mistake.
+#
+# To use it: on render.com choose New > Blueprint and pick this repository.
+# The steps, and how to check the site afterwards, are in the README.
+
+services:
+  - type: web
+    name: pump
+    runtime: node
+
+    # 0.5 CPU and 512 MB. It is the smallest plan that may have a disk; the
+    # free plan may not, and loses every local file whenever it sleeps.
+    plan: 0.5c-512mb
+
+    # Cannot be changed after the first deploy.
+    region: virginia
+
+    # Exactly one copy of the server. SQLite has one writer, and a service
+    # with a disk cannot have more. On a deploy Render stops the old copy
+    # before starting the new one, so two versions never share the file. The
+    # price is a few seconds of downtime on each deploy.
+    numInstances: 1
+
+    # --include=dev because the screen is built with Vite, which is a
+    # development dependency, and npm leaves those out when it thinks it is
+    # installing for production.
+    buildCommand: npm ci --include=dev && npm run build
+    # The server is started directly, not through npm. Render's stop signal
+    # then reaches it at once, so it can finish the request in hand and close
+    # the database before it goes. (The checks on GitHub start it the same
+    # way, in the hammer test.)
+    startCommand: node --import tsx apps/server/src/index.ts
+    healthCheckPath: /api/health
+
+    # A push to main goes live only after the checks on GitHub have passed.
+    autoDeployTrigger: checksPass
+
+    envVars:
+      # The server uses Node's built-in SQLite, so it needs Node 26. Render's
+      # default is older.
+      - key: NODE_VERSION
+        value: 26.13.1
+      # Every wallet is in this one file, and it must be on the disk below.
+      # The folder here must be the disk's mountPath. The server refuses to
+      # start on a host if this is missing or its folder does not exist
+      # (apps/server/src/db/location.ts).
+      - key: DATABASE_PATH
+        value: /var/data/pump.db
+
+    # The only files that survive a deploy or a restart are the ones under
+    # mountPath. Render takes a snapshot of the disk once a day. That is a
+    # last resort, not a backup: restoring one loses everything since it was
+    # taken, and Render warns against restoring a disk that holds a database.
+    disk:
+      name: pump-data
+      mountPath: /var/data
+      sizeGB: 1

@@ -1,4 +1,5 @@
 import type { BalloonView } from '../api/contract';
+import type { PanelActivity } from '../game/controls';
 import { nextPumpGainCents } from '../game/patchGain';
 import type { CSSProperties } from 'react';
 import { formatCents, formatChance, formatMultiplier } from '../money';
@@ -32,15 +33,24 @@ interface RoundControlsProps {
   /** Every balloon in the round, ended ones included. */
   readonly balloons: readonly BalloonView[];
   /**
-   * The round has more than one balloon. Each has its own Pump button under
-   * it, so the big button here pumps them all.
+   * The round has more than one balloon, so the big button here pumps every
+   * balloon still in play, and Cash out all sits beside it.
    */
   readonly multi: boolean;
   /**
-   * A request for this balloon is on its way, or the controls just moved to
-   * it from a balloon that ended: Cash out and Patch + Pump wait.
+   * The controls just moved to this balloon from one that ended (the short
+   * switch pause): Cash out and Patch + Pump wait.
    */
   readonly pending: boolean;
+  /**
+   * Per balloon index: what it is doing (see panelActivity). While the
+   * picked balloon is anything but free, Patch + Pump waits: a press would
+   * be ignored. While its pump is on its way, Cash out can still be pressed
+   * but shows no amount: that pump is about to change it (or end it, if it
+   * pops), so a press cashes out right after its answer, if the balloon is
+   * still in play. Once pressed, it says so.
+   */
+  readonly activity: readonly PanelActivity[];
   /** Pumps the picked balloon once (from the keyboard). */
   readonly onPump: () => void;
   /** Pumps the picked balloon, again and again while held. */
@@ -75,14 +85,16 @@ function SlotDot({ balloon }: { readonly balloon: BalloonView | null }) {
  * fixed for the whole round, so nothing moves under a finger when a balloon
  * ends; only labels change.
  *
- * Each balloon has its own Pump button under it (BalloonCard). So the big
- * button pumps every balloon still in play: Pump all while two or more are,
- * Pump once only one is left. It keeps pumping while it is held down.
+ * While two or more balloons are in play, each has its own Pump button
+ * under it (BalloonCard), and the big button is Pump all. Once only one is
+ * left, its own button goes and the big button is plain Pump. It keeps
+ * pumping while it is held down.
  */
 export function RoundControls({
   balloon,
   multi,
   pending,
+  activity,
   onPump,
   onPumpHold,
   onPatchPump,
@@ -97,11 +109,33 @@ export function RoundControls({
   const patchPrice = next?.patchPriceCents ?? null;
   const cashOut = balloon?.cashOutCents ?? null;
   const off = balloon === null || pending;
+  const doing = (b: BalloonView): PanelActivity => activity[b.index] ?? 'free';
+  const now = balloon === null ? 'free' : doing(balloon);
   // Money in the whole round: every balloon's bet plus its Patches.
   const totalBetCents = balloons.reduce((sum, b) => sum + b.betCents + b.patchesCents, 0);
   // Cash out all takes every balloon in play that has a cash-out value.
   const cashable = balloons.filter((b) => b.status === 'active' && b.cashOutCents !== null);
   const cashAllCents = cashable.reduce((sum, b) => sum + (b.cashOutCents ?? 0), 0);
+  // An amount is shown only while it is what a press would pay. While a pump
+  // is on its way the amount is about to change, so the button says when it
+  // will cash out instead: after that pump. Once pressed, "queued".
+  const cashOutText =
+    cashOut === null
+      ? '—'
+      : now === 'queued'
+        ? 'queued'
+        : now === 'pumping'
+          ? 'after pump'
+          : formatCents(cashOut);
+  const allQueued = cashable.length > 0 && cashable.every((b) => doing(b) === 'queued');
+  const cashAllText =
+    cashable.length === 0
+      ? '—'
+      : allQueued
+        ? 'queued'
+        : cashable.some((b) => doing(b) === 'pumping' || doing(b) === 'queued')
+          ? 'after pump'
+          : formatCents(cashAllCents);
   const name = balloon && multi ? `balloon ${balloon.index + 1}` : null;
   // What the next pump adds if it holds, shown beside the Patch price so the
   // two can be weighed. Early pumps on a low-risk ladder price the Patch at
@@ -148,23 +182,31 @@ export function RoundControls({
         <button
           type="button"
           className="btn btn-outline btn-two"
-          disabled={off || cashOut === null}
+          disabled={off || cashOut === null || now === 'queued'}
           onClick={onCashOut}
           title={name ? `Cash out ${name} (C)` : 'Cash out (C)'}
-          aria-label={name && cashOut !== null ? `Cash out ${name}, ${formatCents(cashOut)}` : undefined}
+          aria-label={
+            cashOut === null
+              ? undefined
+              : now === 'queued' || now === 'pumping'
+                ? `Cash out${name ? ` ${name}` : ''} after this pump`
+                : name
+                  ? `Cash out ${name}, ${formatCents(cashOut)}`
+                  : undefined
+          }
         >
           <span className="btn-name">
             {multi && <SlotDot balloon={balloon} />}
             Cash out
           </span>
-          <strong>{cashOut === null ? '—' : formatCents(cashOut)}</strong>
+          <strong>{cashOutText}</strong>
         </button>
         {/* A filled panel with the tape icon, so it can't be taken for Cash
             out (a plain outline) or Pump (solid pearl). */}
         <button
           type="button"
           className="btn btn-two btn-patch"
-          disabled={off || patchPrice === null}
+          disabled={off || now !== 'free' || patchPrice === null}
           onClick={onPatchPump}
           title={patchHint}
           aria-label={
@@ -188,19 +230,20 @@ export function RoundControls({
             {gainText ?? '\u00a0'}
           </span>
         </button>
-        {/* Never greyed out while a pump is on its way, so a hold doesn't
-            flash; a press that comes too soon is ignored by the game. */}
+        {/* The Pump buttons are never greyed out while a pump is on its
+            way, so a hold doesn't flash; a press that comes too soon is
+            ignored by the game. */}
         {multi ? (
           <div className="round-all">
             <button
               type="button"
               className="btn btn-outline btn-two"
-              disabled={cashable.length === 0}
+              disabled={cashable.length === 0 || allQueued}
               onClick={onCashOutAll}
               title="Cash out every balloon still in play that has been pumped"
             >
               <span>Cash out all</span>
-              <strong>{cashable.length === 0 ? '—' : formatCents(cashAllCents)}</strong>
+              <strong>{cashAllText}</strong>
             </button>
             <HoldButton
               className="btn btn-primary"

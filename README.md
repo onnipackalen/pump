@@ -6,7 +6,8 @@ wallet around it, and a React frontend.
 Work in progress. Built so far: the engine (game rules and math), the exact RTP
 check and the simulator, the provably fair draw code, the server (wallet, game
 routes and the hammer test), and the game screen with its verify page, which
-play against the real server. Not done yet: the live site.
+play against the real server. Not live yet: the site is set up for Render but
+not deployed (see "The live site").
 
 ## Run it locally
 
@@ -29,8 +30,75 @@ carries its own copy of those numbers for what it shows before a bet, and
 the API only, so an older build can never be mistaken for the game.
 
 The server keeps everything in one SQLite file, `apps/server/data/pump.db`,
-created on first start. Set `DATABASE_PATH` to put it somewhere else. It uses
-Node's built-in SQLite, so there is nothing native to compile.
+created on first start. Set `DATABASE_PATH` to put it somewhere else; the
+folder you name must already be there. It uses Node's built-in SQLite, so
+there is nothing native to compile.
+
+## The live site
+
+The live site runs on [Render](https://render.com): one web service with one
+1 GB disk, set up from `render.yaml` in this repo. No setting is typed in by
+hand on Render's pages, and none should be changed there: Render puts back
+what `render.yaml` says.
+
+It costs about 7.25 US dollars a month (7 for the server, 0.25 for the disk),
+and less for part of a month. A service with a disk needs a paid plan, so add
+a payment card under Billing on Render first.
+
+To set it up:
+
+1. `main` on GitHub must contain `render.yaml`, with a green check on its
+   newest commit.
+2. On Render choose **New > Blueprint** and connect this repository. The first
+   time, Render sends you to GitHub to connect your account; allow it for this
+   repository. Give the Blueprint any name and leave the branch as `main`.
+3. Render lists what `render.yaml` will create: a web service named `pump`.
+   If the file has a mistake, Render shows the mistake here instead. Choose
+   **Deploy Blueprint**.
+4. When the deploy is live, open the `onrender.com` address shown on the
+   service's page.
+
+Then check it, once:
+
+- The service's Disk page shows a 1 GB disk mounted at `/var/data`.
+- Search the service's log for `the database file is`. The line is printed at
+  every start and must name `/var/data/pump.db`.
+- Play a round and note the balance. On the service's page choose
+  **Manual Deploy > Deploy latest commit**, wait until it is live, reload the
+  game in the same browser, and see the same balance. A fresh $10,000 means
+  the database was lost. After this second start the log line must say
+  `opened the existing file`, not `made a NEW, EMPTY file`.
+
+If the first deploy fails, do not make a second Blueprint: that creates a
+second paid service with its own empty disk. Fix the cause and push; the new
+deploy starts by itself.
+
+After that, a push to `main` goes live by itself once the checks on GitHub
+have passed. If a push does not go live, look at its check on GitHub: Render
+does not deploy a push whose check failed or that has no check. The site is
+down for a few seconds on each deploy: Render stops the old copy before it
+starts the new one, so two versions never write to the same database.
+
+### Where the wallets are
+
+Every wallet is in one file on that disk, `/var/data/pump.db`. Render keeps
+only what is on the disk; the rest of the machine is thrown away on every
+deploy and every restart. So that a missing setting or a missing disk cannot
+quietly lose the wallets, the server will not start on a host unless
+`DATABASE_PATH` is set and its folder is already there
+(`apps/server/src/db/location.ts`). The server cannot tell the disk from any
+other folder that exists, so `DATABASE_PATH` and the disk's mount path are
+changed only in `render.yaml`, both together, never on Render's pages.
+
+Never delete the service while the site is in use: the wallets are on its
+disk. Render takes a snapshot of the disk once a day and keeps it for a week,
+but that is a last resort, not a backup: restoring one puts the whole disk
+back to that moment, so every round and payout since is gone, and Render
+warns that a database restored this way can come back damaged.
+
+When the site is no longer needed: on the Blueprint's Settings page set Auto
+Sync to No, then delete the `pump` service. That destroys every wallet for
+good. Afterwards look at the Billing page to see that the charges stopped.
 
 ## Scripts
 
@@ -77,6 +145,7 @@ All JSON. The exact shapes are TypeScript types in `packages/contract`.
 
 | Address | What it does |
 | --- | --- |
+| `GET /api/health` | Answers `{ "status": "ok" }`. Render calls it to see that the server is up, so `render.yaml` names it. |
 | `GET /api/session` | Wallet, seeds and the round in progress, so a page refresh restores it. A first visit creates the player with $10,000 and sets the cookie. It is the only request that creates a player, so the screen loads it first. |
 | `GET /api/history?limit=10` | The player's latest finished rounds. |
 | `POST /api/rounds` | Starts a round: `{ difficultyId, betsCents }`, one bet per balloon. Charges the bets. |

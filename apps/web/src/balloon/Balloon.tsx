@@ -181,6 +181,12 @@ export function Balloon({
         <path className="pb-hose-tube" d="M116 295C88 295 100 262 100 227" />
         <path className="pb-hose-shine" d="M116 295C88 295 100 262 100 227" />
         <rect className="pb-hose-end" x="96" y="221" width="8" height="7" rx="2" />
+        {/* remnant: the pop mark. A torn scrap of rubber still stuck over the
+             end of the hose, so it drops to the floor with it. Hidden until
+             a pop. It reaches only 8 units past the hose end: on the floor
+             that is the edge of this balloon's own slot, and the next pump
+             stands just beyond it. */}
+        <path className="pb-remnant" d="M96 230L94 222L93 216L97 218.5L99 214L102 218L105 213.5L107 218L111 215.5L112 222L108.5 225L111 230L105 229L104 232Z" />
       </g>
       {/* air: the puff that runs up the hose on each tap. */}
       <circle className="pb-air" cx="0" cy="0" r="5.4" />
@@ -286,8 +292,6 @@ export function Balloon({
               </g>
             </g>
           </g>
-          {/* remnant: torn rubber left on the knot after a pop. Hidden until then. */}
-          <path className="pb-remnant" d="M86 207L83.5 198L90 201.5L91.5 192L97 199L101 189.5L105 198.5L110.5 193L111 201.5L117 197.5L114 207Q100 211 86 207Z" />
           {/* neck: the open neck the hose blows into while the balloon is pumped. */}
           <g className="pb-neck">
             <path className="pb-neck-tube" d="M95.5 204C96.6 210 96.6 215.5 95.2 220H104.8C103.4 215.5 103.4 210 104.5 204Z" />
@@ -377,13 +381,28 @@ export function Balloon({
   );
 }
 
+/** The size before the first pump. balloon.css is drawn for this range. */
+const BALLOON_SCALE_MIN = 0.45;
+
 /**
- * How big the balloon is drawn. It grows by the same step each time the
- * multiplier doubles, and fills its box at the top reachable rung. Size
- * shows value only, never risk. Display only, so floats are fine here.
+ * How big the balloon is drawn: 0.45 before the first pump, 1 at the
+ * balloon's top reachable rung.
+ *
+ * Size follows progress up the ladder: pumps survived out of the pumps
+ * this balloon can make. (It used to follow the multiplier, and then the
+ * first pump on a long ladder grew the balloon by a fifth of one percent.)
+ *
+ * The curve is half a straight line and half a square root. The square
+ * root makes the first pumps big steps. The straight line keeps a floor
+ * under the late ones: no pump grows the balloon by less than half an
+ * even share of the way.
+ *
+ * Size shows how far up the ladder the balloon is, never risk. Display
+ * only, so floats are fine here.
  */
-export function balloonScale(multiplierHundredths: number | null, topHundredths: number): number {
-  if (multiplierHundredths === null || topHundredths <= 100) return 0.45;
-  const progress = Math.log(multiplierHundredths / 100) / Math.log(topHundredths / 100);
-  return 0.45 + 0.55 * Math.min(1, Math.max(0, progress));
+export function balloonSize(rung: number, topRung: number): number {
+  if (topRung <= 0) return BALLOON_SCALE_MIN;
+  const progress = Math.min(1, Math.max(0, rung / topRung));
+  const curved = (progress + Math.sqrt(progress)) / 2;
+  return BALLOON_SCALE_MIN + (1 - BALLOON_SCALE_MIN) * curved;
 }
