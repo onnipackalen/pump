@@ -15,6 +15,7 @@ import { VerifyPage } from './components/VerifyPage';
 import type { AutoPlaySettings } from './game/autoPlay';
 import { checkBets, type BetSetup } from './game/betSetup';
 import { controlTarget, panelActivity, showOwnPump, SWITCH_PAUSE_MS } from './game/controls';
+import { stageLevelId } from './game/level';
 import { topRungForBet } from './game/rules';
 import { useAutoPlay } from './game/useAutoPlay';
 import { useGame, type GameEvent } from './game/useGame';
@@ -478,7 +479,9 @@ export function App() {
                     <BalloonCard
                       key={`${round.id}-${balloon.index}`}
                       balloon={balloon}
-                      difficultyId={round.difficultyId}
+                      // The round's level while it runs; once it is over,
+                      // the one picked for the next round (game/level.ts).
+                      difficultyId={stageLevelId(round, setupDifficulty?.id)}
                       rtpBp={round.rtpBp}
                       ladder={round.ladder}
                       beat={state.beats[balloon.index] ?? 'idle'}

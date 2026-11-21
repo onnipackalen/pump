@@ -8,8 +8,15 @@ import { FLOOR_Y } from '../src/balloon/hoseShape';
 import { BalloonCard, PreviewCard } from '../src/components/BalloonCard';
 import { BetPanel } from '../src/components/BetPanel';
 import { checkBets } from '../src/game/betSetup';
-import { LEVEL_COLOURS, LEVEL_FALLBACK, levelColour, levelOf, MAX_LEVEL_MARKS } from '../src/game/level';
-import { balloon } from './fixtures';
+import {
+  LEVEL_COLOURS,
+  LEVEL_FALLBACK,
+  levelColour,
+  levelOf,
+  MAX_LEVEL_MARKS,
+  stageLevelId,
+} from '../src/game/level';
+import { balloon, round } from './fixtures';
 
 const css = readFileSync(new URL('../src/balloon/balloon.css', import.meta.url), 'utf8');
 const pageCss = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -211,6 +218,42 @@ describe('the cards pass the difficulty to the pump', () => {
     expect(svgTag(html)).toContain(`data-level="${id}"`);
     expect(svgTag(html)).toContain(`--pb-level:${level.colour}`);
     expect(rings(html)).toHaveLength(level.marks);
+  });
+});
+
+describe('the level the pumps of a round show', () => {
+  const ids = difficulties.map((d) => d.id);
+  const played = ids[0] ?? '';
+
+  it('is the round\'s own while it is in play, whatever is picked', () => {
+    const live = round([balloon({ rung: 2 })], { difficultyId: played });
+    expect(live.status).toBe('active');
+    for (const picked of [...ids, undefined]) {
+      expect(stageLevelId(live, picked)).toBe(played);
+    }
+  });
+
+  it('follows the difficulty picked for the next round once the round is over', () => {
+    // The stage keeps a finished round's balloons beside the bet panel, so
+    // picking another difficulty there must change their pumps at once.
+    const over = round([balloon({ status: 'cashed', rung: 2 })], { difficultyId: played });
+    expect(over.status).toBe('finished');
+    for (const picked of ids) {
+      expect(stageLevelId(over, picked)).toBe(picked);
+    }
+  });
+
+  it('stays the round\'s own once it is over if nothing is picked', () => {
+    const over = round([balloon({ status: 'popped', rung: 1 })], { difficultyId: played });
+    expect(stageLevelId(over, undefined)).toBe(played);
+  });
+
+  it('is what the game screen hands each balloon of a round', () => {
+    // The screen itself is not rendered in these tests (no DOM here), so
+    // check that it passes the round and the picked difficulty through.
+    const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+    const card = /<BalloonCard\b[\s\S]*?\/>/.exec(app)?.[0] ?? '';
+    expect(card).toMatch(/difficultyId=\{stageLevelId\(round, setupDifficulty\?\.id\)\}/);
   });
 });
 
