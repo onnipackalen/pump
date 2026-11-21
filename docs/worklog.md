@@ -1793,3 +1793,40 @@ What went wrong, and how it was caught:
   before this worktree had a build, so it serves the API only (its log
   says so, and the page is a 404). It reads the build folder only when it
   starts, and stopping it was not allowed from this session.
+
+## 2026-11-21: live stats, review fixes
+
+Three reviews of the live stats branch (money logic, the live screen,
+trying to break it). Fixed:
+- A round now counts once it shows as finished, after being seen in play,
+  unless it came to the screen finished in a refusal (`endedElsewhere` in
+  useGame: the 24-hour rule, or an end elsewhere). It no longer needs a
+  pop, top or cash-out beat, which goes back to idle after 1.5 s: a round
+  whose last answer was lost could be missed for good.
+- A round that leaves the screen before its end shows (its answer lost
+  twice, then the catch-up finds no round in play) is counted from its
+  line in the history list, unless the line shows the 24-hour rule (a
+  refund, or a round that lasted a day). Live stats and the session net
+  agreed to the cent after both lost-answer cases, played on the server.
+- Upright phone: during a round or auto-play the strip is left out (the
+  round panel needs all the room), and the button now says so: unlit,
+  unavailable, "Live stats after this round". Before, a tap lit it and
+  showed nothing.
+- Upright phone: the strip has a fixed height and the line takes what the
+  figures leave, so six-figure amounts no longer push Bet off the screen.
+- Computer: with the card open the layout is a grid; the controls keep
+  their own height and the card takes the room left. Before, a fixed card
+  cut the Manual/Auto toggle at 1024x560, and the auto form with three
+  balloons at 1440x730, 1280x720 and 1024x768. No card under 600px tall.
+- The small chart shows no "$0.00" twice and no lone dot before a round.
+
+What went wrong, and how it was caught:
+- The beat rule was the first version's own choice; the money review
+  found the 1.5 s gap by feeding a held round through `shownRound` by hand.
+  Tests now run `shownRound` into `watchShown` for that case.
+- The auto form with three balloons being cut was wider than the review
+  said: found by measuring every control against the controls card at
+  eight window sizes in four panel states.
+- The `live-stats` server still serves the API only, so the live checks
+  ran in a headless Chrome with no port, the page files served from
+  `apps/web/dist` and every /api call going to that server.
