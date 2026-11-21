@@ -77,6 +77,24 @@
 .pump-balloon .pb-neck-lip {
   fill: var(--balloon-deep);
 }
+/* The neck is darker where it is pinched into the balloon and at the lip,
+   and the rolled lip catches a little light. */
+.pump-balloon .pb-neck-fade-a {
+  stop-color: #000;
+  stop-opacity: 0.28;
+}
+.pump-balloon .pb-neck-fade-b {
+  stop-color: #000;
+  stop-opacity: 0.08;
+}
+.pump-balloon .pb-neck-fade-c {
+  stop-color: #000;
+  stop-opacity: 0.18;
+}
+.pump-balloon .pb-neck-gleam {
+  fill: #fff;
+  opacity: 0.35;
+}
 .pump-balloon .pb-tie {
   opacity: 0;
 }
@@ -131,6 +149,19 @@
 .pump-balloon .pb-rim {
   fill: #fff;
   opacity: 0.16;
+}
+/* Depth: a darker underside and light bounced up the lower left edge. */
+.pump-balloon .pb-core-a {
+  stop-color: #000;
+  stop-opacity: 0;
+}
+.pump-balloon .pb-core-b {
+  stop-color: #000;
+  stop-opacity: 0.26;
+}
+.pump-balloon .pb-bounce {
+  fill: #fff;
+  opacity: 0.14;
 }
 .pump-balloon .pb-shine {
   fill: #fff;
@@ -1284,7 +1315,7 @@
  * Never use the hidden draw, and never react to how close a draw was.
  *
  * Higher level = wider sway; a little taller; deeper breathing; brighter,
- * wider highlight; a pale "thin spot" fades in; and from level 2 a short
+ * wider highlight; a soft paler sheen fades in over the upper right; and from level 2 a short
  * shiver every 1.3 s. Only transform and opacity.
  * The sway uses the separate rotate, scale and translate properties, so
  * it never fights the beat (.pb-squash) or the size (.pb-grow).
@@ -1353,21 +1384,49 @@
   --pb-shiver: 1.1px;
 }
 
-/* Thin spot gradient: pale centre, soft darker edge (black and white only). */
-.pump-balloon .pb-thin-a {
+/*
+ * Stretched thin. The rubber over the upper right goes paler, with a
+ * bright band along the curve. Nothing is paler than the pearl balloon's
+ * white, so there the patch is a cool see-through grey instead, the way
+ * thin white latex lets the dark sky show through. Both fade out with no
+ * edge: the old oval spot had a dark rim and read as a dent or an eye.
+ * The mask and the band are white only (their ids repeat on every
+ * balloon); the colour and strength come from these two numbers.
+ */
+.pump-balloon {
+  --pb-sheen-tint: #fff;
+  --pb-sheen-max: 0.5;
+}
+.pump-balloon[data-slot="1"] {
+  --pb-sheen-tint: #8fa3c6;
+  --pb-sheen-max: 0.42;
+}
+.pump-balloon .pb-sheen {
+  fill: var(--pb-sheen-tint);
+  opacity: var(--pb-sheen-max);
+}
+.pump-balloon .pb-sheen-fade-a {
   stop-color: #fff;
-  stop-opacity: 0.6;
+  stop-opacity: 1;
 }
-.pump-balloon .pb-thin-b {
+.pump-balloon .pb-sheen-fade-b {
   stop-color: #fff;
-  stop-opacity: 0.2;
+  stop-opacity: 0.32;
 }
-.pump-balloon .pb-thin-c {
-  stop-color: #000;
-  stop-opacity: 0.08;
+.pump-balloon .pb-sheen-fade-c {
+  stop-color: #fff;
+  stop-opacity: 0;
 }
-.pump-balloon .pb-thin-d {
-  stop-color: #000;
+.pump-balloon .pb-band-a {
+  stop-color: #fff;
+  stop-opacity: 0;
+}
+.pump-balloon .pb-band-b {
+  stop-color: #fff;
+  stop-opacity: 0.85;
+}
+.pump-balloon .pb-band-c {
+  stop-color: #fff;
   stop-opacity: 0;
 }
 
@@ -1475,7 +1534,7 @@
   94%, 100% { translate: 0 0; }
 }
 
-/* At level 3 the thin spot pulses gently, in time with the shiver. */
+/* At level 3 the sheen pulses gently, in time with the shiver. */
 @keyframes pb-thin-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.8; }
@@ -1484,7 +1543,7 @@
 /* ---------------------------------------------------------------------
  * Reduced motion: no sway, no breathing, no pulse, and the highlight
  * changes without growing. The STILL cues stay: the level's stretch,
- * the thin spot and the brighter highlight, so the risk cue is kept.
+ * the sheen and the brighter highlight, so the risk cue is kept.
  * ------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
