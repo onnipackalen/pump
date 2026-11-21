@@ -571,30 +571,30 @@ summary:focus-visible,
 }
 
 /*
- * The three round buttons differ by shape, not only colour, so none can be
- * taken for another: Pump is solid, Cash out is a plain outline, and
- * Patch + Pump looks like the patch the balloon wears: a stitched (dashed)
- * edge, faint tape stripes and a tape icon.
+ * The three round buttons differ by fill, not only colour, so none can be
+ * taken for another: Pump is solid pearl, Cash out is a plain outline with
+ * nothing inside, and Patch + Pump is a filled panel with the tape icon.
+ * No dashed edge or stripes: those read as "locked", and this button works.
  */
 .btn-patch {
-  border: 1.5px dashed #8a8f9a;
-  background:
-    repeating-linear-gradient(
-      135deg,
-      rgba(244, 242, 238, 0.06) 0 5px,
-      rgba(244, 242, 238, 0) 5px 10px
-    ),
-    var(--panel-raised);
+  border: 1.5px solid #8a8f9a;
+  background: var(--panel-raised);
 }
 
 .btn-patch:hover:not(:disabled) {
   border-color: var(--pearl);
 }
 
-.patch-name {
+/* A button's name with an icon or a balloon's colour dot in front. */
+.btn-name {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+.btn-name .dot {
+  width: 8px;
+  height: 8px;
 }
 
 .patch-icon {
@@ -884,6 +884,18 @@ input {
 
 .round-actions .btn-primary {
   grid-column: 1 / -1;
+}
+
+/* With 2-3 balloons: Cash out all beside a still-large Pump all. */
+.round-all {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 6px;
+}
+
+.round-all .btn-primary {
+  grid-column: auto;
 }
 
 /* --------------------------------------------------------------- Settings */

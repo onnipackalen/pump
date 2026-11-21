@@ -776,6 +776,86 @@ Note for later: migration 1 was edited in place to add the cap column.
 That was safe only because no database existed anywhere. Once a live
 site has a database, schema changes must be new migration steps.
 
+## 2026-11-20: hostile review of the ladders and the Patch: designs, nothing applied
+
+A hostile review sent four points. Its numbers were checked and are right.
+Designs were worked out for the lead to say yes or no to; `config.ts` and
+the locked rules are unchanged.
+
+- Easy's first rung is 1.01x, and Easy's pop chance hardly builds (7.3% to
+  16.5%). Design "Easy B", checked with the whole engine suite and `npm run
+  rtp` at 9400, 9700 and 9900 on a scratch copy:
+
+  ```
+  102 112 123 137 154 175 200 230 266 309 361 424 500 591 701 835 1000
+  1210 1492 1894 2500 3452 5000
+  ```
+
+  23 rungs (today 32), pump 1 pops 4.9% (4.0%), later pumps 8.9% to 31.0%,
+  rungs at 2x, 5x, 10x, 25x and 50x, starts from an RTP of 92.90% (Easy
+  today: 93.59%). A balloon never cashed out climbs 7.6 rungs (9.9).
+- What limits the design: every later pump must pop more often than pump 1
+  does at the lowest RTP the game must start at. So a higher first rung
+  forces a steeper ladder; at 1.05x Easy would be Medium. And with
+  multipliers in hundredths, a gentle start can only rise in tiny steps.
+- A Patch costs (1 - pop chance) / RTP of what the step can win, on any
+  ladder. On today's Easy at a $1 bet the price is the whole gain on pumps
+  2 to 8. Proposed: do not sell a Patch that costs at least what its step
+  can win.
+- Patch spend has no limit: the largest single Patch is $25,773.20 (Hard,
+  $500 bet, pump 13). Options given to the lead: no limit; no Patch priced
+  above the largest bet ($1,000); no Patch priced above the balloon's own
+  bet; no Patch priced above ten times the bet. The RTP is the same under
+  all of them, because every Patch returns the RTP by itself.
+
+Turned out wrong while designing: two searches for an evenly rising Easy
+ladder found nothing. The cause was the constraint, not the search: five
+round rungs, whole hundredths and a strictly rising pop chance leave very
+few ladders. Caught by counting how long Easy can be for each first rung.
+## 2026-11-20: fixes from the hostile critique (round panel, Patch, wording)
+
+A team of hostile critics (veteran player, design lead, regulator, art
+director, cheat) reviewed the game. Their chat handed each fix to the chat
+holding those files; this entry covers the ones given to the "Hostile agent
+game fix" chat, built on branch `critique-fixes`.
+
+Built:
+
+- Round panel with 2-3 balloons: Total bet showed only the picked
+  balloon's stake ($1.00 shown, $3.00 riding). It now adds up every
+  balloon's bet and Patches. Cash out and Patch + Pump carry the picked
+  balloon's colour dot, the same dot the bet panel uses, so the panel says
+  which balloon they act on. Cash out all sits beside Pump all, and the big
+  button says Pump once only one balloon is left. Which buttons exist is
+  fixed for the whole round, so nothing moves under a finger when a balloon
+  ends; only labels change.
+- The keyboard Patch now takes Shift+P. A single stray P bought a Patch,
+  and on Expert at the top bet after pump 1 that costs $696.72.
+- The working Patch + Pump button had a dashed edge and stripes, which read
+  as "locked". It now has a solid edge and a filled panel; the tape icon
+  still marks it.
+- Game info says Patches are paid on top of the bet, so the bet limits do
+  not cap them, and that late Patches can cost many times the bet.
+- `npm run rtp` said cent rounding "only shows on tiny bets". Patch prices
+  round up too, and an early Patch can cost a few cents at a $1 bet, so the
+  note now says rounding costs most on small amounts: tiny bets and cheap
+  Patches at any bet.
+
+Turned out wrong, and how it was caught:
+
+- The entry "auto-play, sound, review fixes and graphics (web)" above says
+  the strain cues, the top seal and the Patch tape sticker are off. Commit 9148fb2,
+  46 minutes after that entry, turned those three back on, and the game
+  shows them. The ghost outline, the scrap after a pop and the cash-out
+  tick are still off (balloon-app.css). The art director critic caught the
+  mismatch; it was checked against BalloonCard.tsx and git blame.
+
+How it was checked: screen tests, lint and typecheck pass. The round panel
+was drawn from the real component and styles at desktop width and about
+260 px wide (a 320 px phone gives it 304 px), with one balloon, three
+balloons, and three balloons with one left. The full game was not played in a browser:
+other chats were already running the most preview servers this folder
+allows.
 ## 2026-11-20: pumps on the floor, bigger pictures on phones (branch `one-screen-layout`)
 
 Two fixes to the game screen after a hostile review, both CSS, both in the
@@ -861,3 +941,11 @@ Turned out wrong while designing: two searches for an evenly rising Easy
 ladder found nothing. The cause was the constraint, not the search: five
 round rungs, whole hundredths and a strictly rising pop chance leave very
 few ladders. Caught by counting how long Easy can be for each first rung.
+
+## 2026-11-20: Easy stays as it is
+
+The lead looked at "Easy B" next to today's Easy and chose to keep today's
+ladder (32 rungs, first rung 1.01x). Easy B stays on record in the entry
+"hostile review of the ladders and the Patch" and was not applied. Still
+open, and the lead's call: whether to limit Patch prices, and whether to
+stop selling a Patch that costs at least what its step can win.
