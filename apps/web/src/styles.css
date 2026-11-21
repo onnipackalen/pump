@@ -150,8 +150,14 @@ body {
 }
 
 /*
- * Upright phones: the stage on top, the panel under the thumb. Still one
- * screen that never scrolls, like every other size.
+ * Upright phones and tablets: the stage on top, the panel under the thumb.
+ * Still one screen that never scrolls, like every other size.
+ *
+ * An upright screen is taller than it is wide. Beside a side panel the
+ * stage would be a narrow strip with half of it empty sky, so the panel
+ * goes underneath and the balloons get the full width. On a tablet the
+ * panel keeps a phone's width, in the middle, so its buttons don't stretch
+ * from edge to edge.
  *
  * The panel takes the height it needs and the stage gets the rest, so the
  * balloons shrink to make room. Two things keep that from going wrong on a
@@ -166,7 +172,7 @@ body {
  *   picture. Only if even that does not fit (no real phone in the size
  *   check) does the panel scroll inside itself, as a last resort.
  */
-@media (max-width: 760px) and (orientation: portrait) {
+@media (orientation: portrait) {
   .layout {
     flex-direction: column;
     padding: 0 8px 8px;
@@ -184,8 +190,8 @@ body {
   .controls {
     order: 0;
     flex: 0 1 auto;
-    align-self: stretch;
-    width: auto;
+    align-self: center;
+    width: min(100%, 560px);
     min-height: 0;
     max-height: none;
   }
@@ -256,7 +262,17 @@ body {
   max-width: 960px;
   min-height: 0;
   margin: 0 auto;
-  padding-top: 8px;
+  /*
+   * Side room for the two outer pictures. A picture may be wider than its
+   * slot (see .balloon-box svg), and what is drawn in it reaches up to
+   * 2.8% of the stage's width past the slot. The layout already keeps 8px
+   * at the screen's edge; this adds the rest, which is nothing on a phone
+   * and a few pixels on a tablet. Without it a pump's shadow was cut at the
+   * edge of a tablet screen. On a stage wider than the 960px the balloons
+   * use, the empty margins at the sides are that room already, so they are
+   * taken off: a wide desktop gets no padding at all.
+   */
+  padding: 8px max(0px, 2.8% - 8px - max(0px, (100% - 960px) / 2)) 0;
 }
 
 /* One balloon: the picture, then its two lines of numbers on the floor. */
