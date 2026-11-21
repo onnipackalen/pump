@@ -1,12 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GAME_CONFIG, popChance } from '@pump/engine';
-import type { BalloonView, Fraction, RoundView, WalletView } from '../src/api/contract';
-import { balloonScale } from '../src/balloon/Balloon';
-import { balloonBeat, balloonStrain, subText } from '../src/components/BalloonCard';
+import type { BalloonView, RoundView, WalletView } from '../src/api/contract';
+import { balloonBeat, cardScale, subText } from '../src/components/BalloonCard';
 import { shownRound, shownWallet } from '../src/game/useGame';
 import { HOLD_GAP_MS, holdStep, type HoldTarget } from '../src/game/useHoldPump';
-import { PRESS_MS, pressMs, riskStep } from '../src/game/risk';
+import { balloonTension, PRESS_MS, pressMs, tensionFloor, type Tension } from '../src/game/risk';
 import { balloon, round } from './fixtures';
 
 const css = readFileSync(new URL('../src/balloon/balloon.css', import.meta.url), 'utf8');
@@ -22,46 +21,72 @@ function cssPressMs(strain: number): number {
   return Number(found[1]);
 }
 
-describe('pressMs', () => {
-  it('follows the published pop chance in four steps', () => {
-    expect(pressMs({ num: 1, den: 100 })).toBe(300);
-    expect(pressMs({ num: 24, den: 100 })).toBe(300);
-    expect(pressMs({ num: 25, den: 100 })).toBe(360);
-    expect(pressMs({ num: 40, den: 100 })).toBe(420);
-    expect(pressMs({ num: 60, den: 100 })).toBe(480);
-    expect(pressMs({ num: 99, den: 100 })).toBe(480);
-  });
+const RTPS = [9400, 9700, 9900] as const;
 
-  it('is the shortest press when no chance is published', () => {
-    expect(pressMs(null)).toBe(PRESS_MS[0]);
-    expect(pressMs(undefined)).toBe(PRESS_MS[0]);
-  });
-
-  it('never gets shorter as the pop chance rises', () => {
-    let last = 0;
-    for (let num = 0; num <= 100; num += 1) {
-      const ms = pressMs({ num, den: 100 });
-      expect(ms).toBeGreaterThanOrEqual(last);
-      last = ms;
-    }
-  });
-
+describe('press length and strain: one number, from the balloon\'s own range', () => {
   it('is the length the art plays, at every strain level', () => {
     expect(PRESS_MS.map((_, strain) => cssPressMs(strain))).toEqual([...PRESS_MS]);
   });
 
-  it('gives every pump of every ladder the strain the art has a press length for, at 94, 97 and 99% RTP', () => {
-    for (const rtpBp of [9400, 9700, 9900]) {
+  it('gives every pump of every ladder the press the art plays for its strain, at 94, 97 and 99% RTP', () => {
+    for (const rtpBp of RTPS) {
       for (const { ladder } of GAME_CONFIG.difficulties) {
-        for (let pump = 1; pump <= ladder.length; pump += 1) {
-          const chance = popChance(rtpBp, ladder, pump);
-          const next = { popChance: chance, multiplierHundredths: 0, patchPriceCents: null };
-          const strain = balloonStrain(balloon({ next }));
-          expect(strain).toBe(riskStep(chance) - 1);
-          expect(pressMs(chance)).toBe(cssPressMs(strain ?? 0));
+        // The full ladder, and a balloon whose bet the payout cap stops halfway.
+        for (const topRung of [ladder.length, Math.ceil(ladder.length / 2)]) {
+          const r = round([], { rtpBp, ladder });
+          let last = 0;
+          for (let rung = 0; rung < topRung; rung += 1) {
+            const b = atRung(ladder, rtpBp, rung, topRung);
+            const strain = balloonTension(r, b);
+            if (strain === undefined) throw new Error('a balloon in play has a strain');
+            // The game waits exactly as long as the art's press at that strain.
+            expect(pressMs(r, b)).toBe(cssPressMs(strain));
+            // Never calmer as the pop chance rises.
+            expect(strain).toBeGreaterThanOrEqual(last);
+            last = strain;
+          }
         }
       }
     }
+  });
+
+  it('runs from the first pump\'s own floor up to most tense on the top pump, on every difficulty (Easy too)', () => {
+    for (const rtpBp of RTPS) {
+      for (const { ladder } of GAME_CONFIG.difficulties) {
+        for (const topRung of [ladder.length, Math.ceil(ladder.length / 2)]) {
+          const r = round([], { rtpBp, ladder });
+          const first = atRung(ladder, rtpBp, 0, topRung);
+          const top = atRung(ladder, rtpBp, topRung - 1, topRung);
+          // The first pump is the bottom of its own range, so only the
+          // absolute floor can lift it: calm below 25%, never calm at 40%+.
+          const floor = tensionFloor(popChance(rtpBp, ladder, 1));
+          expect(balloonTension(r, first)).toBe(floor);
+          expect(pressMs(r, first)).toBe(PRESS_MS[floor]);
+          expect(balloonTension(r, top)).toBe(3);
+          expect(pressMs(r, top)).toBe(PRESS_MS[3]);
+        }
+      }
+    }
+  });
+
+  it('never draws a pump calmer than its absolute floor, on any difficulty', () => {
+    for (const rtpBp of RTPS) {
+      for (const { ladder } of GAME_CONFIG.difficulties) {
+        const r = round([], { rtpBp, ladder });
+        for (let rung = 0; rung < ladder.length; rung += 1) {
+          const b = atRung(ladder, rtpBp, rung);
+          const floor = tensionFloor(popChance(rtpBp, ladder, rung + 1));
+          expect(balloonTension(r, b)).toBeGreaterThanOrEqual(floor);
+        }
+      }
+    }
+  });
+
+  it('is the shortest press, with no strain, for a balloon with no next pump', () => {
+    const r = round([]);
+    expect(balloonTension(r, balloon({ next: null }))).toBeUndefined();
+    expect(pressMs(r, balloon({ next: null }))).toBe(PRESS_MS[0]);
+    expect(pressMs(r, balloon({ status: 'popped' }))).toBe(PRESS_MS[0]);
   });
 });
 
@@ -117,13 +142,21 @@ describe('the air pocket in balloon.css', () => {
   });
 });
 
-/** A balloon about to make pump number `pump` on a ladder, as the server would send it. */
-function atRung(ladder: readonly number[], rtpBp: number, rung: number): BalloonView {
+/**
+ * A balloon at `rung` on a ladder, about to make pump rung + 1, as the server
+ * would send it. Its top is the whole ladder unless `topRung` says lower.
+ */
+function atRung(
+  ladder: readonly number[],
+  rtpBp: number,
+  rung: number,
+  topRung = ladder.length,
+): BalloonView {
   const multiplier = rung === 0 ? null : (ladder[rung - 1] ?? null);
   return balloon({
     rung,
     drawIndex: rung,
-    topRung: ladder.length,
+    topRung,
     multiplierHundredths: multiplier,
     cashOutCents: multiplier,
     next: {
@@ -134,14 +167,18 @@ function atRung(ladder: readonly number[], rtpBp: number, rung: number): Balloon
   });
 }
 
-/** What BalloonCard reads from a balloon while its beat is "press". */
-function drawn(b: BalloonView | undefined, top: number) {
+/**
+ * What BalloonCard reads from a balloon of round `r` while its beat is
+ * "press". The size is the card's own rule (cardScale), so this cannot
+ * drift from the card.
+ */
+function drawn(b: BalloonView | undefined, r: RoundView) {
   if (!b) throw new Error('no balloon');
   return {
     beat: balloonBeat(b, 'press', true),
-    strain: balloonStrain(b),
-    pressMs: cssPressMs(balloonStrain(b) ?? 0),
-    scale: balloonScale(b.multiplierHundredths, top),
+    strain: balloonTension(r, b),
+    pressMs: cssPressMs(balloonTension(r, b) ?? 0),
+    scale: cardScale(b),
     status: b.status,
     sub: subText(b, 'press', false, null),
   };
@@ -150,17 +187,18 @@ function drawn(b: BalloonView | undefined, top: number) {
 describe('a balloon in its press, when another balloon\'s answer arrives first', () => {
   // Two balloons on one ladder: the first far enough up that its next pump
   // has a longer press than a first pump. Found from config, at each RTP.
-  function mixedRound(rtpBp: number): { before: RoundView; chance: Fraction; top: number } {
+  function mixedRound(rtpBp: number): { before: RoundView; longPress: number } {
     for (const { id, ladder } of GAME_CONFIG.difficulties) {
+      const on = { rtpBp, ladder };
       for (let rung = 1; rung < ladder.length - 1; rung += 1) {
-        const chance = popChance(rtpBp, ladder, rung + 1);
-        if (pressMs(chance) > pressMs(popChance(rtpBp, ladder, 1))) {
-          const before = round([atRung(ladder, rtpBp, rung), atRung(ladder, rtpBp, 0)], {
+        const up = atRung(ladder, rtpBp, rung);
+        if (pressMs(on, up) > pressMs(on, atRung(ladder, rtpBp, 0))) {
+          const before = round([up, atRung(ladder, rtpBp, 0)], {
             difficultyId: id,
             rtpBp,
             ladder,
           });
-          return { before, chance, top: ladder[ladder.length - 1] ?? 0 };
+          return { before, longPress: pressMs(on, up) };
         }
       }
     }
@@ -169,11 +207,11 @@ describe('a balloon in its press, when another balloon\'s answer arrives first',
 
   for (const rtpBp of [9400, 9700, 9900]) {
     it(`keeps the pressed view through a pop, at RTP ${rtpBp}`, () => {
-      const { before, chance, top } = mixedRound(rtpBp);
+      const { before, longPress } = mixedRound(rtpBp);
       const [a, b] = before.balloons;
       if (!a || !b) throw new Error('fixture');
       // The second balloon's press is shorter, so its answer is applied first.
-      expect(pressMs(b.next?.popChance)).toBeLessThan(pressMs(chance));
+      expect(pressMs(before, b)).toBeLessThan(longPress);
       // That answer holds the whole round: the first balloon has popped in it.
       const answer = round(
         [
@@ -187,21 +225,21 @@ describe('a balloon in its press, when another balloon\'s answer arrives first',
 
       // The first balloon is drawn exactly as it was pressed, and the art's
       // press length is still the one the game is waiting on.
-      expect(drawn(shown?.balloons[0], top)).toEqual(drawn(a, top));
-      expect(drawn(shown?.balloons[0], top).pressMs).toBe(pressMs(chance));
+      expect(drawn(shown?.balloons[0], before)).toEqual(drawn(a, before));
+      expect(drawn(shown?.balloons[0], before).pressMs).toBe(longPress);
       expect(shown?.balloons[0]?.status).toBe('active');
       // The second balloon's own answer is shown at once.
       expect(shown?.balloons[1]).toBe(answer.balloons[1]);
       // Without the pressed view the result would be on screen already.
-      expect(drawn(answer.balloons[0], top).sub).not.toBe(drawn(a, top).sub);
-      expect(drawn(answer.balloons[0], top).strain).toBeUndefined();
+      expect(drawn(answer.balloons[0], before).sub).not.toBe(drawn(a, before).sub);
+      expect(drawn(answer.balloons[0], before).strain).toBeUndefined();
 
       // Its own answer clears the pressed view: now the result shows.
       expect(shownRound(answer, [null, null])).toBe(answer);
     });
 
     it(`keeps the pressed view through a survive, at RTP ${rtpBp}`, () => {
-      const { before, top } = mixedRound(rtpBp);
+      const { before } = mixedRound(rtpBp);
       const [a, b] = before.balloons;
       if (!a || !b) throw new Error('fixture');
       const grown = atRung(before.ladder, rtpBp, a.rung + 1);
@@ -211,9 +249,9 @@ describe('a balloon in its press, when another balloon\'s answer arrives first',
         ladder: before.ladder,
       });
       const shown = shownRound(answer, [a, null]);
-      expect(drawn(shown?.balloons[0], top)).toEqual(drawn(a, top));
+      expect(drawn(shown?.balloons[0], before)).toEqual(drawn(a, before));
       // Never bigger before its own answer.
-      expect(drawn(answer.balloons[0], top).scale).toBeGreaterThan(drawn(a, top).scale);
+      expect(drawn(answer.balloons[0], before).scale).toBeGreaterThan(drawn(a, before).scale);
     });
   }
 
@@ -262,14 +300,14 @@ describe('a held pump', () => {
    * and the next step comes HOLD_GAP_MS after the last answer. The server is
    * instant and every pump survives. Returns when each step was sent.
    */
-  function playHold(chances: readonly Fraction[], hold: HoldTarget, steps: number): number[] {
+  function playHold(
+    balloons: readonly BalloonView[],
+    on: Pick<RoundView, 'rtpBp' | 'ladder'>,
+    hold: HoldTarget,
+    steps: number,
+  ): number[] {
     vi.useFakeTimers();
-    const next = (chance: Fraction) => ({
-      popChance: chance,
-      multiplierHundredths: 0,
-      patchPriceCents: null,
-    });
-    const r = round(chances.map((chance) => balloon({ next: next(chance) })));
+    const r = round(balloons, on);
     const pending = r.balloons.map(() => false);
     const sentAt: number[] = [];
     const start = Date.now();
@@ -281,7 +319,7 @@ describe('a held pump', () => {
         setTimeout(() => {
           pending[index] = false;
           afterAnswer();
-        }, pressMs(r.balloons[index]?.next?.popChance));
+        }, pressMs(r, r.balloons[index] ?? balloon()));
       }
     };
     const afterAnswer = (): void => {
@@ -295,27 +333,38 @@ describe('a held pump', () => {
     return sentAt;
   }
 
+  /** A balloon on a configured ladder whose next pump is at this tension, at the configured RTP. */
+  function atTension(tension: Tension): { b: BalloonView; on: Pick<RoundView, 'rtpBp' | 'ladder'> } {
+    const rtpBp = GAME_CONFIG.rtpBp;
+    for (const { ladder } of GAME_CONFIG.difficulties) {
+      const on = { rtpBp, ladder };
+      for (let rung = 0; rung < ladder.length; rung += 1) {
+        const b = atRung(ladder, rtpBp, rung);
+        if (balloonTension(on, b) === tension) return { b, on };
+      }
+    }
+    throw new Error(`no pump at tension ${tension}`);
+  }
+
   it('pumps one balloon every press + gap, at every strain level', () => {
-    const chances: Fraction[] = [
-      { num: 10, den: 100 },
-      { num: 30, den: 100 },
-      { num: 50, den: 100 },
-      { num: 70, den: 100 },
-    ];
-    chances.forEach((chance, strain) => {
-      const cycle = (PRESS_MS[strain] ?? 0) + HOLD_GAP_MS;
-      const sentAt = playHold([chance], { kind: 'one', roundId: 'round-1', index: 0 }, 4);
+    for (const tension of [0, 1, 2, 3] as const) {
+      const { b, on } = atTension(tension);
+      const cycle = PRESS_MS[tension] + HOLD_GAP_MS;
+      const sentAt = playHold([b], on, { kind: 'one', roundId: 'round-1', index: 0 }, 4);
       expect(sentAt).toEqual([0, cycle, 2 * cycle, 3 * cycle]);
-    });
+    }
   });
 
   it('on Pump all, waits for the longest press, so mixed balloons stay in step', () => {
+    const ladder = GAME_CONFIG.difficulties[0]?.ladder ?? [];
+    const rtpBp = GAME_CONFIG.rtpBp;
     const sentAt = playHold(
       [
-        { num: 70, den: 100 },
-        { num: 10, den: 100 },
-        { num: 10, den: 100 },
+        atRung(ladder, rtpBp, ladder.length - 1),
+        atRung(ladder, rtpBp, 0),
+        atRung(ladder, rtpBp, 0),
       ],
+      { rtpBp, ladder },
       { kind: 'all', roundId: 'round-1' },
       3,
     );

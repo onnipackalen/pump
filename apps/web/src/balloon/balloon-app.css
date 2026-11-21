@@ -7,11 +7,16 @@
  * (see docs/worklog.md, 2026-11-20) found no product using these details,
  * so they are switched off here:
  * - the grey dashed "ghost" outline left after a pop;
- * - the torn rubber scrap left on the knot after a pop;
  * - the tick badge after a cash-out (the card says "Cashed out" and the
  *   amount in words instead, as UK RTS 14F guidance suggests).
+ *
+ * The torn rubber scrap after a pop was on this list too. The user then
+ * asked for it back (2026-11-20): with it off, a popped balloon and a
+ * cashed-out one ended as nearly the same picture, an empty pump. So the
+ * scrap is on again, as the one quiet mark of a pop. It now sits on the
+ * end of the fallen hose, not in the air where the knot used to be.
  */
-.pump-balloon :is(.pb-ghost, .pb-remnant, .pb-tick) {
+.pump-balloon :is(.pb-ghost, .pb-tick) {
   display: none;
 }
 
@@ -22,4 +27,36 @@
  */
 .pump-balloon {
   overflow: visible;
+}
+
+/*
+ * The multiplier printed on the balloon must stay readable when the whole
+ * picture is small, as on a phone with three balloons. It came out at 7
+ * to 9 px there.
+ *
+ * The number is 30 units tall in a drawing 320 units tall, and never
+ * smaller than --pb-value-floor of that. So on a picture H px tall it is
+ * at least 30 x floor x H / 320 px. The steps below raise the floor as
+ * the picture gets shorter, to keep that at 12 px or more down to a
+ * picture 160 px tall (and 11 px at 147).
+ *
+ * H is the height styles.css gives the picture inside .balloon-box, the
+ * smaller of the box's height and 2.4 times its width. That is why each
+ * step asks about both. 0.8 is the highest floor at which "1.01x" still
+ * fits inside the smallest balloon that shows a number.
+ */
+@container (height < 256px) or (width < 106.6px) {
+  .pump-balloon {
+    --pb-value-floor: 0.6;
+  }
+}
+@container (height < 214px) or (width < 89.2px) {
+  .pump-balloon {
+    --pb-value-floor: 0.7;
+  }
+}
+@container (height < 183px) or (width < 76.2px) {
+  .pump-balloon {
+    --pb-value-floor: 0.8;
+  }
 }

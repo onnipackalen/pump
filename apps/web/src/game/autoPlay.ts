@@ -80,13 +80,12 @@ export function maxStepsPerRound(balloonCount: number, targetPumps: number): num
   return balloonCount * (targetPumps + 1);
 }
 
-/** What one finished round did to the player's money. */
-export function roundNetCents(round: RoundView): number {
-  return round.balloons.reduce(
-    (net, b) => net + b.payoutCents - b.betCents - b.patchesCents,
-    0,
-  );
-}
+/**
+ * What one finished round did to the player's money. The same sum as the
+ * result shown over the stage and the win check (winTier): a refunded bet
+ * is void, so it counts neither as spent nor as paid.
+ */
+export { roundNetCents } from './winTier';
 
 /**
  * Whether the next round may start. Returns why not, or null to go on.
