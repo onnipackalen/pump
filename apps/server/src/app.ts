@@ -7,6 +7,7 @@ import type { RouteContext } from './routes/context';
 import { fairnessRoutes } from './routes/fairness';
 import { roundRoutes } from './routes/rounds';
 import { sessionRoutes } from './routes/session';
+import { winsRoutes } from './routes/wins';
 import type { Runtime } from './runtime';
 import { buildServices } from './services';
 
@@ -99,6 +100,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
   sessionRoutes(app, context);
   fairnessRoutes(app, context);
   roundRoutes(app, context);
+  winsRoutes(app, context);
 
   return app;
 }

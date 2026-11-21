@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 import { openDatabase, type Db } from '../src/db/database';
 import { migrate } from '../src/db/migrations';
+import { ALL_FEATURES, type Features } from '../src/features';
 import { int } from '../src/db/rows';
 import type { Runtime } from '../src/runtime';
 import { buildServices, type Services } from '../src/services';
@@ -19,7 +20,10 @@ export interface TestRuntime extends Runtime {
  * A runtime on a fresh in-memory database, with a clock that only moves when
  * told to and "random" values that are the same on every run.
  */
-export function testRuntime(config: GameConfig = GAME_CONFIG): TestRuntime {
+export function testRuntime(
+  config: GameConfig = GAME_CONFIG,
+  features: Features = ALL_FEATURES,
+): TestRuntime {
   const db = openDatabase(':memory:');
   migrate(db);
   let time = Date.parse('2026-01-01T00:00:00.000Z');
@@ -31,6 +35,7 @@ export function testRuntime(config: GameConfig = GAME_CONFIG): TestRuntime {
   return {
     db,
     config,
+    features,
     now: () => new Date(time),
     newId: () => `id-${String(counter++)}`,
     newToken: () => bytes('token').toString('base64url'),
@@ -48,8 +53,11 @@ export interface TestWorld {
   readonly app: FastifyInstance;
 }
 
-export function testWorld(config: GameConfig = GAME_CONFIG): TestWorld {
-  const runtime = testRuntime(config);
+export function testWorld(
+  config: GameConfig = GAME_CONFIG,
+  features: Features = ALL_FEATURES,
+): TestWorld {
+  const runtime = testRuntime(config, features);
   return {
     runtime,
     db: runtime.db,

@@ -42,6 +42,26 @@ export interface PlayedRound {
 }
 
 /**
+ * One finished round that paid out more than went in, for the public lists.
+ * It carries the player's id so the service can make a tag from it; the id
+ * itself is never sent to anyone.
+ */
+export interface PublicWinRow {
+  readonly playerId: string;
+  readonly difficultyId: string;
+  /** Bets that were played. Refunded (void) bets are left out. */
+  readonly betCents: number;
+  readonly patchesCents: number;
+  readonly payoutCents: number;
+  /** The highest multiplier a balloon in the round cashed out at, in hundredths. */
+  readonly topMultiplierHundredths: number;
+  readonly finishedAt: string;
+}
+
+/** Which public list: the latest wins, the largest gains, or the highest multipliers. */
+export type PublicWinOrder = 'recent' | 'biggest' | 'luckiest';
+
+/**
  * A round as stored: who owns it, which seeds it uses, and the round itself
  * in the engine's own shape (its RTP, its ladder and its balloons).
  */
@@ -280,6 +300,33 @@ export function roundsRepository(db: Db) {
     GROUP BY r.id
     ORDER BY r.finished_at ASC, r.started_at ASC, r.id ASC
   `);
+  // Wins across all players, for the public lists. Only rounds that are
+  // over; a round still in progress never shows. "More than went in" counts
+  // bets played plus Patches, with refunded bets left out, exactly as the
+  // stats page does. The top multiplier is read from the round's own stored
+  // ladder (a JSON list): rung k is item k - 1. A round can only have paid
+  // out through a cashed balloon, so a win always has one.
+  const publicWinsSql = (order: string): string => `
+    SELECT r.player_id, r.difficulty_id, r.finished_at,
+           SUM(CASE WHEN b.status = 'refunded' THEN 0 ELSE b.bet_cents END) AS staked_cents,
+           SUM(b.patches_cents) AS patch_cents,
+           SUM(b.payout_cents)  AS paid_cents,
+           MAX(CASE WHEN b.status = 'cashed'
+                    THEN json_extract(r.ladder, '$[' || (b.rung - 1) || ']') END)
+                                AS top_hundredths
+    FROM rounds r
+    JOIN balloons b ON b.round_id = r.id
+    WHERE r.status = 'finished'
+    GROUP BY r.id
+    HAVING paid_cents > staked_cents + patch_cents
+    ORDER BY ${order}, r.finished_at DESC, r.id DESC
+    LIMIT :limit
+  `;
+  const selectPublicWins = {
+    recent: db.prepare(publicWinsSql('r.finished_at DESC')),
+    biggest: db.prepare(publicWinsSql('(paid_cents - staked_cents - patch_cents) DESC')),
+    luckiest: db.prepare(publicWinsSql('top_hundredths DESC')),
+  } as const;
   const selectExpired = db.prepare(`
     SELECT id FROM rounds WHERE status = 'active' AND last_action_at <= :cutoff
     ORDER BY last_action_at
@@ -397,6 +444,19 @@ export function roundsRepository(db: Db) {
         patchesCents: int(row, 'patches_cents'),
         payoutCents: int(row, 'payout_cents'),
         seedRevealed: nullableText(row, 'revealed_at') !== null,
+        finishedAt: text(row, 'finished_at'),
+      }));
+    },
+
+    /** Up to `limit` wins across all players, in the order asked for. */
+    publicWins(order: PublicWinOrder, limit: number): PublicWinRow[] {
+      return selectPublicWins[order].all({ limit }).map((row) => ({
+        playerId: text(row, 'player_id'),
+        difficultyId: text(row, 'difficulty_id'),
+        betCents: int(row, 'staked_cents'),
+        patchesCents: int(row, 'patch_cents'),
+        payoutCents: int(row, 'paid_cents'),
+        topMultiplierHundredths: int(row, 'top_hundredths'),
         finishedAt: text(row, 'finished_at'),
       }));
     },
