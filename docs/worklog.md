@@ -1780,3 +1780,106 @@ three lines at most, so a new ladder with a bigger top fails the test
 instead of the screen. 1465 tests pass.
 
 Nothing turned out wrong in this step.
+
+## 2026-11-20: the multiplier steps go with each balloon
+
+From the user's competitor notes (#5 on their list): "Multipliers on top.
+In auto mode it shows the multipliers growing and the ones coming next,
+and it scrolls along the top", "We have a lot of space at the top ...
+Maybe put the rows up there", and "Three balloons: harder for us with
+three balloons, especially on a phone. Need to figure out how to fit it."
+Then, in the competitor chat, the rule for phones: "It only go if there's
+like space clearly available", and a plan they approved ("Yes, send it"):
+on a computer one row per balloon in the top space; on an iPhone a row
+under the balloon for one balloon and a small "next 1.23×" for two or
+three; nothing over the balloons or the sky above them, which is where
+they grow.
+
+Built on `one-screen-layout`:
+
+- `game/stepRow.ts` (pure, tested): every step of a balloon's ladder with
+  its state: passed, current, next, ahead, locked (above the top its bet
+  can reach) or popped (the step it was going for). It reads only the
+  balloon's own state and the round's own ladder, so it cannot hint at a
+  pump that was not made.
+- `components/StepRow.tsx` and `steps.css`: one row per balloon, drawn
+  three ways.
+  - A computer (wide, at least 560 px tall): a line of its own along the
+    top of the balloon's slot. One passed step stays in view, then the
+    current one in the balloon's colour, then what is coming; it slides
+    along as the balloon climbs. A short ladder sits in the middle and does
+    not move. The Net badge and messages moved down under the rows.
+  - An upright slot at least 300 px wide (one balloon on a phone): the
+    steps run left and right of the amount under the balloon, in the band
+    those two lines already have. The big multiplier is the current step.
+    Shown only while the balloon can still be pumped.
+  - A narrower upright slot (two or three balloons on a phone): no row.
+    Each balloon in play says "next 1.28×" small, inside its own Pump
+    button, or alone in that row when it has no button.
+  - A phone on its side: nothing.
+- `BalloonCard.tsx`: the row is the first child of both cards; the Pump
+  row takes the next step (the server's own number). `App.tsx` gives the
+  preview its ladder and the top its bet can reach.
+
+One thing is not as the approved plan worded it. The plan put the phone's
+row "in the gap between the amount and the bet panel (~100px free)". That
+gap is the empty Pump row, which exists only with two or three balloons;
+with one balloon it is closed and the round panel starts right under the
+amount. A row of its own there would take about 34 px from the picture.
+Beside the amount it takes nothing. The coordinator agreed and will show
+the user this difference before it lands.
+
+Checked on the real server, 32 sizes, twelve states (bet screen with one
+and three balloons, both again with a bet the payout cap cuts short, a
+one-balloon round after four pumps, after it, a pop on the first pump, a
+three-balloon round, the same round down to its last balloon, after it,
+the Auto form, auto-play running). 31 sizes pass as before; 568x320 on its
+side still scrolls inside its panel. New in what "pass" means: on a wide
+screen the row is at the top of its slot, inside it, above the picture,
+with the current and the next step in view and no message on it; on an
+upright screen the steps are inside the label band, level with the big
+multiplier, never on the amount, and hidden once the balloon is over; in
+a narrow slot each balloon in play has exactly one "next" line, inside
+its host, at 9 px or more, and the Pump button is no taller than before.
+The after-round line now passes everywhere (the coordinator's fix).
+
+The balloons' size, old build against new at all 32 sizes with one and
+three balloons: identical on every upright screen and every phone on its
+side (51 of 64 measurements). On a wide screen the picture is 34 px
+shorter, the row's own line: 3% at 1500x1400, 5% at 1440x900, 8% at
+1024x600. 1474 tests pass.
+
+What went wrong, and how it was caught:
+
+- The step width is set smaller on the row itself for the phone band, but
+  the distance from one step to the next was first worked out on the
+  stage, above it. A custom property is worked out where it is written, so
+  the row would have slid by the computer's distance. Seen on reading the
+  file before the first run; the distance is now worked out on the row.
+- The first run of the size check said steps lay on the amount at nineteen
+  upright sizes. They did not: the check resizes its frame and measures at
+  once, and the row takes 280 ms to slide to its new place. The check now
+  switches the slide off in its own frame; with that it finds none. In
+  the game a step cannot cross the amount in any case: the row is cut away
+  around the middle, so steps slide in under the amount and out the other
+  side.
+- The same run measured "bet screen, one balloon" with three balloons on
+  the stage: the stage keeps the last round until the next bet, and a
+  round from an earlier try was still there. The check now ends any round
+  and loads the page again before it starts.
+- A fifth preview server was refused (five per folder, four belong to
+  other chats), and rebuilding the one build would have changed the game
+  the user was playing in the same server's tab. The trial build is now
+  served beside it, under /wip/, from the same server.
+
+Not built, not checked:
+
+- "The balloon needs to grow more." The picture already has the stage's
+  whole height; what stays small is the balloon inside it
+  (`balloonSize()` in Balloon.tsx: 0.45 before the first pump, 0.56 after
+  three pumps on Easy). That file is being changed for the flat start by
+  another chat, so the numbers went there instead of a second edit here.
+- Stake shows a step's cash-out and chance when it is tapped. Not in the
+  approved plan, not built.
+- Chromium only. The rows use container queries, `:has()` and a mask; none
+  has been tried in Safari or on a real iPhone.
