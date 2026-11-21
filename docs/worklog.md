@@ -2958,3 +2958,25 @@ it does not re-read the Blueprint's settings). Off either way today, but
 turning the lists on later takes more than editing `render.yaml` and
 deploying: the value has to reach the service, through a Blueprint sync or
 the service's Environment page. Ask the user before either.
+
+## 2026-11-21: PLAYTEST.md, AI_USAGE.md, hours and the README opening
+
+The write-ups the brief asks for, drafted from the records, not from memory:
+- PLAYTEST.md from the user's own competitor notes (spoken on Friday evening
+  while playing Stake's Pump, SmartSoft's Balloon and InOut's Chicken Road),
+  what was built from each note (this worklog), and the bugs the user found
+  playing ours (their chat messages).
+- Hours: from the timestamps of the user's own messages in every Pump chat,
+  counting runs of messages less than 30 minutes apart. Friday about 9.6 h,
+  Saturday morning about 2.0 h, no messages from 11:12 to 16:57 (the user's
+  engineering competition). The evening's 5 hours are the user's estimate,
+  written before that evening was over.
+- AI_USAGE.md: tools, who did what, two places the user caught the AI.
+- README: the "Work in progress" opening replaced with both links and what
+  is built; a section on the one fun thing (the after-round reveal), near
+  the top because reviewers read it first; an "Hours I spent" section.
+
+What turned out wrong, and how it was caught:
+- The first PLAYTEST draft said the user had played ours "all day" while it
+  was built. Their messages show it only at some points of the day; caught
+  when re-reading the draft against the message times, and toned down.
