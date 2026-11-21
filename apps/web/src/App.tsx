@@ -550,8 +550,8 @@ export function App() {
                         panel === 'round' && stage.balloons.length > 1 && target === balloon.index
                       }
                       onSelect={() => setChosen(balloon.index)}
-                      // Its own Pump only while two or more balloons are in
-                      // play: with one left, the panel's big button is Pump.
+                      // Its own Pump in a round of two or three, until this
+                      // balloon ends, the last one left included.
                       canPump={panel === 'round' && showOwnPump(stage, balloon)}
                       onPump={() => {
                         setChosen(balloon.index);

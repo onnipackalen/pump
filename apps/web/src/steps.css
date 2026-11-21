@@ -334,7 +334,7 @@
  * An upright slot with no room for the row (two or three balloons on a
  * phone): each balloon still in play says the step its next pump goes for,
  * small, under its amount: inside its own Pump button, or alone in that
- * row when it has no button (the last balloon in play, or auto-play).
+ * row when it has no button (during auto-play).
  */
 .slot-next {
   display: none;

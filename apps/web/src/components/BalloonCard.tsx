@@ -47,8 +47,8 @@ interface BalloonCardProps {
   readonly selected: boolean;
   readonly onSelect: () => void;
   /**
-   * It shows its own Pump button: the round is played by hand, and this
-   * balloon and at least one other are still in play (see showOwnPump).
+   * It shows its own Pump button: the round is played by hand, it has two
+   * or three balloons, and this one is still in play (see showOwnPump).
    */
   readonly canPump: boolean;
   /** Picks this balloon and pumps it once (from the keyboard). */

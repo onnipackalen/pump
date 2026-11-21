@@ -192,16 +192,14 @@ export function watchShown<T extends ShownTarget>(
 }
 
 /**
- * Whether a balloon shows its own Pump button under it: only while it and
- * at least one other balloon are still in play. Then the panel's big button
- * is Pump all, and each balloon needs its own. With one balloon in play
- * (a round of one, or a round of two or three down to its last balloon) the
- * big button is plain Pump, so nothing on screen says it twice. (The
- * button's row stays either way, so the picture never jumps.)
+ * Whether a balloon shows its own Pump button under it: in a round of two
+ * or three, for as long as that balloon is in play. The last balloon left
+ * keeps its button too, so a button the player was using never goes away
+ * under their finger (the user: "currently disapears after other two pumps
+ * are broken"). In a round of one the panel's big button is the only Pump.
  */
 export function showOwnPump(round: RoundView, balloon: BalloonView): boolean {
-  if (balloon.status !== 'active') return false;
-  return round.balloons.filter((b) => b.status === 'active').length > 1;
+  return round.balloons.length > 1 && balloon.status === 'active';
 }
 
 /**

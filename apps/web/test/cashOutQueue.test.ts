@@ -34,11 +34,11 @@ describe('showOwnPump', () => {
     expect(r.balloons.map((b) => showOwnPump(r, b))).toEqual([false, true, true]);
   });
 
-  it('not once a round of two or three is down to its last balloon: the big button is plain Pump then', () => {
+  it('still on the last balloon left in a round of two or three', () => {
     const three = round([balloon({ status: 'popped' }), balloon({ status: 'cashed' }), balloon()]);
-    expect(three.balloons.map((b) => showOwnPump(three, b))).toEqual([false, false, false]);
+    expect(three.balloons.map((b) => showOwnPump(three, b))).toEqual([false, false, true]);
     const two = round([balloon(), balloon({ status: 'popped' })]);
-    expect(two.balloons.map((b) => showOwnPump(two, b))).toEqual([false, false]);
+    expect(two.balloons.map((b) => showOwnPump(two, b))).toEqual([true, false]);
   });
 });
 

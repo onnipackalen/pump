@@ -92,10 +92,10 @@ function SlotDot({ balloon }: { readonly balloon: BalloonView | null }) {
  * the whole round, so nothing moves under a finger when a balloon ends;
  * only labels change.
  *
- * While two or more balloons are in play, each has its own Pump button
+ * In a round of two or three, each balloon in play has its own Pump button
  * under it (BalloonCard), and the big button is Pump all. Once only one is
- * left, its own button goes and the big button is plain Pump. It keeps
- * pumping while it is held down.
+ * left, the big button is plain Pump, and that balloon keeps its own
+ * button too. The big button keeps pumping while it is held down.
  */
 export function RoundControls({
   balloon,

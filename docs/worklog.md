@@ -2733,3 +2733,20 @@ thorouhly"): typecheck, lint, web tests, and one look in the browser at
 
 Not checked: a full auto-play run with the target ringed, real phones,
 Safari, the live site.
+
+## 2026-11-21: the last balloon keeps its own Pump
+
+The user, with a phone screenshot of the last balloon in play showing no
+button: "currently disapears after other two pumps are broken". It was on
+purpose: `showOwnPump` gave a balloon its own Pump only while two or more
+were in play, so the button left from under the player's finger.
+
+Now, in a round of two or three, every balloon keeps its own Pump (with
+"next ×.××" in it) until that balloon ends, the last one included. A round
+of one still has only the panel's big Pump. The big button still turns
+from Pump all to plain Pump when one balloon is left. Branch
+`last-balloon-pump`; comments and the `showOwnPump` test updated.
+
+Checked lightly: typecheck, lint, web tests (one run stalled for four
+minutes and failed three tests by time; a clean re-run passed all 536),
+and one look at 390 x 844 with 3 balloons on Expert after two popped.
