@@ -1232,3 +1232,49 @@ step in the README cover it.
 
 Not done by anyone yet: the deploy itself. Nothing here has run on
 Render; the dry run was on a Mac. The first deploy is the real test.
+
+## 2026-11-20: `cashout-reveal` merged with main again, and the review's fixes
+
+Main had moved on (stats page, database location rule, Render, new balloon
+look, saved seed hashes, new Pump row rules), so main was merged into the
+branch again, up to f7eedde. Five files clashed; both sides were kept. The
+verify page now checks both things this browser saved: the seed hash shown
+before the round (main) and the reveal lines shown after it (this branch).
+Main's new Pump row rule closes the row after every round and in one-balloon
+rounds; a finished round with a reveal line keeps it open, except while
+auto-play runs.
+
+Turned out wrong, and how it was caught (a review that ran everything):
+
+- From the repo root, `npm run hammer -- --url=... --db=...` never reached
+  the hammer. The inner `npm run` kept the options as its own settings, and
+  the hammer quietly started its own server and said PASS. Caught by
+  pointing it at a port with nothing on it. The root script now ends in
+  `--` (like `sim`), and the hammer stops with a clear message when npm
+  kept an option, an option is unknown, or `--db` comes without `--url`.
+- A database made by this branch before the first merge has a step 2 with
+  another name and another shape. The server counted steps by number only,
+  skipped the new step 2 and died at start on a missing column. Caught by
+  building such a database from the old commit. `migrate()` now checks every
+  recorded step's name first and refuses, before changing anything, with a
+  message that says to delete the file.
+- `verifyRound` takes a balloon's top rung from the record's own payout cap.
+  A record with a lower cap, the top that gives and a reveal worked out
+  against it checked out against itself, and the saved reveal line could not
+  tell either. Caught by a review test that built such a record. The screen
+  now also keeps each balloon's top rung as it first saw the round, and the
+  verify page says when the record gives another one ("does not match what
+  this device showed"). `verifyRound` is unchanged: the cap stays per-round
+  config, like the RTP.
+- The worktree's own `node_modules` lacked `@fastify/static`, so its server
+  and tests used the main checkout's copy. `npm ci` in the worktree fixed it.
+
+Checked: typecheck, lint, all 1,447 tests, the hammer against a server
+started by hand (from the repo root, with the options) and on its own, a
+database from the old branch code refused at start, and the built screen at
+375x812: three balloons and one balloon, reveal lines in the row after the
+round, no scrolling. On the verify page an honest round checks out, and one
+whose saved top was changed by hand is flagged.
+
+Not done: main moved again during this work (d33e4d3, balloon art only). It
+merges into this branch with no conflict but was not merged here.
