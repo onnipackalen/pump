@@ -853,17 +853,12 @@ input {
   white-space: nowrap;
 }
 
-.readouts [data-risk='1'] {
-  color: var(--risk-1);
-}
-.readouts [data-risk='2'] {
-  color: var(--risk-2);
-}
-.readouts [data-risk='3'] {
-  color: var(--risk-3);
-}
-.readouts [data-risk='4'] {
-  color: var(--risk-4);
+/* The pop chance: required by the brief, kept quiet at the user's wish.
+   Small, grey, normal weight, no warning colours. */
+.readouts .readout-quiet dd {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .round-actions {
