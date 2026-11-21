@@ -30,9 +30,11 @@
  *        The player's own choices. winsPrivate: true keeps all of their
  *        wins, past ones too, out of the public lists.
  *   GET  /api/wins                        -> PublicWinsResponse
- *        All players' latest, largest and luckiest wins (the viewer's own
- *        are among them). Needs no player and no cookie. Empty lists when
- *        the server has it switched off.
+ *        The latest, largest and luckiest wins of all players who have not
+ *        chosen to keep theirs private (the viewer's own are among them
+ *        unless they have). Needs no player and no cookie. Empty lists when
+ *        the server has it switched off, which on a host it is until
+ *        PUBLIC_WINS=on.
  *   POST /api/rounds                      StartRoundRequest -> ActionResult
  *   POST /api/rounds/:roundId/pump        PumpBody          -> PumpResult
  *        With patch: true this buys a Patch and pumps in one atomic step.
@@ -359,9 +361,11 @@ export interface ApiErrorResponse {
 export interface PlayerSettings {
   /**
    * True: none of this player's wins is shown in the public lists
-   * (GET /api/wins), past wins included. It takes effect at once. False,
-   * which every player starts with: their wins may be listed there, under a
-   * tag. Switching back to false shows them again within a few seconds.
+   * (GET /api/wins), past wins included. It takes effect at once; until the
+   * lists are next read they can then be shorter than ten. False, which
+   * every player starts with: their wins may be listed there, under a tag.
+   * Switching back to false shows them again the next time the lists are
+   * read: about five seconds, longer after a slow read.
    */
   readonly winsPrivate: boolean;
 }

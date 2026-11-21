@@ -5,7 +5,8 @@ import type { Runtime } from '../runtime';
 
 /**
  * The wins everyone may see: the latest, the largest and the luckiest, across
- * all players (the viewer's own wins are among them).
+ * all players who have not chosen to keep theirs private (the viewer's own
+ * wins are among them unless they have).
  *
  * A win is a finished round that paid out more than went in. What went in is
  * the bets that were played plus the Patches; a bet the 24-hour rule handed
@@ -55,8 +56,10 @@ const SWITCHED_OFF: PublicWinsResponse = { enabled: false, recent: [], biggest: 
  *   cookie. The id itself is never sent to anyone.
  * - One player's wins of one day carry the same tag; the next day the tag is
  *   another. So someone who knows one of a player's wins (its time, stake
- *   and payout) can pick out that player's other listed wins of that day,
- *   and no further.
+ *   and payout) can pick out that player's other listed wins of that day.
+ *   Wins of different days are tied together only if the player goes
+ *   private while several are listed: their rows then leave the lists in
+ *   the same moment, and someone comparing answers can see that.
  * - Two players can get the same tag by chance. Same tag means "almost
  *   always the same player", not "certainly".
  */

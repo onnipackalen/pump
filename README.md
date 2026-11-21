@@ -105,8 +105,11 @@ older server fails half way through some actions, and a pump that fails only
 when it would end the round tells the player what that pump would do. From
 this version on the server refuses to start on a database that a newer
 version has changed (`migrate` in `apps/server/src/db/migrations.ts`), so the
-mistake is loud instead of quiet. If something is wrong after a deploy, fix it
-with a new commit and deploy that.
+mistake is loud instead of quiet. Each database step is one-way in this
+sense: once step 2 (the after-round reveal) or step 3 (a player's choice to
+keep wins private) has run on the live database, no version from before that
+step may be deployed there again. If something is wrong after a deploy, fix
+it with a new commit and deploy that.
 
 Never delete the service while the site is in use: the wallets are on its
 disk. Render takes a snapshot of the disk once a day and keeps it for a week,
@@ -206,7 +209,7 @@ All JSON. The exact shapes are TypeScript types in `packages/contract`.
 | `GET /api/stats` | The player's own results over every finished round: profit over time, best win, rounds by difficulty. |
 | `GET /api/settings` | The player's own choices: `{ winsPrivate }`. |
 | `PUT /api/settings` | Changes them: `{ winsPrivate: true }` keeps all of the player's wins, past ones too, out of the public lists, at once. |
-| `GET /api/wins` | All players' latest, largest and luckiest wins, ten of each (the viewer's own are among them). Needs no cookie. No player id, round id or seed is sent; a player is a short tag that changes every day. Empty when the server is started with `PUBLIC_WINS=off`. |
+| `GET /api/wins` | The latest, largest and luckiest wins, ten of each, of all players who have not chosen to keep theirs private. Needs no cookie. No player id, round id or seed is sent; a player is a short tag that changes every day. Empty when the server is started with `PUBLIC_WINS=off`. |
 | `POST /api/rounds` | Starts a round: `{ difficultyId, betsCents }`, one bet per balloon. Charges the bets. |
 | `POST /api/rounds/:id/pump` | One pump: `{ balloonIndex, expectedDrawIndex, patch }`. With `patch: true` the Patch is bought and the pump made in one step. The answer says `survived`, `saved`, `popped` or `top`. If it ends the round, each balloon cashed out below its top gets `afterRound`: where it would have popped. |
 | `POST /api/rounds/:id/cash-out` | Cashes out one balloon: `{ balloonIndex, expectedDrawIndex }`. If it ends the round, each balloon cashed out below its top gets `afterRound`, as with a pump. |
@@ -215,22 +218,32 @@ All JSON. The exact shapes are TypeScript types in `packages/contract`.
 | `POST /api/fairness/rotate` | Retires the server seed, reveals it, and starts a new one. Refused during a round. |
 
 Showing players' wins to everyone is not allowed in every market, so it has
-an off switch. Start the server with `PUBLIC_WINS=off` and `GET /api/wins`
-answers `"enabled": false` with empty lists, and the server reads nothing for
-it. A word that is neither `on` nor `off` also switches it off, with a warning
-in the log: a typo in the value never switches it on. Nothing set, or an empty
-value, means on, and the server cannot see a typo in the variable's name, so
-it says `public wins: ON` or `public wins: OFF` in its log at every start.
-Read that line after changing the setting. On Render the setting is one more
-entry under `envVars` in `render.yaml`; write the value in quotes (`"off"`),
-because a bare `off` in a YAML file can be read as `false`.
+an off switch, `PUBLIC_WINS`, read when the server starts:
+
+- `off`: `GET /api/wins` answers `"enabled": false` with empty lists, and the
+  server reads nothing for it.
+- `on`: the lists are shown.
+- A word that is neither: off, with a warning in the log. A typo in the value
+  never switches it on.
+- Nothing set: on when the game is run from this repo, so you see it; off on
+  a host, where showing players' results to others has to be a written
+  choice. `render.yaml` says `"off"` for the live site until the game screen
+  has the switch described below. Write the value in quotes there: a bare
+  `on` or `off` in a YAML file can be read as `true` or `false`.
+
+The server cannot see a typo in the variable's name, so it says
+`public wins: ON` or `public wins: OFF` in its log at every start. Read that
+line after changing the setting.
 
 A player can keep their own wins private. `PUT /api/settings` with
 `{ "winsPrivate": true }` takes every win of theirs out of the three lists,
-past wins too, and it happens at once, not after the five seconds. Their own
-history and stats are not touched by it. Every player starts with their wins
-shown; that is one default in one place (the `wins_private` column, database
-step 3) if it should be the other way round.
+past wins too, and it happens at once, not after the five seconds. Until the
+lists are next read they can then be shorter than ten. Switching back shows
+the wins again the next time the lists are read: about five seconds, longer
+after a slow read. The player's own history and stats are not touched by it.
+Every player starts with their wins shown. That is the default of one column
+(`wins_private`, database step 3). It can be changed by editing that step only
+until the step has run on a database; after that it takes a new step.
 
 What the lists give away, in plain words. A win there is a finished round that
 paid out more than its bets and Patches, shown with its time, stake and
@@ -238,9 +251,12 @@ payout. A player is shown as a six-character tag: a one-way hash of the player
 and the day. It cannot be turned back into anything, and it changes every
 day. But someone who knows one of a player's wins (say from a screenshot) can
 find that row, and with it that player's other listed wins of the same day.
-Two players can also share a tag by chance. A fresh answer reads every
-finished round, so one answer is reused for at least five seconds, and for
-longer the slower the read was.
+Two players can also share a tag by chance. And when a player goes private,
+all their rows leave the lists in the same moment, whatever day they are
+from: someone comparing one answer with the next can tell that those rows
+were one player, and that this player chose private. A fresh answer reads
+every finished round, so one answer is reused for at least five seconds, and
+for longer the slower the read was, up to twenty minutes.
 
 Every request that changes something needs an `Idempotency-Key` header. Errors
 always look like `{ "error": { "code", "message" } }`:

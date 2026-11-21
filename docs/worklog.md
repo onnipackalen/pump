@@ -2044,3 +2044,58 @@ so the next step will not break them.
 For the owner to decide: wins are shown unless a player chooses private. If
 it should be private unless a player chooses to show them, it is the default
 of that one column.
+
+## 2026-11-21: the private setting after its review (branch public-wins)
+
+Two reviewers (the database step and the upgrade; the setting itself), each
+finding attacked by a second reader. A third reader, from the chat that
+coordinates merges, read the earlier fix commits. The code held: the upgrade
+from the live version's database with rounds in progress left every row the
+same, all old rounds verified and reconciled, nobody could read or change
+another player's choice, and no moment was found where a private player's
+row is served. What turned out wrong, and how it was caught:
+
+- The lists would have gone public before anyone could choose. The screen has
+  no switch yet, and the server showed the lists unless told not to, so a
+  deploy would have shown every existing player's past wins with no way for
+  them to say no. On a host the lists are now OFF unless PUBLIC_WINS is set
+  to "on" (a forgotten or misnamed entry shows nothing), `render.yaml` says
+  "off" in so many words, and run from the repo they are still on.
+- A clock jump during a read froze the lists. The read was timed with the
+  wall clock, so an hour's jump (a laptop waking, a time correction) counted
+  as an hour's read and a rest of twenty hours. A read now counts for a
+  minute at most. Found by the coordinator's reader with a throwaway test.
+- Two tests were blind. The "no cookie" test ran in a world with no players,
+  so a bug that fell back on an existing player still got 401; a planted
+  fallback passed all tests. And nothing checked the claim that switching the
+  setting never re-reads the rounds: a planted hide() that threw the kept
+  answer away passed too, at 501 reads for 1,000 switches. Both are now
+  tested, the second by counting reads over 200 switches.
+- No test pinned the names of the database steps. A rename passes every test
+  and would make the live database refuse to start. They are pinned now.
+- The words were ahead of the code in four places: "all players' wins" (it is
+  all who have not chosen private), "shows them again within a few seconds"
+  (it is at the next read, up to twenty minutes after a very slow one), "one
+  default in one place" (only until the step has run on a database), and "and
+  no further" about the day tag (a player who goes private has all their rows
+  leave together, which ties their days together for anyone comparing two
+  answers). All four now say what the code does.
+
+Database steps are one-way. Step 3, like step 2, cannot be undone on a
+database it has run on: once it has run on the live database, no version from
+before it may be deployed there. A server with the guard refuses to start on
+such a file. The live site was put on the guard version (8d9c901) on
+2026-11-20, so the version behind this one refuses instead of running; the
+older deploys still in the host's list (8562809, 297760c) have no guard and
+must never be put back.
+
+Left as it is, and why:
+
+- Going private can be seen by someone polling the lists. Hiding the rows at
+  once is the point; hiding them slowly would leave a private player listed
+  for longer. The README says so.
+- After someone goes private the lists can be shorter than ten until the next
+  read. Filling them would need the read that this is built to avoid.
+- Everyone starts with wins shown. With the lists off on the live site
+  nobody's wins are shown until the owner switches them on, so the other
+  default can still be chosen then, as a new database step.
