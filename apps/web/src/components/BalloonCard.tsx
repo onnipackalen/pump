@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { BalloonView, PumpOutcome } from '../api/contract';
 import { Balloon, balloonScale, type BalloonBeat } from '../balloon/Balloon';
+import { afterRoundLine, twoLineChars } from '../game/afterRound';
 import type { Beat } from '../game/useGame';
 import { riskStep } from '../game/risk';
 import { HoldButton } from './HoldButton';
@@ -39,6 +40,11 @@ interface BalloonCardProps {
   readonly onPump: () => void;
   /** Picks this balloon and pumps it, again and again while held. */
   readonly onPumpHold: () => void;
+  /**
+   * The round is over and every balloon's motion has finished: a balloon
+   * cashed out below its top rung may now say where it would have popped.
+   */
+  readonly afterRoundShown: boolean;
 }
 
 /**
@@ -176,21 +182,35 @@ function SlotLabel({
 /**
  * The row under a balloon's numbers that holds its own Pump button. The row
  * is always there, even with no button in it, so a balloon never changes
- * size when its button comes or goes.
+ * size when its button comes or goes. Once the round is over, a balloon
+ * cashed out below its top rung uses the empty row to say, small and grey,
+ * where it would have popped (`after`). The two never meet: the button is
+ * only for a balloon in play, the line only for one that cashed out.
  */
 function SlotAction({
   slot,
   show,
+  after = null,
   onPump,
   onPumpHold,
 }: {
   readonly slot: number;
   readonly show: boolean;
+  readonly after?: string | null;
   readonly onPump: () => void;
   readonly onPumpHold: () => void;
 }) {
   return (
     <div className="slot-action">
+      {!show && after !== null && (
+        <p
+          className="slot-after"
+          style={{ '--after-chars': twoLineChars(after) } as CSSProperties}
+          title={after}
+        >
+          {after}
+        </p>
+      )}
       {show && (
         <HoldButton
           className="btn slot-pump"
@@ -232,6 +252,7 @@ export function BalloonCard({
   canPump,
   onPump,
   onPumpHold,
+  afterRoundShown,
 }: BalloonCardProps) {
   const slot = balloon.index + 1;
   const topMultiplier = multiplierAt(ladder, balloon.topRung);
@@ -240,6 +261,8 @@ export function BalloonCard({
   const win = balloon.status === 'cashed' && roundWin !== null ? roundWin : undefined;
   // The art plays the win once; the label keeps its win colour.
   const artWin = winShown ? undefined : win;
+  // Where it would have popped: only once the round is over and still.
+  const after = afterRoundShown ? afterRoundLine(balloon) : null;
 
   return (
     <article
@@ -275,7 +298,13 @@ export function BalloonCard({
         won={win !== undefined}
         live={!quiet}
       />
-      <SlotAction slot={slot} show={canPump} onPump={onPump} onPumpHold={onPumpHold} />
+      <SlotAction
+        slot={slot}
+        show={canPump}
+        after={after}
+        onPump={onPump}
+        onPumpHold={onPumpHold}
+      />
     </article>
   );
 }

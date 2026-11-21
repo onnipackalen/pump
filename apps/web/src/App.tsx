@@ -23,6 +23,7 @@ import { roundWinTier } from './game/winTier';
 import { market } from './market';
 import { formatCents, formatElapsed, formatSignedCents, parseDollarsToCents } from './money';
 import { useMotionSetting } from './motion';
+import { shownReveals } from './verify/shownReveals';
 import { cuesFor } from './sound/cues';
 import { soundBoard } from './sound/SoundBoard';
 
@@ -115,6 +116,18 @@ export function App() {
   const round = state.round;
   const roundActive = round?.status === 'active';
   const roundWin = round ? roundWinTier(round) : null;
+  // Where each cashed-out balloon would have popped: only once the round is
+  // over and every balloon's last motion has finished, so it never shows
+  // during play or over a pop, cash-out or win.
+  const afterRoundShown =
+    round?.status === 'finished' &&
+    state.beats.every((beat) => beat === 'idle') &&
+    !state.pending.some(Boolean);
+  // Keep the lines as they go on screen, so the verify page can check later
+  // that the round's record says the same.
+  useEffect(() => {
+    if (afterRoundShown) shownReveals.remember(round);
+  }, [afterRoundShown, round]);
   // Net position since this visit began (UK RTS 2E). No deposits happen
   // here, so it is the change in balance.
   const sessionNet =
@@ -419,6 +432,7 @@ export function App() {
                         setChosen(balloon.index);
                         holdOne(balloon.index);
                       }}
+                      afterRoundShown={afterRoundShown}
                     />
                   ))
                 : setup.bets.map((text, index) => (

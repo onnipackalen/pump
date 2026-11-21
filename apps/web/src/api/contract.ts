@@ -9,7 +9,10 @@
  * - Money is integer cents. Multipliers are integer hundredths (123 = 1.23x).
  * - Chances are exact fractions { num, den }. The screen turns them into a
  *   percentage for display only.
- * - No response ever contains a future draw or an unrevealed server seed.
+ * - While a round is in progress, no response contains the outcome of a pump
+ *   that was not made. Once a round is over, each balloon cashed out below
+ *   its top rung shows where it would have popped (BalloonView.afterRound).
+ * - No response ever contains an unrevealed server seed.
  *
  * Endpoints. All JSON. Every mutating request carries an Idempotency-Key
  * header; a repeat with the same key gets the stored original response.
@@ -55,6 +58,30 @@ export interface NextPumpView {
   readonly patchPriceCents: number | null;
 }
 
+/**
+ * How a balloon's reveal ends:
+ * - popped: a later plain pump would have popped it
+ * - top:    it would have reached its top rung
+ */
+export type RevealOutcome = 'popped' | 'top';
+
+/**
+ * Where a balloon cashed out below its top rung would have popped, if the
+ * player had kept pumping with no Patch. Shown only once the whole round is
+ * over. Display only: no rolls, no money.
+ */
+export interface AfterRoundView {
+  readonly outcome: RevealOutcome;
+  /**
+   * The highest rung it would have reached. popped: the rung it was on when
+   * a pump popped it (the cash-out rung itself if the very next pump pops).
+   * top: its top rung.
+   */
+  readonly reachedRung: number;
+  /** The multiplier of reachedRung, in hundredths (the engine's multiplierAt). */
+  readonly reachedMultiplierHundredths: number;
+}
+
 export interface BalloonView {
   /** 0, 1 or 2. The screen shows it as balloon 1, 2 or 3. */
   readonly index: number;
@@ -83,6 +110,13 @@ export interface BalloonView {
   readonly patchesCents: number;
   /** Paid out for this balloon. 0 until it cashes out. */
   readonly payoutCents: number;
+  /**
+   * Where it would have popped. Set only when the round is finished and this
+   * balloon was cashed out below its top rung; null otherwise, and always
+   * null while the round is in progress. Responses stored before this field
+   * existed lack it: read it as `afterRound ?? null`.
+   */
+  readonly afterRound: AfterRoundView | null;
 }
 
 export type RoundStatus = 'active' | 'finished';
@@ -223,6 +257,22 @@ export interface DrawRecordView {
   readonly roll: number;
 }
 
+/**
+ * A balloon's reveal as stored, with its draws, so the verify page can work
+ * it out again from the revealed seeds and compare.
+ */
+export interface VerifiableAfterRound {
+  readonly outcome: RevealOutcome;
+  /** As in AfterRoundView. */
+  readonly reachedRung: number;
+  /**
+   * Its draws, in order: plain pumps (no Patch) from rung + 1 up. The first
+   * uses the balloon's drawIndex at cash-out (not its rung), each next one
+   * the index after. Each survives except a final pop.
+   */
+  readonly draws: readonly DrawRecordView[];
+}
+
 /** One balloon of a finished round: what was done to it, and how it ended. */
 export interface VerifiableBalloon {
   readonly betCents: number;
@@ -240,14 +290,19 @@ export interface VerifiableBalloon {
   readonly drawIndex: number;
   readonly patchesCents: number;
   readonly payoutCents: number;
-  /** The draw of every pump on this balloon, in order, as recorded. */
+  /** The draw of every pump on this balloon, in order, as recorded. No reveal draws. */
   readonly draws: readonly DrawRecordView[];
+  /** Its reveal: set for a balloon cashed out below its top rung, null otherwise. */
+  readonly afterRound: VerifiableAfterRound | null;
 }
 
 /**
  * Everything needed to recompute a finished round in the browser: its
- * revealed server seed, its client seed and nonce, the RTP and ladder it
- * was played with, and each balloon's actions and recorded end state.
+ * revealed server seed, its client seed and nonce, the RTP, ladder and
+ * payout cap it was played with, and each balloon's actions, draws, recorded
+ * end state and reveal. It is the engine's RoundRecord (from
+ * @pump/engine/fair) plus id and finishedAt, so it can go straight into
+ * verifyRound.
  */
 export interface VerifiableRound {
   readonly id: string;

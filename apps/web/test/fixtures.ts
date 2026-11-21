@@ -15,6 +15,7 @@ export function balloon(overrides: Partial<BalloonView> = {}): BalloonView {
     next: null,
     patchesCents: 0,
     payoutCents: 0,
+    afterRound: null,
     ...overrides,
   };
 }

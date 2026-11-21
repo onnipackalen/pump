@@ -317,6 +317,25 @@ body {
   background: rgba(244, 242, 238, 0.26);
 }
 
+/*
+ * After the round: where a cashed-out balloon would have popped, in the
+ * empty Pump row. Small and grey, never a win colour. It wraps to two short
+ * lines, sized by the longer one (--after-chars) so it fits a ~110 px slot
+ * on a phone; at the 9px floor it may take a third line, which still fits
+ * the row (3 x 9px x 1.2 < the smallest --tap, 36px).
+ */
+.slot-after {
+  align-self: center;
+  max-width: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: max(9px, min(var(--sub-max), 165cqw / max(var(--after-chars, 18), 1)));
+  line-height: 1.2;
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
 .slot-label {
   flex: none;
   display: flex;

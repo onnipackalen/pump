@@ -8,13 +8,23 @@ import {
   verifyRound,
   type BalloonCheck,
   type CheckedDraw,
+  type CheckedReveal,
   type RoundCheck,
 } from '@pump/engine/fair';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiFailure, NetworkFailure, type GameClient } from '../api/client';
-import type { BalloonStatus, RoundSummary, VerifiableBalloon, VerifiableRound } from '../api/contract';
+import type {
+  BalloonStatus,
+  DrawRecordView,
+  RevealOutcome,
+  RoundSummary,
+  VerifiableBalloon,
+  VerifiableRound,
+} from '../api/contract';
+import { afterRoundText } from '../game/afterRound';
 import { centsToInput, formatCents, formatMultiplier, formatSignedCents, parseDollarsToCents } from '../money';
 import { actionsToText, textToActions } from '../verify/actionsText';
+import { screenAgrees, shownReveals } from '../verify/shownReveals';
 
 interface VerifyPageProps {
   readonly client: GameClient;
@@ -215,8 +225,9 @@ function parseWhole(text: string): number | null {
 
 /**
  * Builds the round to check from the edited text. What was recorded (each
- * balloon's end state and draws, and the payout cap) is kept from the record:
- * those are the claims being checked, not inputs.
+ * balloon's end state, draws and reveal, and the payout cap) is kept from the
+ * record: those are the claims being checked, not inputs. A record from
+ * before reveals existed has no afterRound, which counts as none.
  */
 function roundFrom(
   form: RoundForm,
@@ -253,6 +264,7 @@ function roundFrom(
       patchesCents: recorded?.patchesCents ?? 0,
       payoutCents: recorded?.payoutCents ?? 0,
       draws: recorded?.draws ?? [],
+      afterRound: recorded?.afterRound ?? null,
     };
   });
   if (errors.length > 0) return { errors };
@@ -367,21 +379,39 @@ function Workbench({ record }: { readonly record: VerifiableRound }) {
 
 function Results({ result, round }: { readonly result: RoundCheck; readonly round: VerifiableRound }) {
   const computedHash = isServerSeed(round.serverSeed) ? hashServerSeed(round.serverSeed) : null;
+  const anyReveal = result.balloons.some((b) => b.afterRound !== null);
+  // The reveal lines this device's screen showed and the seeds disagree with.
+  // verifyRound checks the record; only this device knows what it showed.
+  const screenProblems = result.balloons.flatMap((b) => {
+    const screen = screenCheck(b, round);
+    if (screen === null || screen.agrees) return [];
+    const truth =
+      b.afterRound === null
+        ? 'the seeds give it no reveal'
+        : `worked out from the seeds it is “${describeReveal(b.afterRound, cashedRung(b, round), round.ladder)}”`;
+    return [`Balloon ${b.balloonIndex + 1}: after the round this device showed “${screen.words}”, but ${truth}.`];
+  });
+  const ok = result.ok && screenProblems.length === 0;
+  const problems = [...result.problems, ...screenProblems];
   return (
     <>
       <section
         className="card panel verify-verdict"
-        data-verdict={result.ok ? 'match' : 'mismatch'}
+        data-verdict={ok ? 'match' : 'mismatch'}
         role="status"
       >
         <strong>
-          {result.ok
-            ? '✓ This round checks out. Every pump, worked out again from the seeds, gives exactly what was recorded and paid.'
-            : '✗ This round does not match what was recorded.'}
+          {ok
+            ? `✓ This round checks out. Every pump, worked out again from the seeds, gives exactly what was recorded and paid${
+                anyReveal ? ', and so does where each cashed-out balloon would have popped' : ''
+              }.`
+            : result.ok
+              ? '✗ This round does not match what this device showed.'
+              : '✗ This round does not match what was recorded.'}
         </strong>
-        {result.problems.length > 0 && (
+        {problems.length > 0 && (
           <ul>
-            {result.problems.map((p) => (
+            {problems.map((p) => (
               <li key={p}>{p}</li>
             ))}
           </ul>
@@ -416,15 +446,19 @@ const OUTCOME_TEXT: Readonly<Record<DrawOutcome, string>> = {
   top: 'Survived: top rung, cashed out',
 };
 
+/** One row of a draws table: the draw, the rung it tried for, and what it did. */
+interface DrawRow {
+  readonly draw: CheckedDraw;
+  readonly targetRung: number;
+  readonly result: string;
+}
+
 /**
  * Labels each recomputed draw for display: the rung it tried for (a Patch
  * save keeps the rung, so the next pump tries for the same rung again) and
  * what it did. The checking itself is verifyRound's.
  */
-function labelDraws(
-  draws: readonly CheckedDraw[],
-  topRung: number,
-): { readonly draw: CheckedDraw; readonly targetRung: number; readonly outcome: DrawOutcome }[] {
+function labelDraws(draws: readonly CheckedDraw[], topRung: number): DrawRow[] {
   let rung = 0;
   return draws.map((draw) => {
     const targetRung = rung + 1;
@@ -435,7 +469,28 @@ function labelDraws(
     } else {
       outcome = draw.patched ? 'saved' : 'popped';
     }
-    return { draw, targetRung, outcome };
+    return { draw, targetRung, result: OUTCOME_TEXT[outcome] };
+  });
+}
+
+/**
+ * Labels a reveal's draws: plain pumps from the cash-out rung up, one rung
+ * per draw, so draw i tries for rung cashedRung + 1 + i. Never mixed into a
+ * balloon's own draws: those are real pumps, these decided nothing.
+ */
+function labelRevealDraws(
+  draws: readonly CheckedDraw[],
+  cashedRung: number,
+  topRung: number,
+): DrawRow[] {
+  return draws.map((draw, i) => {
+    const targetRung = cashedRung + 1 + i;
+    const result = !draw.survived
+      ? 'Would pop'
+      : targetRung === topRung
+        ? 'Would reach the top'
+        : 'Would survive';
+    return { draw, targetRung, result };
   });
 }
 
@@ -455,8 +510,12 @@ const STATUS_TEXT: Readonly<Record<BalloonStatus, string>> = {
   refunded: 'Refunded',
 };
 
+function onLadder(ladder: readonly number[], rung: number): boolean {
+  return Number.isSafeInteger(rung) && rung >= 1 && rung <= ladder.length;
+}
+
 function multiplierText(ladder: readonly number[], rung: number): string {
-  return rung >= 1 && rung <= ladder.length ? ` (${formatMultiplier(multiplierAt(ladder, rung))})` : '';
+  return onLadder(ladder, rung) ? ` (${formatMultiplier(multiplierAt(ladder, rung))})` : '';
 }
 
 function describeEnd(end: BalloonEnd, ladder: readonly number[]): string {
@@ -467,6 +526,140 @@ function describeEnd(end: BalloonEnd, ladder: readonly number[]): string {
     `Patches ${formatCents(end.patchesCents)}`,
     `paid ${formatCents(end.payoutCents)}`,
   ].join(' · ');
+}
+
+/** What a reveal shows, in the words the game screen uses. */
+interface RevealEnd {
+  readonly outcome: RevealOutcome;
+  readonly reachedRung: number;
+  readonly draws: readonly DrawRecordView[];
+}
+
+function describeReveal(
+  reveal: Pick<RevealEnd, 'outcome' | 'reachedRung'> | null,
+  cashedRung: number,
+  ladder: readonly number[],
+): string {
+  if (reveal === null) return 'nothing';
+  const { outcome, reachedRung } = reveal;
+  if (!onLadder(ladder, reachedRung)) {
+    return `${outcome === 'top' ? 'reached the top' : 'popped'} on rung ${reachedRung}`;
+  }
+  return afterRoundText(cashedRung, outcome, reachedRung, multiplierAt(ladder, reachedRung));
+}
+
+/** The recorded reveal and the recomputed one say the same, draw by draw. */
+function sameReveal(recorded: RevealEnd | null, recomputed: CheckedReveal | null): boolean {
+  if (recorded === null || recomputed === null) return recorded === recomputed;
+  return (
+    recorded.outcome === recomputed.outcome &&
+    recorded.reachedRung === recomputed.reachedRung &&
+    recorded.draws.length === recomputed.draws.length &&
+    recorded.draws.every((d, i) => {
+      const r = recomputed.draws[i];
+      return (
+        r !== undefined &&
+        d.drawIndex === r.drawIndex &&
+        d.den === r.den &&
+        d.num === r.num &&
+        d.roll === r.roll
+      );
+    })
+  );
+}
+
+/** The rung a balloon was cashed out on, as the record has it. */
+function cashedRung(check: BalloonCheck, round: VerifiableRound): number {
+  return round.balloons[check.balloonIndex]?.rung ?? check.balloon?.rung ?? 0;
+}
+
+/**
+ * The reveal line this device's screen showed for a balloon, in the game's
+ * words, and whether the reveal worked out from the seeds says the same.
+ * Null when this device kept no line for it (another device, cleared
+ * storage, or no line was shown).
+ */
+function screenCheck(
+  check: BalloonCheck,
+  round: VerifiableRound,
+): { readonly words: string; readonly agrees: boolean } | null {
+  const shown = shownReveals.shownOf(round.id, check.balloonIndex);
+  if (shown === null) return null;
+  return {
+    words: describeReveal(shown, cashedRung(check, round), round.ladder),
+    agrees: screenAgrees(shown, check.afterRound),
+  };
+}
+
+/** A table of draws, and the bytes behind each roll. */
+function DrawTable({
+  rows,
+  round,
+  messageOf,
+}: {
+  readonly rows: readonly DrawRow[];
+  readonly round: VerifiableRound;
+  readonly messageOf: (d: CheckedDraw) => string;
+}) {
+  return (
+    <>
+      <div className="table-scroll">
+        <table className="verify-table">
+          <thead>
+            <tr>
+              <th scope="col" className="num">Draw</th>
+              <th scope="col">Tries for</th>
+              <th scope="col">Message</th>
+              <th scope="col" className="num">Roll</th>
+              <th scope="col">Survives if</th>
+              <th scope="col">Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ draw: d, targetRung, result }) => (
+              <tr key={d.drawIndex}>
+                <td className="num">{d.drawIndex}</td>
+                <td>
+                  rung {targetRung}
+                  {multiplierText(round.ladder, targetRung)}
+                  {d.patched ? ' · Patch' : ''}
+                </td>
+                <td>
+                  <code>{messageOf(d)}</code>
+                </td>
+                <td className="num">{d.roll}</td>
+                <td>
+                  roll &lt; {d.num} of {d.den}
+                </td>
+                <td>{result}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <details className="verify-bytes">
+        <summary>Show the bytes behind each roll</summary>
+        <ol start={rows[0]?.draw.drawIndex ?? 0}>
+          {rows.map(({ draw: d }) => {
+            const message = messageOf(d);
+            return (
+              <li key={d.drawIndex}>
+                <code>{message}</code> → HMAC-SHA256{' '}
+                <code>
+                  {isServerSeed(round.serverSeed)
+                    ? bytesToHex(hmacSha256(round.serverSeed, message))
+                    : '—'}
+                </code>{' '}
+                → word {d.wordIndex}
+                {d.block > 0 ? ` of block ${d.block}` : ''} = {d.word} → {d.word} mod {d.den} ={' '}
+                {d.roll}
+              </li>
+            );
+          })}
+        </ol>
+      </details>
+    </>
+  );
 }
 
 function BalloonResult({ check, round }: { readonly check: BalloonCheck; readonly round: VerifiableRound }) {
@@ -486,6 +679,17 @@ function BalloonResult({ check, round }: { readonly check: BalloonCheck; readonl
           block: d.block,
         });
 
+  // The reveal the record holds (the server's claim, sent for checking), and
+  // the one worked out again from the seeds (verifyRound's, from the
+  // replayed balloon). A record from before reveals existed has none. And
+  // the line this device's screen showed, if it kept one.
+  const recordedReveal: RevealEnd | null = recorded.afterRound ?? null;
+  const trueReveal = check.afterRound;
+  const revealSame = sameReveal(recordedReveal, trueReveal);
+  const recordedWords = describeReveal(recordedReveal, recorded.rung, round.ladder);
+  const trueWords = describeReveal(trueReveal, check.balloon?.rung ?? recorded.rung, round.ladder);
+  const screen = screenCheck(check, round);
+
   return (
     <section className="card panel" aria-labelledby={`verify-b${check.balloonIndex}`}>
       <h2 id={`verify-b${check.balloonIndex}`}>
@@ -495,63 +699,7 @@ function BalloonResult({ check, round }: { readonly check: BalloonCheck; readonl
       {rows.length === 0 ? (
         <p className="hint">No pumps: no draw was made on this balloon.</p>
       ) : (
-        <>
-          <div className="table-scroll">
-            <table className="verify-table">
-              <thead>
-                <tr>
-                  <th scope="col" className="num">Draw</th>
-                  <th scope="col">Tries for</th>
-                  <th scope="col">Message</th>
-                  <th scope="col" className="num">Roll</th>
-                  <th scope="col">Survives if</th>
-                  <th scope="col">Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(({ draw: d, targetRung, outcome }) => (
-                  <tr key={d.drawIndex}>
-                    <td className="num">{d.drawIndex}</td>
-                    <td>
-                      rung {targetRung}
-                      {multiplierText(round.ladder, targetRung)}
-                      {d.patched ? ' · Patch' : ''}
-                    </td>
-                    <td>
-                      <code>{messageOf(d)}</code>
-                    </td>
-                    <td className="num">{d.roll}</td>
-                    <td>
-                      roll &lt; {d.num} of {d.den}
-                    </td>
-                    <td>{OUTCOME_TEXT[outcome]}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <details className="verify-bytes">
-            <summary>Show the bytes behind each roll</summary>
-            <ol start={0}>
-              {check.draws.map((d) => {
-                const message = messageOf(d);
-                return (
-                  <li key={d.drawIndex}>
-                    <code>{message}</code> → HMAC-SHA256{' '}
-                    <code>
-                      {isServerSeed(round.serverSeed)
-                        ? bytesToHex(hmacSha256(round.serverSeed, message))
-                        : '—'}
-                    </code>{' '}
-                    → word {d.wordIndex}
-                    {d.block > 0 ? ` of block ${d.block}` : ''} = {d.word} → {d.word} mod {d.den} ={' '}
-                    {d.roll}
-                  </li>
-                );
-              })}
-            </ol>
-          </details>
-        </>
+        <DrawTable rows={rows} round={round} messageOf={messageOf} />
       )}
 
       <p className="verify-line">Recorded: {describeEnd(recorded, round.ladder)}</p>
@@ -562,6 +710,39 @@ function BalloonResult({ check, round }: { readonly check: BalloonCheck; readonl
             : `✗ Recomputed: ${describeEnd(check.balloon, round.ladder)}`}
         </p>
       )}
+
+      {(recordedReveal !== null || trueReveal !== null || screen !== null) && (
+        <>
+          <h3>After the round</h3>
+          <p className="hint">
+            Once the round was over, this balloon was played on with plain pumps (no Patch) on its
+            next draws, to show where it would have popped. It decided nothing and moved no money.
+          </p>
+          {trueReveal !== null && check.balloon !== null && trueReveal.draws.length > 0 && (
+            <DrawTable
+              rows={labelRevealDraws(trueReveal.draws, check.balloon.rung, check.balloon.topRung)}
+              round={round}
+              messageOf={messageOf}
+            />
+          )}
+          <p className="verify-line">Recorded: {recordedWords}</p>
+          <p className="verify-line" data-ok={revealSame}>
+            {revealSame
+              ? '✓ Recomputed: the same.'
+              : `✗ Recomputed: ${trueWords}${
+                  trueWords === recordedWords ? ' (the same words, but from different draws)' : ''
+                }`}
+          </p>
+          {screen !== null && (
+            <p className="verify-line" data-ok={screen.agrees}>
+              {screen.agrees
+                ? `✓ This device showed “${screen.words}”, which matches the seeds.`
+                : `✗ This device showed “${screen.words}”, which does not match the seeds.`}
+            </p>
+          )}
+        </>
+      )}
+
       {check.problems.length > 0 && (
         <ul className="verify-diff">
           {check.problems.map((p) => (
