@@ -905,3 +905,11 @@ Found and left alone, because they are not these two fixes:
   that rule now also carries the scrolling above.
 - The 20% of sky left on a phone can only be used by taller art (a longer
   hose, say). That belongs to the graphics.
+
+## 2026-11-20: Easy stays as it is
+
+The lead looked at "Easy B" next to today's Easy and chose to keep today's
+ladder (32 rungs, first rung 1.01x). Easy B stays on record in the entry
+"hostile review of the ladders and the Patch" and was not applied. Still
+open, and the lead's call: whether to limit Patch prices, and whether to
+stop selling a Patch that costs at least what its step can win.
