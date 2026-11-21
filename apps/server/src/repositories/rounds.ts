@@ -28,6 +28,19 @@ export interface FinishedRound {
   readonly finishedAt: string;
 }
 
+/** One finished round's money, for the stats page. Refunded (void) bets are left out. */
+export interface PlayedRound {
+  readonly id: string;
+  readonly difficultyId: string;
+  /** Balloons whose bets were played, not handed back. */
+  readonly balloonsPlayed: number;
+  readonly betCents: number;
+  readonly patchesCents: number;
+  readonly payoutCents: number;
+  readonly seedRevealed: boolean;
+  readonly finishedAt: string;
+}
+
 /**
  * A round as stored: who owns it, which seeds it uses, and the round itself
  * in the engine's own shape (its RTP, its ladder and its balloons).
@@ -249,6 +262,24 @@ export function roundsRepository(db: Db) {
     ORDER BY r.finished_at DESC, r.started_at DESC, r.id DESC
     LIMIT :limit
   `);
+  // Every finished round of a player, oldest first, in the same order as the
+  // history list read backwards. Refunded balloons are void, so they add
+  // nothing; Patches and payouts on them are always 0 anyway.
+  const selectPlayed = db.prepare(`
+    SELECT r.id, r.difficulty_id, r.finished_at, s.revealed_at,
+           COALESCE(SUM(CASE WHEN b.status = 'refunded' THEN 0 ELSE 1 END), 0)
+                                             AS balloons_played,
+           COALESCE(SUM(CASE WHEN b.status = 'refunded' THEN 0 ELSE b.bet_cents END), 0)
+                                             AS bet_cents,
+           COALESCE(SUM(b.patches_cents), 0) AS patches_cents,
+           COALESCE(SUM(b.payout_cents), 0)  AS payout_cents
+    FROM rounds r
+    JOIN server_seeds s ON s.id = r.server_seed_id
+    LEFT JOIN balloons b ON b.round_id = r.id
+    WHERE r.player_id = :playerId AND r.status = 'finished'
+    GROUP BY r.id
+    ORDER BY r.finished_at ASC, r.started_at ASC, r.id ASC
+  `);
   const selectExpired = db.prepare(`
     SELECT id FROM rounds WHERE status = 'active' AND last_action_at <= :cutoff
     ORDER BY last_action_at
@@ -354,6 +385,20 @@ export function roundsRepository(db: Db) {
     /** The player's latest finished rounds, newest first. */
     latestFinished(playerId: string, limit: number): FinishedRound[] {
       return selectFinished.all({ playerId, limit }).map(toFinishedRound);
+    },
+
+    /** Every finished round of the player with its money, oldest first. */
+    playedRounds(playerId: string): PlayedRound[] {
+      return selectPlayed.all({ playerId }).map((row) => ({
+        id: text(row, 'id'),
+        difficultyId: text(row, 'difficulty_id'),
+        balloonsPlayed: int(row, 'balloons_played'),
+        betCents: int(row, 'bet_cents'),
+        patchesCents: int(row, 'patches_cents'),
+        payoutCents: int(row, 'payout_cents'),
+        seedRevealed: nullableText(row, 'revealed_at') !== null,
+        finishedAt: text(row, 'finished_at'),
+      }));
     },
 
     /** Rounds still in progress that nobody has touched since `cutoff`. */

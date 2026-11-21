@@ -1,0 +1,244 @@
+/*
+ * The stats page. Like the verify page it is for reading, so it scrolls
+ * inside its own box under the top bar; the game screen itself never scrolls.
+ *
+ * Colour roles follow graphics/README.md: mint only for a real gain, plain
+ * or muted text for everything else. The one data colour is the accent.
+ */
+
+.stats {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.stats-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--gap);
+  max-width: 880px;
+  margin: 0 auto;
+  padding-block: 4px 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+.stats-inner > * {
+  min-width: 0;
+}
+
+.stats h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.stats h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.stats-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Four headline numbers: two by two on a phone, one row when there is room. */
+.stats-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .stats-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.stats-tiles > div {
+  padding: 10px 12px;
+}
+
+.stats-tiles dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* An amount is never cut short: it shrinks on a narrow phone and, past
+   that, wraps after a thousands comma (StatsPage marks those spots). */
+.stats-tiles dd {
+  margin: 2px 0 0;
+  font-size: clamp(15px, 4.8vw, 20px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- Profit */
+
+.profit-chart {
+  margin: 0;
+}
+
+.profit-readout {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.profit-readout > :last-child {
+  font-weight: 700;
+}
+
+.profit-plot {
+  position: relative;
+  height: 180px;
+  border-radius: 8px;
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+
+.profit-plot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.profit-plot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.profit-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2px;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.profit-gain {
+  fill: var(--mint);
+  opacity: 0.14;
+}
+
+.profit-loss {
+  fill: var(--muted);
+  opacity: 0.12;
+}
+
+.profit-zero {
+  stroke: var(--line);
+  stroke-width: 1px;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.profit-cross {
+  stroke: var(--muted);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.profit-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.profit-axis {
+  position: absolute;
+  left: 0;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.profit-axis-high {
+  top: 0;
+}
+
+.profit-axis-low {
+  bottom: 0;
+}
+
+.profit-x {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+/* -------------------------------------------------------------- Best win */
+
+.stats-best {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+}
+
+.stats-best-gain {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-best-facts {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------- By difficulty */
+
+.stats-table td:nth-child(2) {
+  width: 45%;
+  min-width: 110px;
+}
+
+.stats-rounds {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* The bar is a share of the track: the most-played difficulty fills it. */
+.stats-track {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.stats-bar {
+  display: block;
+  height: 8px;
+  border-radius: 0 4px 4px 0;
+  background: var(--accent);
+}
+
+.stats-count {
+  flex: none;
+  min-width: 3ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

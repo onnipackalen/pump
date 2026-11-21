@@ -23,6 +23,8 @@
  *        Wallet, seeds, and the in-progress round if there is one, so a page
  *        refresh can restore it.
  *   GET  /api/history?limit=10            -> { rounds: RoundSummary[] }
+ *   GET  /api/stats                       -> PlayerStats
+ *        The player's results over every round they have finished.
  *   POST /api/rounds                      StartRoundRequest -> ActionResult
  *   POST /api/rounds/:roundId/pump        PumpBody          -> PumpResult
  *        With patch: true this buys a Patch and pumps in one atomic step.
@@ -345,6 +347,72 @@ export interface ApiErrorResponse {
 /** The response of GET /api/history. */
 export interface HistoryResponse {
   readonly rounds: readonly RoundSummary[];
+}
+
+/**
+ * The response of GET /api/stats: the player's results over every round they
+ * have finished.
+ *
+ * Only money that was really played counts. A bet handed back unplayed by the
+ * 24-hour rule is void: it is left out of every figure here, and a round whose
+ * bets were all handed back is not counted as a round at all.
+ */
+export interface PlayerStats {
+  /** Finished rounds with at least one bet played. */
+  readonly rounds: number;
+  /** Balloons played in those rounds. */
+  readonly balloons: number;
+  /** Bets played plus Patches bought. */
+  readonly wageredCents: number;
+  readonly paidOutCents: number;
+  /** paidOutCents - wageredCents. Below 0 is a loss. */
+  readonly netCents: number;
+  /**
+   * The running net after each round, oldest first: the "profit over time"
+   * line. A long history is thinned so the list stays short, but the highest
+   * and lowest points survive the thinning and the last point is always the
+   * latest round. The line starts at 0 before round 1; that point is not sent.
+   */
+  readonly profit: readonly ProfitPoint[];
+  /** The round that won the most, or null if no round has won anything yet. */
+  readonly bestWin: BestWin | null;
+  /** One entry per difficulty the player has played, in the game's own order. */
+  readonly byDifficulty: readonly DifficultyStats[];
+}
+
+export interface ProfitPoint {
+  /** Which round this is, counting from 1 for the player's first. */
+  readonly round: number;
+  /** The running net after that round. */
+  readonly netCents: number;
+}
+
+/**
+ * A round that paid back more than it cost. "Won" here always means a real
+ * gain: payout above bets plus Patches.
+ */
+export interface BestWin {
+  readonly roundId: string;
+  readonly difficultyId: string;
+  /** The gain: payout minus bets and Patches. Always above 0. */
+  readonly netCents: number;
+  /** Bets plus Patches. */
+  readonly wageredCents: number;
+  readonly payoutCents: number;
+  /** The highest multiplier a balloon in this round cashed out at. */
+  readonly multiplierHundredths: number;
+  /** ISO 8601. */
+  readonly finishedAt: string;
+  /** Its server seed has been revealed, so it can be checked now. */
+  readonly seedRevealed: boolean;
+}
+
+export interface DifficultyStats {
+  readonly difficultyId: string;
+  readonly rounds: number;
+  readonly wageredCents: number;
+  readonly paidOutCents: number;
+  readonly netCents: number;
 }
 
 /** The body of PUT /api/fairness/client-seed. */

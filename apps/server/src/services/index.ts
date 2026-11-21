@@ -10,6 +10,7 @@ import { gameService, type GameService } from './game';
 import { idempotencyService, type IdempotencyService } from './idempotency';
 import { playersService, type PlayersService } from './players';
 import { sessionService, type SessionService } from './session';
+import { statsService, type StatsService } from './stats';
 import { walletService, type WalletService } from './wallet';
 
 export interface Services {
@@ -18,6 +19,7 @@ export interface Services {
   readonly fairness: FairnessService;
   readonly game: GameService;
   readonly session: SessionService;
+  readonly stats: StatsService;
   readonly idempotency: IdempotencyService;
 }
 
@@ -48,6 +50,7 @@ export function buildServices(runtime: Runtime): Services {
     fairness,
     game,
     session: sessionService(wallet, fairness, game, rounds),
+    stats: statsService(runtime, rounds),
     idempotency: idempotencyService(runtime, keys),
   };
 }

@@ -1,16 +1,17 @@
 import type { CSSProperties } from 'react';
 import type { BalloonView, PumpOutcome } from '../api/contract';
-import { Balloon, balloonScale, type BalloonBeat } from '../balloon/Balloon';
+import { Balloon, balloonSize, type BalloonBeat } from '../balloon/Balloon';
 import { afterRoundLine, twoLineChars } from '../game/afterRound';
 import type { Beat } from '../game/useGame';
-import { riskStep } from '../game/risk';
+import { balloonTension } from '../game/risk';
 import { HoldButton } from './HoldButton';
-import { multiplierAt } from '../game/rules';
 import type { WinTier } from '../game/winTier';
 import { formatCents, formatMultiplier } from '../money';
 
 interface BalloonCardProps {
   readonly balloon: BalloonView;
+  /** The RTP and ladder its round was played with (its own copies). */
+  readonly rtpBp: number;
   readonly ladder: readonly number[];
   readonly beat: Beat;
   /** Its last pump was bought with a Patch. */
@@ -34,7 +35,10 @@ interface BalloonCardProps {
   readonly selectable: boolean;
   readonly selected: boolean;
   readonly onSelect: () => void;
-  /** It can be pumped by hand now: the round is played by hand and this balloon is still in play. */
+  /**
+   * It shows its own Pump button: the round is played by hand, and this
+   * balloon and at least one other are still in play (see showOwnPump).
+   */
   readonly canPump: boolean;
   /** Picks this balloon and pumps it once (from the keyboard). */
   readonly onPump: () => void;
@@ -87,17 +91,6 @@ export function balloonBeat(
 }
 
 /**
- * How much the balloon strains, 0 to 3. It comes only from the published
- * chance that its next pump pops, never from a draw: the same four steps
- * that colour the pop chance in the panel.
- */
-export function balloonStrain(balloon: BalloonView): number | undefined {
-  const next = balloon.next;
-  if (balloon.status !== 'active' || !next) return undefined;
-  return riskStep(next.popChance) - 1;
-}
-
-/**
  * The Patch sticker for a pump bought with a Patch: it goes on with the
  * press, then tears off if it stopped a pop (the pump would have popped
  * the balloon) or peels off if the pump survived anyway, the pump that
@@ -116,6 +109,16 @@ export function balloonPatch(beat: Beat, patched: boolean): 'on' | 'spent' | 'to
     default:
       return undefined;
   }
+}
+
+/**
+ * How big the card draws a balloon: by how far up its own ladder it is,
+ * pumps survived out of the pumps this bet can reach (see balloonSize).
+ * The card picks its size here and nowhere else, so a test can check the
+ * very rule the screen uses.
+ */
+export function cardScale(balloon: BalloonView): number {
+  return balloonSize(balloon.rung, balloon.topRung);
 }
 
 /** The big line under a balloon: its multiplier, or how it ended. */
@@ -181,11 +184,12 @@ function SlotLabel({
 
 /**
  * The row under a balloon's numbers that holds its own Pump button. The row
- * is always there, even with no button in it, so a balloon never changes
- * size when its button comes or goes. Once the round is over, a balloon
- * cashed out below its top rung uses the empty row to say, small and grey,
- * where it would have popped (`after`). The two never meet: the button is
- * only for a balloon in play, the line only for one that cashed out.
+ * is always there, even with no button in it (with one balloon in play there
+ * is only the panel's big Pump), so a balloon never changes size when its
+ * button comes or goes. Once the round is over, a balloon cashed out below
+ * its top rung uses the empty row to say, small and grey, where it would
+ * have popped (`after`). The two never meet: the button is only for a
+ * balloon in play, the line only for one that cashed out.
  */
 function SlotAction({
   slot,
@@ -230,13 +234,14 @@ function SlotAction({
 }
 
 /**
- * One balloon in a round: its picture, two lines of numbers and its own
- * Pump button. Cash out and Patch + Pump are in the control panel
- * (RoundControls), which acts on the balloon the player picked; pumping a
- * balloon from its own button picks it too.
+ * One balloon in a round: its picture, two lines of numbers and, while two
+ * or more balloons are in play, its own Pump button. Cash out and Patch + Pump
+ * are in the control panel (RoundControls), which acts on the balloon the
+ * player picked; pumping a balloon from its own button picks it too.
  */
 export function BalloonCard({
   balloon,
+  rtpBp,
   ladder,
   beat,
   patched,
@@ -255,7 +260,6 @@ export function BalloonCard({
   afterRoundShown,
 }: BalloonCardProps) {
   const slot = balloon.index + 1;
-  const topMultiplier = multiplierAt(ladder, balloon.topRung);
   // Only a real gain is celebrated, judged over the whole round: never a
   // round that paid back no more than its bets and Patches.
   const win = balloon.status === 'cashed' && roundWin !== null ? roundWin : undefined;
@@ -277,9 +281,11 @@ export function BalloonCard({
       <div className="balloon-box">
         <Balloon
           slot={slot}
-          scale={balloonScale(balloon.multiplierHundredths, topMultiplier)}
+          scale={cardScale(balloon)}
           beat={balloonBeat(balloon, beat, pending)}
-          strain={balloonStrain(balloon)}
+          // How tense its next pump is within this balloon's own range of
+          // pop chances; the game's press length reads the same number.
+          strain={balloonTension({ rtpBp, ladder }, balloon)}
           patch={balloonPatch(beat, patched)}
           win={artWin}
           top={balloon.rung === balloon.topRung}

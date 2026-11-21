@@ -24,6 +24,14 @@ import type {
 import { afterRoundText } from '../game/afterRound';
 import { centsToInput, formatCents, formatMultiplier, formatSignedCents, parseDollarsToCents } from '../money';
 import { actionsToText, textToActions } from '../verify/actionsText';
+import {
+  hashFieldLabel,
+  hashSource,
+  hashVerdict,
+  noRecordNote,
+  recordHashProblem,
+} from '../verify/hashCheck';
+import { shownHashFor } from '../verify/shownHashes';
 import { screenAgrees, shownReveals } from '../verify/shownReveals';
 
 interface VerifyPageProps {
@@ -56,6 +64,10 @@ function describeFailure(error: unknown): string {
  * engine package the server uses: @pump/engine/fair verifyRound replays each
  * balloon with the engine's own rules and draws from the seeds, and lists
  * every place where the record differs. This page only shows the result.
+ *
+ * The hash "shown before the round" is this browser's own copy, saved when
+ * the round started (verify/shownHashes), not the server's record of it, so
+ * the check can catch a server that lies. Without a copy, the page says so.
  */
 export function VerifyPage({
   client,
@@ -159,17 +171,22 @@ export function VerifyPage({
   );
 }
 
-/** Fetches one round's record, then hands it to the workbench. */
+/**
+ * Fetches one round's record, then hands it to the workbench with the hash
+ * this browser saved before that round, if it has one.
+ */
 function RoundLoader({ client, roundId }: { readonly client: GameClient; readonly roundId: string }) {
   const [loaded, setLoaded] = useState<
-    { readonly record: VerifiableRound } | { readonly error: string } | null
+    | { readonly record: VerifiableRound; readonly shownHash: string | null }
+    | { readonly error: string }
+    | null
   >(null);
 
   useEffect(() => {
     let cancelled = false;
     client.getVerifiableRound(roundId).then(
       (record) => {
-        if (!cancelled) setLoaded({ record });
+        if (!cancelled) setLoaded({ record, shownHash: shownHashFor(record.id) });
       },
       (error: unknown) => {
         if (!cancelled) setLoaded({ error: describeFailure(error) });
@@ -188,7 +205,7 @@ function RoundLoader({ client, roundId }: { readonly client: GameClient; readonl
       </p>
     );
   }
-  return <Workbench key={loaded.record.id} record={loaded.record} />;
+  return <Workbench key={loaded.record.id} record={loaded.record} shownHash={loaded.shownHash} />;
 }
 
 /** The inputs as the player can edit them: all text. */
@@ -202,10 +219,14 @@ interface RoundForm {
   readonly balloons: readonly { readonly bet: string; readonly topRung: string; readonly actions: string }[];
 }
 
-function formFrom(record: VerifiableRound): RoundForm {
+/**
+ * The inputs as recorded. The hash shown before the round is this browser's
+ * own copy when it has one (`shownHash`), and the server's record otherwise.
+ */
+export function formFrom(record: VerifiableRound, shownHash: string | null): RoundForm {
   return {
     serverSeed: record.serverSeed,
-    serverSeedHash: record.serverSeedHash,
+    serverSeedHash: shownHash ?? record.serverSeedHash,
     clientSeed: record.clientSeed,
     nonce: String(record.nonce),
     rtpBp: String(record.rtpBp),
@@ -292,9 +313,16 @@ function check(round: VerifiableRound): RoundCheck | { readonly error: string } 
 }
 
 /** The round's inputs, editable, and the check worked out from them. */
-function Workbench({ record }: { readonly record: VerifiableRound }) {
-  const [form, setForm] = useState<RoundForm>(() => formFrom(record));
-  const edited = JSON.stringify(form) !== JSON.stringify(formFrom(record));
+function Workbench({
+  record,
+  shownHash,
+}: {
+  readonly record: VerifiableRound;
+  /** The hash this browser saved before the round, or null if it has none. */
+  readonly shownHash: string | null;
+}) {
+  const [form, setForm] = useState<RoundForm>(() => formFrom(record, shownHash));
+  const edited = JSON.stringify(form) !== JSON.stringify(formFrom(record, shownHash));
   const built = useMemo(() => roundFrom(form, record), [form, record]);
   const result = useMemo(() => ('round' in built ? check(built.round) : null), [built]);
 
@@ -325,7 +353,7 @@ function Workbench({ record }: { readonly record: VerifiableRound }) {
         <div className="verify-head">
           <h2 id="verify-inputs">The round’s inputs</h2>
           {edited && (
-            <button type="button" className="btn btn-small" onClick={() => setForm(formFrom(record))}>
+            <button type="button" className="btn btn-small" onClick={() => setForm(formFrom(record, shownHash))}>
               Reset to the recorded round
             </button>
           )}
@@ -337,7 +365,7 @@ function Workbench({ record }: { readonly record: VerifiableRound }) {
         </p>
         <div className="verify-grid">
           {field('v-server-seed', 'Server seed (revealed)', form.serverSeed, (v) => setForm({ ...form, serverSeed: v }), true)}
-          {field('v-server-hash', 'Server seed hash (shown before the round)', form.serverSeedHash, (v) => setForm({ ...form, serverSeedHash: v }), true)}
+          {field('v-server-hash', hashFieldLabel(shownHash), form.serverSeedHash, (v) => setForm({ ...form, serverSeedHash: v }), true)}
           {field('v-client-seed', 'Client seed', form.clientSeed, (v) => setForm({ ...form, clientSeed: v }), true)}
           {field('v-nonce', 'Nonce', form.nonce, (v) => setForm({ ...form, nonce: v }))}
           {field('v-rtp', 'RTP (basis points)', form.rtpBp, (v) => setForm({ ...form, rtpBp: v }))}
@@ -371,15 +399,38 @@ function Workbench({ record }: { readonly record: VerifiableRound }) {
           </ul>
         </section>
       ) : (
-        result !== null && 'round' in built && <Results result={result} round={built.round} />
+        result !== null &&
+        'round' in built && (
+          <Results
+            result={result}
+            round={built.round}
+            shownHash={shownHash}
+            recordHash={record.serverSeedHash}
+          />
+        )
       )}
     </>
   );
 }
 
-function Results({ result, round }: { readonly result: RoundCheck; readonly round: VerifiableRound }) {
+function Results({
+  result,
+  round,
+  shownHash,
+  recordHash,
+}: {
+  readonly result: RoundCheck;
+  readonly round: VerifiableRound;
+  /** The hash this browser saved before the round, or null if it has none. */
+  readonly shownHash: string | null;
+  /** The server's record of that hash. */
+  readonly recordHash: string;
+}) {
   const computedHash = isServerSeed(round.serverSeed) ? hashServerSeed(round.serverSeed) : null;
   const anyReveal = result.balloons.some((b) => b.afterRound !== null);
+  // The server's record naming another hash than this browser saved is a
+  // problem with the record itself, whatever the inputs say.
+  const recordProblem = recordHashProblem(shownHash, recordHash);
   // The reveal lines this device's screen showed and the seeds disagree with.
   // verifyRound checks the record; only this device knows what it showed.
   const screenProblems = result.balloons.flatMap((b) => {
@@ -391,8 +442,14 @@ function Results({ result, round }: { readonly result: RoundCheck; readonly roun
         : `worked out from the seeds it is “${describeReveal(b.afterRound, cashedRung(b, round), round.ladder)}”`;
     return [`Balloon ${b.balloonIndex + 1}: after the round this device showed “${screen.words}”, but ${truth}.`];
   });
-  const ok = result.ok && screenProblems.length === 0;
-  const problems = [...result.problems, ...screenProblems];
+  const recordOk = result.ok && recordProblem === null;
+  const ok = recordOk && screenProblems.length === 0;
+  const problems = [
+    ...(recordProblem === null ? [] : [recordProblem]),
+    ...result.problems,
+    ...screenProblems,
+  ];
+  const note = noRecordNote(shownHash);
   return (
     <>
       <section
@@ -405,7 +462,7 @@ function Results({ result, round }: { readonly result: RoundCheck; readonly roun
             ? `✓ This round checks out. Every pump, worked out again from the seeds, gives exactly what was recorded and paid${
                 anyReveal ? ', and so does where each cashed-out balloon would have popped' : ''
               }.`
-            : result.ok
+            : recordOk
               ? '✗ This round does not match what this device showed.'
               : '✗ This round does not match what was recorded.'}
         </strong>
@@ -424,10 +481,9 @@ function Results({ result, round }: { readonly result: RoundCheck; readonly roun
           SHA-256 of the server seed: <code>{computedHash ?? '—'}</code>
         </p>
         <p className="verify-line" data-ok={result.seedHashMatches}>
-          {result.seedHashMatches
-            ? '✓ Same as the hash shown before the round, so the seed was fixed before you played.'
-            : '✗ Not the hash shown before the round.'}
+          {hashVerdict(hashSource(round.serverSeedHash, shownHash, recordHash), result.seedHashMatches)}
         </p>
+        {note !== null && <p className="hint">{note}</p>}
       </section>
 
       {result.balloons.map((b) => (

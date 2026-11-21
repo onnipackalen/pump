@@ -5,6 +5,7 @@ import type {
   CashOutBody,
   FairnessView,
   HistoryResponse,
+  PlayerStats,
   PumpBody,
   PumpResult,
   RotateResult,
@@ -155,6 +156,10 @@ export class HttpClient implements GameClient {
       `/api/history?limit=${String(limit)}`,
     );
     return answer.rounds;
+  }
+
+  getStats(): Promise<PlayerStats> {
+    return this.asPlayer('GET', '/api/stats');
   }
 
   startRound(request: StartRoundRequest, key: string): Promise<ActionResult> {

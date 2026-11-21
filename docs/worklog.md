@@ -1048,3 +1048,187 @@ hand, and an upgrade: a database made by main's own code (hammer rounds plus
 a round left in play) opened by the merged server. The open round finished
 with its reveals stored, all 55 old rounds pass `verifyRound`, and reconcile
 is clean.
+## 2026-11-20: upright tablets get the stacked layout
+
+The user's call: "Yes, fix tablets". One CSS change in `styles.css`.
+
+- Every screen that is taller than it is wide now has the stage on top at
+  full width and the panel underneath. Before, only screens up to 760 px
+  wide did; an upright tablet got the side panel, which left the stage a
+  narrow strip with half of it empty sky. On a tablet the panel keeps a
+  phone's width (560 px) in the middle, so its buttons don't stretch.
+- The two outer balloon pictures get side room that grows with the screen.
+
+At 768x1024 with three balloons a picture went from 203x325 px to 287x459
+on the bet screen and 359x574 in a round.
+
+Checked on the real server with the size check: 36 sizes (the earlier ones
+plus 761x1000, 810x1080, 820x1180, 834x1194, 900x1200, 1024x1366 and four
+large upright windows), five states with three balloons (a live round, a
+finished round, the bet screen with every bet capped, the Auto tab,
+auto-play running). 35 sizes: nothing scrolls, nothing is off screen, no
+text is cut, the pumps stand on the floor. The one left is still 568x320.
+
+Turned out wrong, and how it was caught:
+
+- With the stage at a tablet's full width, the right-hand pump's shadow was
+  cut by about 6 px at the screen's edge. A picture may be one and a half
+  slots wide, so what is drawn reaches past its slot by an amount that
+  grows with the picture, while the room at the screen's edge was a fixed
+  8 px. On phones it had fitted by 1 to 2 px, by luck. Caught by the size
+  check's rule that no art may pass the screen edge. The check now uses
+  where the drawing really ends (14% and 87% across the picture), and the
+  side room is 2.8% of the stage's width.
+- That side room first shrank the pictures on a wide desktop by 8%, where
+  the balloons already have wide empty margins. Caught by comparing picture
+  sizes before and after in the same check (762 px became 704 px at
+  1920x1080). The margins now count as that room.
+- The first cut-off, "upright and at most 1100 px wide", left a window of
+  1101x1400 with the old half-empty layout. Caught by testing one pixel
+  past the limit. The rule is now just "upright".
+
+Not changed: a very large upright screen (1440x2560) shows the balloons at
+their largest size (762 px) with sky above them. The balloons stop growing
+at 960 px of stage width on every screen.
+
+## 2026-11-20: the stats page (branch `stats-page`)
+
+Built the brief's optional stats page: profit over time, best win, rounds
+by difficulty. It opens from settings ("Your results" → Stats) at `#stats`.
+
+- Server: `GET /api/stats` (contract type `PlayerStats`). A repository
+  query sums each finished round; `services/stats.ts` adds them up in a
+  pure `summarize` function. No game rule lives there: it only counts money
+  the game already settled.
+- What counts: bets played, Patches bought, payouts. A bet handed back by
+  the 24-hour rule is void and left out, the same as in the RTP figures; a
+  round whose bets were all handed back is not counted as a round.
+- Best win is the round with the biggest gain (payout minus bets and
+  Patches). A round that only got its money back, or less, is never called
+  a win. On a tie the earlier round keeps it. It shows its top multiplier
+  and opens on the verify page once its seed is revealed.
+- The profit line keeps every round up to 300. Past that it keeps the
+  lowest, highest and last point of each of 100 groups, so the overall peak
+  and dip and the latest round are always on the chart.
+- Screen: four headline numbers, one line chart (pointer or arrow keys show
+  the net after any round), the best win, a table by difficulty. Mint only
+  for a real gain. Like the verify page it scrolls inside its own box; the
+  game screen still never scrolls.
+
+Checked: 25 server tests, including 40 rounds of real play at RTP 9400,
+9700 and 9900 where the stats' net equals the wallet's change and the
+wagered and paid-out totals equal the ledger's, and the real 24-hour rule
+at all three RTPs: a round refunded unplayed shows as nothing at all, and
+after a pump only the pumped balloon counts. In the browser, 150 rounds
+played on a local server: net +$25.74 on the page and in the wallet, the
+best win's Verify button opened that round and it checked out, no console
+errors, no sideways scroll at 375x812 or 320x568.
+
+Turned out wrong, and how it was caught:
+
+- The first bars in the difficulty table were measured against the wrong
+  width, so a bar for half the rounds was not half as long. Caught on
+  re-reading the CSS before the first run; each bar now sits in its own
+  track.
+- The headline numbers cut a long amount short with "…" on a 320 px phone.
+  Caught by putting a seven-figure amount into the tiles at that size. They
+  now shrink and wrap only after a thousands comma.
+- One test check ("some round has the top gain") could never fail. Caught
+  on reading the test back; it now names the exact round.
+- A new 24-hour test first expected "no best win" for a round where one
+  balloon cashed out at 1.04x and the other bet was refunded. That was the
+  test's mistake: $10.40 back on the $10 really played is a real win; only
+  counting the refunded $5 as stake would make it a loss. Caught when the
+  test failed against the code; the test now expects the win.
+- The browser tool's hover and click did not move the chart's readout,
+  which looked like a bug. Real pointer and key events did move it; the
+  tool moves the pointer off the chart right after a click.
+## 2026-11-20: the Pump row stays through a round
+
+Found while running the size check on the merge coordinator's batch before
+it was committed (its files were copied into this branch's working folder;
+main was only read).
+
+- The batch hides a balloon's own Pump button when only one balloon is
+  still in play. The layout's rule for upright screens closed the button
+  row whenever no balloon had such a button. Together: in a round of two
+  or three, when the second-last balloon ended, the row closed and the
+  floor, the pumps and the last live balloon dropped 54 px mid-round.
+  Measured at 375x812: the horizon moved from 491 to 545 px.
+- The rule now says when the row is not needed at all: no balloon in play
+  (before a round, after it), a round of one balloon, or auto-play running.
+  In a round of two or three played by hand the row stays to the end.
+
+Checked with the batch and the fix together: 36 sizes, eight states with
+the new one "round of three down to its last balloon". At every size the
+picture and the horizon are the same with three balloons in play as with
+one left. The row was also watched at 375x812 through a one-balloon round
+(closed all the way), a three-balloon round (open all the way) and six
+looks during auto-play across rounds and the gaps between them (closed all
+the way). 35 sizes pass every state; the one left is still 568x320.
+
+Turned out wrong, and how it was caught:
+
+- The size check passed the batch at first, because it had no state for a
+  round that is down to its last balloon. The clash was caught by reading
+  the batch's rule for the button (`showOwnPump`) next to the layout's
+  rule, then measuring. The check now has that state, and compares the
+  stage with three balloons in play against the stage with one left.
+- The first rule ("closed when no balloon has a button") described a side
+  effect, not the reason. It broke as soon as another change gave the
+  button a second reason to be absent. The new rule names the cases.
+## 2026-11-20: the game is made ready for a live site on Render
+
+Built:
+
+- `render.yaml`: Render sets the whole site up from this file. One web
+  service, one 1 GB disk at `/var/data`, Node 26, one copy of the server,
+  the database at `/var/data/pump.db`, and a deploy only after the checks
+  on GitHub pass. Each setting was read against Render's own pages today.
+- `apps/server/src/db/location.ts`: on a host the server will not start
+  unless `DATABASE_PATH` is set and its folder is already there, and the
+  server no longer makes that folder itself. Every wallet is in that one
+  file, and a host keeps only its attached disk across deploys.
+- The server's start line in the log now says whether it opened an
+  existing database file (and how many players are in it) or made a new,
+  empty one.
+- `tsx` is now a dependency of the server: it is the start command.
+
+How the host was chosen: five options were researched at today's prices
+(Fly.io, Render, Railway, a rented server, Northflank), each by one reader
+and then checked by a second against the official pages. Render costs
+about $7.25 a month and was picked because it never sleeps, the disk is
+set up from a file in the repo, and it deploys from GitHub.
+
+Turned out wrong, and how it was caught (four reviewers, each finding then
+attacked by a second reader; one reviewer ran everything Render will run,
+in a clean copy):
+
+- The old `openDatabase` made the database folder if it was missing. With
+  a mistyped path or a disk that was not attached, the server would have
+  started happily on the throwaway disk and lost every wallet at the next
+  deploy. Seen while writing the guard; now a refusal with the reason.
+- Started through `npm run start`, the server was three processes deep.
+  The tsx launcher waits about 30 ms for the server to answer a stop
+  signal and then kills it, so under load the clean close of the database
+  did not always run. No money was lost in any of 26 trials (SQLite
+  recovers), but `render.yaml` now starts the server directly, the way the
+  hammer test already does, and the stop handler ignores a second signal
+  instead of dying on it.
+- A `DATABASE_PATH` that named a folder died with SQLite's bare "unable
+  to open database file". The error now names the path and says why.
+- The README told the owner to look for "a disk named pump-data". Render
+  does not show a disk's name. It also read as if the daily disk snapshot
+  were a backup; Render itself warns against restoring a database that
+  way. Both reworded, and the steps now say what to check after the
+  first deploy.
+
+Known and left as it is: the guard proves that the folder exists, not
+that it is the disk. With `render.yaml` unchanged that cannot go wrong. A
+check for "is a mount point" was turned down for now, because it cannot
+be tried on Render before going live and a wrong refusal would take the
+site down. The log line and the "deploy again and see the same balance"
+step in the README cover it.
+
+Not done by anyone yet: the deploy itself. Nothing here has run on
+Render; the dry run was on a Mac. The first deploy is the real test.

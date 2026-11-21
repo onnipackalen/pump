@@ -1,3 +1,4 @@
+import { GAME_CONFIG } from '@pump/engine';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -76,6 +77,7 @@ describe('BalloonCard', () => {
     return renderToStaticMarkup(
       createElement(BalloonCard, {
         balloon: view,
+        rtpBp: GAME_CONFIG.rtpBp,
         // Any rising ladder with 10 rungs: the card only sizes the art from it.
         ladder: Array.from({ length: 10 }, (_, i) => 200 + 100 * i),
         beat: 'idle',
