@@ -766,7 +766,7 @@ pump, cash-out, a refresh mid-round, a second tab acting on an
 out-of-date screen (409, no double pay), seed rotation, and the verify
 page on the finished round. No answer held a result before its pump.
 
-Left open, all in the screen and handed to its chat: a round closed by
+Left open, all in the screen, for its chat to fix: a round closed by
 the 24-hour rule shows a refunded bet as lost; "next round uses nonce N"
 does not move after a round; the screen does not start over by itself
 after a lost session; before a bet the screen shows the RTP and ladders
