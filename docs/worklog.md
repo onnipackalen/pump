@@ -1055,3 +1055,38 @@ Turned out wrong, and how it was caught:
 Not changed: a very large upright screen (1440x2560) shows the balloons at
 their largest size (762 px) with sky above them. The balloons stop growing
 at 960 px of stage width on every screen.
+
+## 2026-11-20: the Pump row stays through a round
+
+Found while running the size check on the merge coordinator's batch before
+it was committed (its files were copied into this branch's working folder;
+main was only read).
+
+- The batch hides a balloon's own Pump button when only one balloon is
+  still in play. The layout's rule for upright screens closed the button
+  row whenever no balloon had such a button. Together: in a round of two
+  or three, when the second-last balloon ended, the row closed and the
+  floor, the pumps and the last live balloon dropped 54 px mid-round.
+  Measured at 375x812: the horizon moved from 491 to 545 px.
+- The rule now says when the row is not needed at all: no balloon in play
+  (before a round, after it), a round of one balloon, or auto-play running.
+  In a round of two or three played by hand the row stays to the end.
+
+Checked with the batch and the fix together: 36 sizes, eight states with
+the new one "round of three down to its last balloon". At every size the
+picture and the horizon are the same with three balloons in play as with
+one left. The row was also watched at 375x812 through a one-balloon round
+(closed all the way), a three-balloon round (open all the way) and six
+looks during auto-play across rounds and the gaps between them (closed all
+the way). 35 sizes pass every state; the one left is still 568x320.
+
+Turned out wrong, and how it was caught:
+
+- The size check passed the batch at first, because it had no state for a
+  round that is down to its last balloon. The clash was caught by reading
+  the batch's rule for the button (`showOwnPump`) next to the layout's
+  rule, then measuring. The check now has that state, and compares the
+  stage with three balloons in play against the stage with one left.
+- The first rule ("closed when no balloon has a button") described a side
+  effect, not the reason. It broke as soon as another change gave the
+  button a second reason to be absent. The new rule names the cases.
