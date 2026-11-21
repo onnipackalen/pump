@@ -923,3 +923,44 @@ step can win was offered twice and not taken up, so it is not being done.
 What the review found stays true and is shown in the open: the largest
 single Patch is $25,773.20 (Hard, $500 bet, pump 13), and the price is on
 the button before the player buys.
+
+## 2026-11-20: hostile critique of the gameplay and graphics, and two merges
+
+From the "hostile agents critique" chat.
+
+What was done:
+- Five critic agents reviewed the live game and its code: a veteran
+  player, the studio's design lead, a gambling regulator, an exploit
+  hunter and an art director. Each had to point to a file, a screenshot
+  or a number it worked out. Scores: feel 4/10, design 5/10, player
+  protection 4/10, graphics 4/10, the server on its own 9/10.
+- Every claim passed on was checked against the code first. At the
+  user's word the fixes went to the chats that hold the files: "Agents
+  finishing" (balloon looks, strain, hold and cash-out, bet panel,
+  auto-play hint, verify hash), "Hostile agent game fix" (round panel,
+  Shift+P, Patch button, Game info text, RTP-check note), "Maths game
+  design" (Easy ladder and Patch limit, design only), "Game background
+  design" (floor and phone stage) and "Game graphics list" (pump art).
+- Merged critique-fixes (f236442) and one-screen-layout (7a2d764) on the
+  user's "Merge both". In a clean copy of the merged main, 1072 tests,
+  lint, typecheck and build passed, and a 3-balloon round against the
+  real server showed the real total bet, Cash out all paying $3.03 for
+  three 1.01x balloons, and the pumps standing on the floor.
+
+Turned out wrong, and how it was caught:
+- The two worst findings (the game ran only in the browser; the server's
+  verify answer failed the verify page) were already fixed by the time
+  the critics reported (320634a, e05258a): another chat changed the same
+  code during the review. Caught by re-running the exploit critic's own
+  probe on current main, where it passed.
+- I first told "Takehome originals pump" that the uncommitted
+  balloon.css, risk.ts and useGame.ts edits were its own. They belonged
+  to "Agents finishing". Caught when "Hostile agent game fix" asked every
+  chat what it held; a correction went out before anyone started.
+- The critique leaned on the rule "No 'would have popped' reveal". It is
+  not in the brief or CLAUDE.md, only in graphics/README.md (untracked,
+  written by the graphics chat), and it contradicts the reveal being
+  built on branch cashout-reveal. The Patch-save item that rested on it
+  is on hold until the user decides.
+- A UK rule (at least 5 s between rounds) was cited. The user ruled UK
+  rules out of scope, so it is not being built.
