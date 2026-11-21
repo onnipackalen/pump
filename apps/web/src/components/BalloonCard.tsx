@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { BalloonView, PumpOutcome } from '../api/contract';
 import { Balloon, balloonSize, type BalloonBeat } from '../balloon/Balloon';
-import { afterRoundLine, twoLineChars } from '../game/afterRound';
+import { afterRoundWords, twoLineChars, type AfterRoundWords } from '../game/afterRound';
 import type { Beat } from '../game/useGame';
 import { balloonTension } from '../game/risk';
 import { balloonSetUp, type SetUpFrom } from '../game/setUp';
@@ -203,19 +203,27 @@ function SlotAction({
 }: {
   readonly slot: number;
   readonly show: boolean;
-  readonly after?: string | null;
+  readonly after?: AfterRoundWords | null;
   readonly onPump: () => void;
   readonly onPumpHold: () => void;
 }) {
   return (
     <div className="slot-action">
       {!show && after !== null && (
+        // Both wordings are written; the CSS shows the short one only in a
+        // slot too narrow for the full one. The full one is the title.
         <p
           className="slot-after"
-          style={{ '--after-chars': twoLineChars(after) } as CSSProperties}
-          title={after}
+          style={
+            {
+              '--after-full-chars': twoLineChars(after.full),
+              '--after-short-chars': twoLineChars(after.short),
+            } as CSSProperties
+          }
+          title={after.full}
         >
-          {after}
+          <span className="after-full">{after.full}</span>
+          <span className="after-short">{after.short}</span>
         </p>
       )}
       {show && (
@@ -270,7 +278,7 @@ export function BalloonCard({
   // The art plays the win once; the label keeps its win colour.
   const artWin = winShown ? undefined : win;
   // Where it would have popped: only once the round is over and still.
-  const after = afterRoundShown ? afterRoundLine(balloon) : null;
+  const after = afterRoundShown ? afterRoundWords(balloon) : null;
 
   return (
     <article

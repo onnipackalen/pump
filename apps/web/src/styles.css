@@ -497,8 +497,13 @@ body {
  * lines, sized by the longer one (--after-chars) so it fits a ~110 px slot
  * on a phone; at the 9px floor it may take a third line, which still fits
  * the row (3 x 9px x 1.2 < the smallest --tap, 36px).
+ *
+ * A narrower slot (three balloons on a phone on its side, about 67 px)
+ * would need four lines, which spill up onto the numbers. There the line
+ * says the same in fewer words (afterRoundShortText): two or three lines.
  */
 .slot-after {
+  --after-chars: var(--after-full-chars);
   align-self: center;
   max-width: 100%;
   margin: 0;
@@ -508,6 +513,22 @@ body {
   text-align: center;
   text-wrap: balance;
   overflow-wrap: anywhere;
+}
+
+.after-short {
+  display: none;
+}
+
+@container (max-width: 104px) {
+  .slot-after {
+    --after-chars: var(--after-short-chars);
+  }
+  .after-full {
+    display: none;
+  }
+  .after-short {
+    display: inline;
+  }
 }
 
 .slot-label {
