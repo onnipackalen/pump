@@ -65,7 +65,7 @@ const db = openOrExplain();
 migrate(db);
 
 // What this market allows, for example PUBLIC_WINS=off. See features.ts.
-const market = featuresFromEnv(process.env);
+const market = featuresFromEnv(process.env, runningOnHost(process.env));
 const runtime = systemRuntime(db, market.features);
 const app = buildApp({ runtime, logger: true, ...(webRoot === undefined ? {} : { webRoot }) });
 for (const warning of market.warnings) app.log.warn(warning);
@@ -73,7 +73,9 @@ for (const warning of market.warnings) app.log.warn(warning);
 // mistyped entry on a host is then seen in the log, not found out later.
 app.log.info(
   `public wins: ${market.features.publicWins ? 'ON' : 'OFF'} (PUBLIC_WINS ${
-    process.env.PUBLIC_WINS === undefined ? 'is not set' : `is "${process.env.PUBLIC_WINS}"`
+    process.env.PUBLIC_WINS === undefined
+      ? `is not set, which means ${runningOnHost(process.env) ? 'off on a host' : 'on away from a host'}`
+      : `is "${process.env.PUBLIC_WINS}"`
   })`,
 );
 // Said at every start, so a host's log shows where the wallets are kept and
