@@ -1,69 +1,58 @@
-import { GAME_CONFIG } from "@pump/engine";
-import { useEffect, useRef, useState } from "react";
-import { gameClient } from "./api";
-import type { RoundView } from "./api/contract";
-import { AutoPlayPanel } from "./components/AutoPlayPanel";
-import { BalloonCard, PreviewCard } from "./components/BalloonCard";
-import { BetPanel, shownTopRung, typedBetCents } from "./components/BetPanel";
-import { FairnessPanel } from "./components/FairnessPanel";
-import { GameInfo } from "./components/GameInfo";
-import { History } from "./components/History";
-import { RoundControls } from "./components/RoundControls";
-import { SettingsMenu } from "./components/SettingsMenu";
-import { SoundToggle } from "./components/SoundToggle";
-import { VerifyPage } from "./components/VerifyPage";
-import type { AutoPlaySettings } from "./game/autoPlay";
-import { checkBets, type BetSetup } from "./game/betSetup";
-import {
-  controlTarget,
-  panelActivity,
-  showOwnPump,
-  SWITCH_PAUSE_MS,
-} from "./game/controls";
-import { useAutoPlay } from "./game/useAutoPlay";
-import { useGame, type GameEvent } from "./game/useGame";
-import { useHoldPump } from "./game/useHoldPump";
-import { useSetUpFrom } from "./game/setUp";
-import { useSessionClock } from "./game/useSessionClock";
+import { GAME_CONFIG } from '@pump/engine';
+import { useEffect, useRef, useState } from 'react';
+import { gameClient } from './api';
+import type { RoundView } from './api/contract';
+import { AutoPlayPanel } from './components/AutoPlayPanel';
+import { BalloonCard, PreviewCard } from './components/BalloonCard';
+import { BetPanel, shownTopRung, typedBetCents } from './components/BetPanel';
+import { FairnessPanel } from './components/FairnessPanel';
+import { GameInfo } from './components/GameInfo';
+import { History } from './components/History';
+import { RoundControls } from './components/RoundControls';
+import { SettingsMenu } from './components/SettingsMenu';
+import { SoundToggle } from './components/SoundToggle';
+import { VerifyPage } from './components/VerifyPage';
+import type { AutoPlaySettings } from './game/autoPlay';
+import { checkBets, type BetSetup } from './game/betSetup';
+import { controlTarget, panelActivity, showOwnPump, SWITCH_PAUSE_MS } from './game/controls';
+import { useAutoPlay } from './game/useAutoPlay';
+import { useGame, type GameEvent } from './game/useGame';
+import { useHoldPump } from './game/useHoldPump';
+import { useSetUpFrom } from './game/setUp';
+import { useSessionClock } from './game/useSessionClock';
 import {
   roundPayoutCents,
   roundRefundedCents,
   roundStakeCents,
   roundWinTier,
-} from "./game/winTier";
-import { market } from "./market";
-import {
-  formatCents,
-  formatElapsed,
-  formatSignedCents,
-  parseDollarsToCents,
-} from "./money";
-import { useMotionSetting } from "./motion";
-import { shownReveals } from "./verify/shownReveals";
-import { cuesFor } from "./sound/cues";
-import { soundBoard } from "./sound/SoundBoard";
-import { LiveStats, LiveStatsOpener } from "./stats/LiveStats";
-import { StatsPage } from "./stats/StatsPage";
-import { useLiveStats } from "./stats/useLiveStats";
+} from './game/winTier';
+import { market } from './market';
+import { formatCents, formatElapsed, formatSignedCents, parseDollarsToCents } from './money';
+import { useMotionSetting } from './motion';
+import { shownReveals } from './verify/shownReveals';
+import { cuesFor } from './sound/cues';
+import { soundBoard } from './sound/SoundBoard';
+import { LiveStats, LiveStatsOpener } from './stats/LiveStats';
+import { StatsPage } from './stats/StatsPage';
+import { useLiveStats } from './stats/useLiveStats';
 
 const config = GAME_CONFIG;
 
 /** How the next round is played: by hand, or by auto-play. */
-type Mode = "manual" | "auto";
+type Mode = 'manual' | 'auto';
 
 /** Which screen is showing. The verify page lives at #verify, the stats at #stats. */
-type View = "game" | "verify" | "stats";
+type View = 'game' | 'verify' | 'stats';
 
 function viewFromHash(): View {
-  if (window.location.hash === "#verify") return "verify";
-  if (window.location.hash === "#stats") return "stats";
-  return "game";
+  if (window.location.hash === '#verify') return 'verify';
+  if (window.location.hash === '#stats') return 'stats';
+  return 'game';
 }
 
 /** Every game event goes to the speaker; cuesFor decides what it sounds like. */
 function playEventSound(event: GameEvent): void {
-  for (const toPlay of cuesFor(event))
-    soundBoard.play(toPlay.cue, toPlay.height, toPlay.delay);
+  for (const toPlay of cuesFor(event)) soundBoard.play(toPlay.cue, toPlay.height, toPlay.delay);
 }
 
 function isTyping(target: EventTarget | null): boolean {
@@ -78,9 +67,8 @@ function isTyping(target: EventTarget | null): boolean {
 function isControl(target: EventTarget | null): boolean {
   return (
     target instanceof Element &&
-    target.closest(
-      'button, summary, a[href], [role="button"], [role="radio"], [role="switch"]',
-    ) !== null
+    target.closest('button, summary, a[href], [role="button"], [role="radio"], [role="switch"]') !==
+      null
   );
 }
 
@@ -90,13 +78,7 @@ function nothingFocused(target: EventTarget | null): boolean {
 }
 
 /** Taps unlock sound when the finger lifts; mouse and keys unlock it at once. */
-const UNLOCK_EVENTS = [
-  "pointerdown",
-  "pointerup",
-  "touchend",
-  "click",
-  "keydown",
-] as const;
+const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'] as const;
 
 /**
  * The whole game on one screen that never scrolls: a top bar, the balloons,
@@ -110,37 +92,31 @@ export function App() {
   const [chosen, setChosen] = useState(0);
   // True for a moment after the controls moved on (SWITCH_PAUSE_MS).
   const [switchPause, setSwitchPause] = useState(false);
-  const pauseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
+  const pauseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(pauseTimer.current), []);
 
   const onGameEvent = (event: GameEvent): void => {
     playEventSound(event);
     // The picked balloon just popped or cashed out: move the controls to the
     // next one still in play, and pause them for a moment.
-    if (event.kind !== "pump" && event.kind !== "cash-out") return;
-    if (event.balloon.status === "active" || event.balloon.index !== chosen)
-      return;
+    if (event.kind !== 'pump' && event.kind !== 'cash-out') return;
+    if (event.balloon.status === 'active' || event.balloon.index !== chosen) return;
     const next = controlTarget(event.round, chosen);
     if (next === null) return;
     setChosen(next);
     clearTimeout(pauseTimer.current);
     setSwitchPause(true);
-    pauseTimer.current = setTimeout(
-      () => setSwitchPause(false),
-      SWITCH_PAUSE_MS,
-    );
+    pauseTimer.current = setTimeout(() => setSwitchPause(false), SWITCH_PAUSE_MS);
   };
 
   const game = useGame(gameClient, onGameEvent);
   const { state } = game;
   const autoPlay = useAutoPlay(game.actions);
   const [setup, setSetup] = useState<BetSetup>({
-    difficultyId: config.difficulties[0]?.id ?? "",
-    bets: ["1.00"],
+    difficultyId: config.difficulties[0]?.id ?? '',
+    bets: ['1.00'],
   });
-  const [mode, setMode] = useState<Mode>("manual");
+  const [mode, setMode] = useState<Mode>('manual');
   const [muted, setMuted] = useState(soundBoard.muted);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [view, setView] = useState<View>(viewFromHash);
@@ -151,19 +127,15 @@ export function App() {
   const round = state.round;
   // How the balloons before this round ended, so each new pump sets up
   // from the picture that was in its place (game/setUp.ts).
-  const setUp = useSetUpFrom(
-    round,
-    state.phase !== "loading" && round === null,
-    view === "game",
-  );
-  const roundActive = round?.status === "active";
+  const setUp = useSetUpFrom(round, state.phase !== 'loading' && round === null, view === 'game');
+  const roundActive = round?.status === 'active';
   const roundWin = round ? roundWinTier(round) : null;
   // Where each cashed-out balloon would have popped: only once the round is
   // over and every balloon's last motion has finished, so it never shows
   // during play or over a pop, cash-out or win.
   const afterRoundShown =
-    round?.status === "finished" &&
-    state.beats.every((beat) => beat === "idle") &&
+    round?.status === 'finished' &&
+    state.beats.every((beat) => beat === 'idle') &&
     !state.pending.some(Boolean);
   // Keep the lines as they go on screen, so the verify page can check later
   // that the round's record says the same.
@@ -185,39 +157,32 @@ export function App() {
   const balance = state.wallet?.balanceCents ?? 0;
   const check = checkBets(setup, config.limits, balance);
   const target = autoRunning ? null : controlTarget(round, chosen);
-  const targetBalloon =
-    target === null ? null : (round?.balloons[target] ?? null);
+  const targetBalloon = target === null ? null : (round?.balloons[target] ?? null);
   const setupDifficulty =
-    config.difficulties.find((d) => d.id === setup.difficultyId) ??
-    config.difficulties[0];
-  const autoOffered =
-    market.autoPlay && setupDifficulty !== undefined && state.phase === "ready";
+    config.difficulties.find((d) => d.id === setup.difficultyId) ?? config.difficulties[0];
+  const autoOffered = market.autoPlay && setupDifficulty !== undefined && state.phase === 'ready';
   // Whether auto-play may change the bets after a win or a loss (market.ts).
   const autoBetSizing = market.autoPlay && market.autoBetSizing;
   // The top the entered bets can reach, the same one the bet panel's info
   // line shows: the auto-play panel says where its pump count stops.
   const autoTopRung = setupDifficulty
-    ? shownTopRung(
-        setupDifficulty.ladder,
-        typedBetCents(setup, check),
-        config.limits.maxPayoutCents,
-      )
+    ? shownTopRung(setupDifficulty.ladder, typedBetCents(setup, check), config.limits.maxPayoutCents)
     : 0;
   // What the panel shows: Stop while auto-play runs, the round's buttons
   // during a round played by hand, and the bet otherwise.
-  const panel = autoRunning ? "auto-running" : roundActive ? "round" : "bet";
+  const panel = autoRunning ? 'auto-running' : roundActive ? 'round' : 'bet';
   // This visit's live stats, counted from the game as the screen shows it.
   const liveStats = useLiveStats(
     state,
-    panel === "auto-running" ? "auto-play" : panel === "round" ? "round" : null,
+    panel === 'auto-running' ? 'auto-play' : panel === 'round' ? 'round' : null,
   );
   // The balloons still in play in a round played by hand.
   const live =
-    panel === "round" && round
-      ? round.balloons.filter((b) => b.status === "active").map((b) => b.index)
+    panel === 'round' && round
+      ? round.balloons.filter((b) => b.status === 'active').map((b) => b.index)
       : [];
   // Holding a Pump button, Space or A keeps pumping.
-  const hold = useHoldPump(round, state.pending, game.pump, panel === "round");
+  const hold = useHoldPump(round, state.pending, game.pump, panel === 'round');
 
   /**
    * Pump all: one ordinary pump per balloon still in play, each its own
@@ -237,7 +202,7 @@ export function App() {
     hold.stop();
     if (!round) return;
     for (const balloon of round.balloons) {
-      if (balloon.status === "active" && balloon.cashOutCents !== null) {
+      if (balloon.status === 'active' && balloon.cashOutCents !== null) {
         game.cashOut(balloon.index);
       }
     }
@@ -256,10 +221,10 @@ export function App() {
   };
 
   const holdOne = (index: number): void => {
-    if (round) hold.start({ kind: "one", roundId: round.id, index }, "pointer");
+    if (round) hold.start({ kind: 'one', roundId: round.id, index }, 'pointer');
   };
   const holdAll = (): void => {
-    if (round) hold.start({ kind: "all", roundId: round.id }, "pointer");
+    if (round) hold.start({ kind: 'all', roundId: round.id }, 'pointer');
   };
 
   const start = (): void => {
@@ -269,8 +234,7 @@ export function App() {
   };
 
   const startAutoPlay = (settings: AutoPlaySettings): void => {
-    if (!check.betsCents || roundActive || autoRunning || state.starting)
-      return;
+    if (!check.betsCents || roundActive || autoRunning || state.starting) return;
     setChosen(0);
     autoPlay.start({
       settings,
@@ -294,22 +258,22 @@ export function App() {
   const openVerify = (roundId: string | null): void => {
     setVerifyRoundId(roundId);
     setSettingsOpen(false);
-    window.location.hash = "verify";
+    window.location.hash = 'verify';
   };
   const closeVerify = (): void => {
-    window.location.hash = "";
+    window.location.hash = '';
   };
   /** Opens the stats page. Back returns to the game. */
   const openStats = (): void => {
     setSettingsOpen(false);
-    window.location.hash = "stats";
+    window.location.hash = 'stats';
   };
 
   // The browser's own Back and Forward move between the game, #verify and #stats.
   useEffect(() => {
     const onHashChange = (): void => setView(viewFromHash());
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
   const toggleSound = (): void => {
@@ -321,11 +285,9 @@ export function App() {
   // this runs before any button's own handler.
   useEffect(() => {
     const unlock = (): void => soundBoard.unlock();
-    for (const name of UNLOCK_EVENTS)
-      window.addEventListener(name, unlock, true);
+    for (const name of UNLOCK_EVENTS) window.addEventListener(name, unlock, true);
     return () => {
-      for (const name of UNLOCK_EVENTS)
-        window.removeEventListener(name, unlock, true);
+      for (const name of UNLOCK_EVENTS) window.removeEventListener(name, unlock, true);
     };
   }, []);
 
@@ -338,102 +300,78 @@ export function App() {
   // While settings is open, no key plays the game: Esc closes the sheet.
   useEffect(() => {
     function onKeyUp(event: KeyboardEvent): void {
-      if (event.key === " " || event.key === "a" || event.key === "A")
-        hold.stop();
+      if (event.key === ' ' || event.key === 'a' || event.key === 'A') hold.stop();
     }
     function onKeyDown(event: KeyboardEvent): void {
       if (settingsOpen) return;
-      if (
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        isTyping(event.target)
-      )
-        return;
-      if (event.key === "Escape") {
+      if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
+      if (event.key === 'Escape') {
         if (autoRunning) autoPlay.stop();
         return;
       }
       // The verify and stats pages are for reading: no key there plays the game.
-      if (view !== "game") return;
-      if (event.key === "m" || event.key === "M") {
+      if (view !== 'game') return;
+      if (event.key === 'm' || event.key === 'M') {
         if (!event.repeat) toggleSound();
         return;
       }
       // Space and Enter on a focused button press that button (Stop, Sound,
       // Cash out...), never something else.
-      if (
-        (event.key === " " || event.key === "Enter") &&
-        isControl(event.target)
-      )
-        return;
+      if ((event.key === ' ' || event.key === 'Enter') && isControl(event.target)) return;
       if (autoRunning) {
-        if (event.key === " ") event.preventDefault();
+        if (event.key === ' ') event.preventDefault();
         return;
       }
       switch (event.key) {
-        case " ":
+        case ' ':
           event.preventDefault();
           if (!event.repeat && target !== null && !switchPause && round) {
-            hold.start(
-              { kind: "one", roundId: round.id, index: target },
-              "key",
-            );
+            hold.start({ kind: 'one', roundId: round.id, index: target }, 'key');
           }
           break;
-        case "p":
-        case "P":
+        case 'p':
+        case 'P':
           // A Patch spends money, late on many times the bet, so a stray P
           // must not buy one: it takes Shift+P.
           if (!event.shiftKey) break;
-          if (!event.repeat && target !== null && !switchPause)
-            game.pump(target, true);
+          if (!event.repeat && target !== null && !switchPause) game.pump(target, true);
           break;
-        case "c":
-        case "C":
+        case 'c':
+        case 'C':
           // C always ends a hold, even when there is nothing to cash out.
           if (event.repeat || switchPause) hold.stop();
           else cashOutTarget();
           break;
-        case "a":
-        case "A":
-          if (!event.repeat && round)
-            hold.start({ kind: "all", roundId: round.id }, "key");
+        case 'a':
+        case 'A':
+          if (!event.repeat && round) hold.start({ kind: 'all', roundId: round.id }, 'key');
           break;
-        case "1":
-        case "2":
-        case "3":
+        case '1':
+        case '2':
+        case '3':
           // Drop focus from any button (say, Cash out, just clicked for
           // another balloon), so the next Space acts on the balloon just picked.
-          if (
-            document.activeElement instanceof HTMLElement &&
-            isControl(document.activeElement)
-          ) {
+          if (document.activeElement instanceof HTMLElement && isControl(document.activeElement)) {
             document.activeElement.blur();
           }
           setChosen(Number(event.key) - 1);
           break;
-        case "Enter":
+        case 'Enter':
           // Only with nothing focused, so a stray Enter after using a form or
           // a panel never places a bet.
           if (!nothingFocused(event.target)) return;
           // Enter bets by hand. It never starts auto-play.
-          if (
-            !event.repeat &&
-            !roundActive &&
-            mode === "manual" &&
-            state.phase === "ready"
-          ) {
+          if (!event.repeat && !roundActive && mode === 'manual' && state.phase === 'ready') {
             start();
           }
           break;
       }
     }
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
     };
   });
 
@@ -459,19 +397,17 @@ export function App() {
               className="balance"
               aria-label="Balance"
               title="Balance"
-              aria-live={autoRunning ? "off" : "polite"}
+              aria-live={autoRunning ? 'off' : 'polite'}
             >
-              {state.wallet ? formatCents(state.wallet.balanceCents) : "—"}
+              {state.wallet ? formatCents(state.wallet.balanceCents) : '—'}
             </strong>
             {/* Session net and time played, always on screen (UK RTS 2E, 13C). */}
             <span className="session" aria-label="This session">
               <span title="Net result this session">
-                {sessionNet === null ? "—" : formatSignedCents(sessionNet)}
+                {sessionNet === null ? '—' : formatSignedCents(sessionNet)}
               </span>
-              {" · "}
-              <span title="Time played this session">
-                {formatElapsed(sessionMs)}
-              </span>
+              {' · '}
+              <span title="Time played this session">{formatElapsed(sessionMs)}</span>
             </span>
           </div>
           {/* Live stats opens from here, next to the session net it spells
@@ -480,7 +416,7 @@ export function App() {
               always in reach, yet away from Bet, Pump and Cash out, where a
               stray tap costs money. Only on the game: the stats and verify
               pages have no room for the panel. */}
-          {view === "game" && <LiveStatsOpener live={liveStats} />}
+          {view === 'game' && <LiveStatsOpener live={liveStats} />}
           <SettingsMenu open={settingsOpen} onOpenChange={setSettingsOpen}>
             <div className="card settings-row">
               <span>Sound</span>
@@ -497,7 +433,7 @@ export function App() {
                 aria-pressed={motion.animationsOn}
                 onClick={motion.toggle}
               >
-                {motion.animationsOn ? "On" : "Off"}
+                {motion.animationsOn ? 'On' : 'Off'}
               </button>
             </div>
             {state.fairness && (
@@ -511,29 +447,17 @@ export function App() {
             )}
             <div className="card settings-row">
               <span>Check a round</span>
-              <button
-                type="button"
-                className="btn btn-small"
-                onClick={() => openVerify(null)}
-              >
+              <button type="button" className="btn btn-small" onClick={() => openVerify(null)}>
                 Verify
               </button>
             </div>
             <div className="card settings-row">
               <span>Your results</span>
-              <button
-                type="button"
-                className="btn btn-small"
-                onClick={openStats}
-              >
+              <button type="button" className="btn btn-small" onClick={openStats}>
                 Stats
               </button>
             </div>
-            <History
-              config={config}
-              rounds={state.history}
-              onVerify={openVerify}
-            />
+            <History config={config} rounds={state.history} onVerify={openVerify} />
             <GameInfo
               config={config}
               autoPlay={market.autoPlay}
@@ -543,7 +467,7 @@ export function App() {
         </div>
       </header>
 
-      {view === "stats" ? (
+      {view === 'stats' ? (
         <StatsPage
           client={gameClient}
           config={config}
@@ -551,221 +475,198 @@ export function App() {
           onVerify={openVerify}
           onBack={closeVerify}
         />
-      ) : view === "verify" ? (
+      ) : view === 'verify' ? (
         <VerifyPage
           client={gameClient}
           config={config}
           rounds={state.history}
           initialRoundId={verifyRoundId}
-          canRotate={!roundActive && !autoRunning && state.phase === "ready"}
+          canRotate={!roundActive && !autoRunning && state.phase === 'ready'}
           onRotate={game.rotateSeed}
           onBack={closeVerify}
         />
       ) : (
-        <main className="layout">
-          <section className="stage" aria-label="Balloons">
-            <div className="stage-top">
-              {state.notice && (
-                <div
-                  className={`notice notice-${state.notice.tone}`}
-                  role="status"
-                >
-                  <span>{state.notice.text}</span>
-                  <button
-                    type="button"
-                    className="btn btn-small"
-                    onClick={game.dismissNotice}
-                  >
-                    OK
-                  </button>
-                </div>
-              )}
-              {round?.status === "finished" && <RoundResult round={round} />}
-            </div>
-
-            {state.phase === "loading" ? (
-              <p className="stage-message">Loading…</p>
-            ) : (
-              <div className="slots">
-                {round
-                  ? round.balloons.map((balloon) => (
-                      <BalloonCard
-                        key={`${round.id}-${balloon.index}`}
-                        balloon={balloon}
-                        difficultyId={round.difficultyId}
-                        rtpBp={round.rtpBp}
-                        ladder={round.ladder}
-                        beat={state.beats[balloon.index] ?? "idle"}
-                        setUp={setUp[balloon.index]}
-                        patched={state.patched[balloon.index] ?? false}
-                        outcome={state.outcomes[balloon.index] ?? null}
-                        held={state.held[balloon.index] ?? false}
-                        pending={state.pending[balloon.index] ?? false}
-                        winShown={state.winShownFor === round.id}
-                        roundWin={roundWin}
-                        quiet={autoRunning}
-                        selectable={
-                          panel === "round" &&
-                          round.balloons.length > 1 &&
-                          balloon.status === "active"
-                        }
-                        selected={
-                          panel === "round" &&
-                          round.balloons.length > 1 &&
-                          target === balloon.index
-                        }
-                        onSelect={() => setChosen(balloon.index)}
-                        // Its own Pump only while two or more balloons are in
-                        // play: with one left, the panel's big button is Pump.
-                        canPump={
-                          panel === "round" && showOwnPump(round, balloon)
-                        }
-                        onPump={() => {
-                          setChosen(balloon.index);
-                          game.pump(balloon.index, false);
-                        }}
-                        onPumpHold={() => {
-                          setChosen(balloon.index);
-                          holdOne(balloon.index);
-                        }}
-                        afterRoundShown={afterRoundShown}
-                      />
-                    ))
-                  : setup.bets.map((text, index) => (
-                      <PreviewCard
-                        key={index}
-                        slot={index + 1}
-                        difficultyId={setupDifficulty?.id ?? setup.difficultyId}
-                        betCents={
-                          check.errors[index] === null
-                            ? parseDollarsToCents(text)
-                            : null
-                        }
-                        ladder={setupDifficulty?.ladder ?? []}
-                        maxPayoutCents={config.limits.maxPayoutCents}
-                      />
-                    ))}
+      <main className="layout">
+        <section
+          className="stage"
+          aria-label="Balloons"
+        >
+          <div className="stage-top">
+            {state.notice && (
+              <div className={`notice notice-${state.notice.tone}`} role="status">
+                <span>{state.notice.text}</span>
+                <button type="button" className="btn btn-small" onClick={game.dismissNotice}>
+                  OK
+                </button>
               </div>
             )}
-          </section>
+            {round?.status === 'finished' && <RoundResult round={round} />}
+          </div>
 
-          {/* Live stats: between the stage and the controls, so on an upright
+          {state.phase === 'loading' ? (
+            <p className="stage-message">Loading…</p>
+          ) : (
+            <div className="slots">
+              {round
+                ? round.balloons.map((balloon) => (
+                    <BalloonCard
+                      key={`${round.id}-${balloon.index}`}
+                      balloon={balloon}
+                      difficultyId={round.difficultyId}
+                      rtpBp={round.rtpBp}
+                      ladder={round.ladder}
+                      beat={state.beats[balloon.index] ?? 'idle'}
+                      setUp={setUp[balloon.index]}
+                      patched={state.patched[balloon.index] ?? false}
+                      outcome={state.outcomes[balloon.index] ?? null}
+                      held={state.held[balloon.index] ?? false}
+                      pending={state.pending[balloon.index] ?? false}
+                      winShown={state.winShownFor === round.id}
+                      roundWin={roundWin}
+                      quiet={autoRunning}
+                      selectable={
+                        panel === 'round' &&
+                        round.balloons.length > 1 &&
+                        balloon.status === 'active'
+                      }
+                      selected={
+                        panel === 'round' && round.balloons.length > 1 && target === balloon.index
+                      }
+                      onSelect={() => setChosen(balloon.index)}
+                      // Its own Pump only while two or more balloons are in
+                      // play: with one left, the panel's big button is Pump.
+                      canPump={panel === 'round' && showOwnPump(round, balloon)}
+                      onPump={() => {
+                        setChosen(balloon.index);
+                        game.pump(balloon.index, false);
+                      }}
+                      onPumpHold={() => {
+                        setChosen(balloon.index);
+                        holdOne(balloon.index);
+                      }}
+                      afterRoundShown={afterRoundShown}
+                    />
+                  ))
+                : setup.bets.map((text, index) => (
+                    <PreviewCard
+                      key={index}
+                      slot={index + 1}
+                      difficultyId={setupDifficulty?.id ?? setup.difficultyId}
+                      betCents={check.errors[index] === null ? parseDollarsToCents(text) : null}
+                      ladder={setupDifficulty?.ladder ?? []}
+                      maxPayoutCents={config.limits.maxPayoutCents}
+                    />
+                  ))}
+            </div>
+          )}
+        </section>
+
+        {/* Live stats: between the stage and the controls, so on an upright
             phone it is the top of the sheet. Where it sits at each size is
             in stats/live-stats.css. */}
-          {liveStats.shown && <LiveStats live={liveStats} />}
+        {liveStats.shown && <LiveStats live={liveStats} />}
 
-          {state.phase !== "loading" && (
-            <aside className="controls" aria-label="Controls">
-              {panel === "round" && round && (
-                <RoundControls
-                  balloon={targetBalloon}
-                  multi={round.balloons.length > 1}
-                  // The pause after the controls move on greys Cash out and
-                  // Patch + Pump.
-                  pending={switchPause}
-                  // What each balloon is doing. A pump on its way greys Patch +
-                  // Pump (a press then would be ignored), but not Cash out: it
-                  // shows no amount then, and waits for that answer (useGame
-                  // queues it).
-                  activity={round.balloons.map((b) =>
-                    panelActivity(
-                      state.pending[b.index] ?? false,
-                      state.beats[b.index] ?? "idle",
-                      game.waitingCashOuts[b.index] ?? false,
-                    ),
-                  )}
-                  onPump={() => {
-                    if (target !== null) game.pump(target, false);
-                  }}
-                  onPumpHold={() => {
-                    if (target !== null) holdOne(target);
-                  }}
-                  onPatchPump={() => {
-                    if (target !== null) game.pump(target, true);
-                  }}
-                  onCashOut={cashOutTarget}
-                  balloons={round.balloons}
-                  onCashOutAll={cashOutAll}
-                  liveCount={live.length}
-                  onPumpAll={pumpAll}
-                  onPumpAllHold={holdAll}
-                />
-              )}
+        {state.phase !== 'loading' && (
+          <aside className="controls" aria-label="Controls">
+            {panel === 'round' && round && (
+              <RoundControls
+                balloon={targetBalloon}
+                multi={round.balloons.length > 1}
+                // The pause after the controls move on greys Cash out and
+                // Patch + Pump.
+                pending={switchPause}
+                // What each balloon is doing. A pump on its way greys Patch +
+                // Pump (a press then would be ignored), but not Cash out: it
+                // shows no amount then, and waits for that answer (useGame
+                // queues it).
+                activity={round.balloons.map((b) =>
+                  panelActivity(
+                    state.pending[b.index] ?? false,
+                    state.beats[b.index] ?? 'idle',
+                    game.waitingCashOuts[b.index] ?? false,
+                  ),
+                )}
+                onPump={() => {
+                  if (target !== null) game.pump(target, false);
+                }}
+                onPumpHold={() => {
+                  if (target !== null) holdOne(target);
+                }}
+                onPatchPump={() => {
+                  if (target !== null) game.pump(target, true);
+                }}
+                onCashOut={cashOutTarget}
+                balloons={round.balloons}
+                onCashOutAll={cashOutAll}
+                liveCount={live.length}
+                onPumpAll={pumpAll}
+                onPumpAllHold={holdAll}
+              />
+            )}
 
-              {/* Always mounted, so the typed auto-play settings are kept. Before the
+            {/* Always mounted, so the typed auto-play settings are kept. Before the
                 bet panel, so on the Auto tab Start is the first thing in the panel. */}
-              {autoOffered && (
-                <div
-                  hidden={
-                    !(
-                      panel === "auto-running" ||
-                      (panel === "bet" && mode === "auto")
-                    )
-                  }
-                >
-                  <AutoPlayPanel
-                    ladder={setupDifficulty.ladder}
-                    topRung={autoTopRung}
-                    difficultyLabel={setupDifficulty.label}
-                    roundBetCents={check.totalCents}
-                    betsValid={check.betsCents !== null}
-                    limits={config.limits}
-                    betSizing={autoBetSizing}
-                    roundActive={roundActive && !autoRunning}
-                    starting={state.starting && !autoRunning}
-                    status={autoPlay.status}
-                    round={autoRunning ? round : null}
-                    onStart={startAutoPlay}
-                    onStop={autoPlay.stop}
-                    onCashOut={autoCashOut}
-                  />
-                </div>
-              )}
+            {autoOffered && (
+              <div hidden={!(panel === 'auto-running' || (panel === 'bet' && mode === 'auto'))}>
+                <AutoPlayPanel
+                  ladder={setupDifficulty.ladder}
+                  topRung={autoTopRung}
+                  difficultyLabel={setupDifficulty.label}
+                  roundBetCents={check.totalCents}
+                  betsValid={check.betsCents !== null}
+                  limits={config.limits}
+                  betSizing={autoBetSizing}
+                  roundActive={roundActive && !autoRunning}
+                  starting={state.starting && !autoRunning}
+                  status={autoPlay.status}
+                  round={autoRunning ? round : null}
+                  onStart={startAutoPlay}
+                  onStop={autoPlay.stop}
+                  onCashOut={autoCashOut}
+                />
+              </div>
+            )}
 
-              {panel === "bet" && (
-                <>
-                  <BetPanel
-                    config={config}
-                    setup={setup}
-                    check={check}
-                    disabled={state.phase !== "ready"}
-                    starting={state.starting}
-                    showBet={mode === "manual" || !market.autoPlay}
-                    onChange={setSetup}
-                    onStart={start}
-                  />
-                  {/* Last in the panel: how to play is chosen once, the rest every round. */}
-                  {market.autoPlay && (
-                    <div
-                      className="segmented"
-                      role="radiogroup"
-                      aria-label="How to play"
+            {panel === 'bet' && (
+              <>
+                <BetPanel
+                  config={config}
+                  setup={setup}
+                  check={check}
+                  disabled={state.phase !== 'ready'}
+                  starting={state.starting}
+                  showBet={mode === 'manual' || !market.autoPlay}
+                  onChange={setSetup}
+                  onStart={start}
+                />
+                {/* Last in the panel: how to play is chosen once, the rest every round. */}
+                {market.autoPlay && (
+                  <div className="segmented" role="radiogroup" aria-label="How to play">
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={mode === 'manual'}
+                      className="segment"
+                      onClick={() => setMode('manual')}
                     >
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={mode === "manual"}
-                        className="segment"
-                        onClick={() => setMode("manual")}
-                      >
-                        Manual
-                      </button>
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={mode === "auto"}
-                        className="segment"
-                        onClick={() => setMode("auto")}
-                      >
-                        Auto
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </aside>
-          )}
-        </main>
+                      Manual
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={mode === 'auto'}
+                      className="segment"
+                      onClick={() => setMode('auto')}
+                    >
+                      Auto
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </aside>
+        )}
+      </main>
       )}
     </div>
   );
@@ -783,12 +684,10 @@ function RoundResult({ round }: { readonly round: RoundView }) {
   const net = paid - spent;
   return (
     <div
-      className={net > 0 ? "round-result win" : "round-result"}
+      className={net > 0 ? 'round-result win' : 'round-result'}
       role="status"
       title={`Spent ${formatCents(spent)}, paid ${formatCents(paid)}${
-        returned > 0
-          ? `, ${formatCents(returned)} in bets returned unplayed`
-          : ""
+        returned > 0 ? `, ${formatCents(returned)} in bets returned unplayed` : ''
       }`}
     >
       Net <strong>{formatSignedCents(net)}</strong>

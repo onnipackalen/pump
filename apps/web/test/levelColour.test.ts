@@ -1,30 +1,18 @@
-import { readFileSync } from "node:fs";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { GAME_CONFIG, type Difficulty } from "@pump/engine";
-import { Balloon } from "../src/balloon/Balloon";
-import { FLOOR_Y } from "../src/balloon/hoseShape";
-import { BalloonCard, PreviewCard } from "../src/components/BalloonCard";
-import { BetPanel } from "../src/components/BetPanel";
-import { checkBets } from "../src/game/betSetup";
-import {
-  LEVEL_COLOURS,
-  LEVEL_FALLBACK,
-  levelColour,
-  levelOf,
-  MAX_LEVEL_MARKS,
-} from "../src/game/level";
-import { balloon } from "./fixtures";
+import { readFileSync } from 'node:fs';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+import { GAME_CONFIG, type Difficulty } from '@pump/engine';
+import { Balloon } from '../src/balloon/Balloon';
+import { FLOOR_Y } from '../src/balloon/hoseShape';
+import { BalloonCard, PreviewCard } from '../src/components/BalloonCard';
+import { BetPanel } from '../src/components/BetPanel';
+import { checkBets } from '../src/game/betSetup';
+import { LEVEL_COLOURS, LEVEL_FALLBACK, levelColour, levelOf, MAX_LEVEL_MARKS } from '../src/game/level';
+import { balloon } from './fixtures';
 
-const css = readFileSync(
-  new URL("../src/balloon/balloon.css", import.meta.url),
-  "utf8",
-);
-const pageCss = readFileSync(
-  new URL("../src/styles.css", import.meta.url),
-  "utf8",
-);
+const css = readFileSync(new URL('../src/balloon/balloon.css', import.meta.url), 'utf8');
+const pageCss = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const difficulties = GAME_CONFIG.difficulties;
 
 /** A colour token as a sheet sets it, like "  --mint: #4fe0a8;". */
@@ -48,28 +36,19 @@ function contrast(a: string, b: string): number {
 }
 
 /** Every ring the markup draws, as numbers. */
-function rings(
-  html: string,
-): { x: number; y: number; width: number; height: number }[] {
-  return [
-    ...html.matchAll(
-      /<rect class="pb-level-ring" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/g,
-    ),
-  ].map((m) => ({
-    x: Number(m[1]),
-    y: Number(m[2]),
-    width: Number(m[3]),
-    height: Number(m[4]),
-  }));
+function rings(html: string): { x: number; y: number; width: number; height: number }[] {
+  return [...html.matchAll(/<rect class="pb-level-ring" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/g)].map(
+    (m) => ({ x: Number(m[1]), y: Number(m[2]), width: Number(m[3]), height: Number(m[4]) }),
+  );
 }
 
 /** The opening tag of the balloon picture in some markup. */
 function svgTag(html: string): string {
-  return /<svg[^>]*class="pump-balloon"[^>]*>/.exec(html)?.[0] ?? "";
+  return /<svg[^>]*class="pump-balloon"[^>]*>/.exec(html)?.[0] ?? '';
 }
 
-describe("the difficulty colours", () => {
-  it("give every configured difficulty a colour of its own", () => {
+describe('the difficulty colours', () => {
+  it('give every configured difficulty a colour of its own', () => {
     for (const d of difficulties) {
       expect(Object.hasOwn(LEVEL_COLOURS, d.id), d.id).toBe(true);
       expect(levelColour(d.id)).not.toBe(LEVEL_FALLBACK);
@@ -78,32 +57,29 @@ describe("the difficulty colours", () => {
     expect(new Set(used).size).toBe(used.length);
   });
 
-  it("falls back for a difficulty with no colour, even one named like a built-in", () => {
-    for (const id of ["insane", "", "constructor", "toString", "__proto__"]) {
+  it('falls back for a difficulty with no colour, even one named like a built-in', () => {
+    for (const id of ['insane', '', 'constructor', 'toString', '__proto__']) {
       expect(levelColour(id)).toBe(LEVEL_FALLBACK);
     }
   });
 
-  it("never uses a colour that already means something: a win, a pop, a warning, an error or a balloon", () => {
+  it('never uses a colour that already means something: a win, a pop, a warning, an error or a balloon', () => {
     const taken = [
-      token(css, "--pb-win"),
-      token(pageCss, "--mint"),
-      token(css, "--pb-popped"),
-      token(pageCss, "--pop"),
-      token(pageCss, "--risk"),
-      token(pageCss, "--error"),
-      ...[...css.matchAll(/--balloon-base: (#[0-9a-f]{6});/g)].map(
-        (m) => m[1] ?? "",
-      ),
+      token(css, '--pb-win'),
+      token(pageCss, '--mint'),
+      token(css, '--pb-popped'),
+      token(pageCss, '--pop'),
+      token(pageCss, '--risk'),
+      token(pageCss, '--error'),
+      ...[...css.matchAll(/--balloon-base: (#[0-9a-f]{6});/g)].map((m) => m[1] ?? ''),
     ];
     for (const colour of [...Object.values(LEVEL_COLOURS), LEVEL_FALLBACK]) {
       expect(taken).not.toContain(colour.toLowerCase());
     }
   });
 
-  it("shows on the pump: at least 3 to 1 against its barrel", () => {
-    const barrel =
-      /\.pb-pump-barrel \{\s*fill: (#[0-9a-f]{6});/.exec(css)?.[1] ?? "";
+  it('shows on the pump: at least 3 to 1 against its barrel', () => {
+    const barrel = /\.pb-pump-barrel \{\s*fill: (#[0-9a-f]{6});/.exec(css)?.[1] ?? '';
     expect(barrel).toMatch(/^#/);
     for (const colour of Object.values(LEVEL_COLOURS)) {
       expect(contrast(colour, barrel), colour).toBeGreaterThanOrEqual(3);
@@ -111,8 +87,8 @@ describe("the difficulty colours", () => {
   });
 });
 
-describe("levelOf", () => {
-  it("gives one ring for the first difficulty, one more for each after it", () => {
+describe('levelOf', () => {
+  it('gives one ring for the first difficulty, one more for each after it', () => {
     difficulties.forEach((d, i) => {
       expect(levelOf(d.id)).toEqual({
         id: d.id,
@@ -122,77 +98,50 @@ describe("levelOf", () => {
     });
   });
 
-  it("still draws a difficulty added to the config, in the fallback colour", () => {
-    const extra: Difficulty = {
-      id: "insane",
-      label: "Insane",
-      ladder: [300, 1000],
-    };
-    const level = levelOf("insane", [...difficulties, extra]);
+  it('still draws a difficulty added to the config, in the fallback colour', () => {
+    const extra: Difficulty = { id: 'insane', label: 'Insane', ladder: [300, 1000] };
+    const level = levelOf('insane', [...difficulties, extra]);
     expect(level.colour).toBe(LEVEL_FALLBACK);
-    expect(level.marks).toBe(
-      Math.min(difficulties.length + 1, MAX_LEVEL_MARKS),
-    );
+    expect(level.marks).toBe(Math.min(difficulties.length + 1, MAX_LEVEL_MARKS));
   });
 
-  it("shows no rings for a difficulty that is not in the config", () => {
-    expect(levelOf("gone").marks).toBe(0);
+  it('shows no rings for a difficulty that is not in the config', () => {
+    expect(levelOf('gone').marks).toBe(0);
   });
 });
 
-describe("the rings on the pump", () => {
-  it("draws one ring per mark, in the colour given, and says the difficulty", () => {
+describe('the rings on the pump', () => {
+  it('draws one ring per mark, in the colour given, and says the difficulty', () => {
     for (let marks = 0; marks <= MAX_LEVEL_MARKS; marks += 1) {
       const html = renderToStaticMarkup(
-        createElement(Balloon, {
-          slot: 1,
-          scale: 0.45,
-          idle: true,
-          level: { id: "x", colour: "#123456", marks },
-        }),
+        createElement(Balloon, { slot: 1, scale: 0.45, idle: true, level: { id: 'x', colour: '#123456', marks } }),
       );
       expect(rings(html)).toHaveLength(marks);
       expect(svgTag(html)).toContain('data-level="x"');
-      expect(svgTag(html)).toContain("--pb-level:#123456");
+      expect(svgTag(html)).toContain('--pb-level:#123456');
     }
   });
 
-  it("draws none, and no level, when it is not given one", () => {
-    const html = renderToStaticMarkup(
-      createElement(Balloon, { slot: 1, scale: 0.45, idle: true }),
-    );
+  it('draws none, and no level, when it is not given one', () => {
+    const html = renderToStaticMarkup(createElement(Balloon, { slot: 1, scale: 0.45, idle: true }));
     expect(rings(html)).toHaveLength(0);
-    expect(svgTag(html)).not.toContain("data-level");
-    expect(svgTag(html)).not.toContain("--pb-level");
+    expect(svgTag(html)).not.toContain('data-level');
+    expect(svgTag(html)).not.toContain('--pb-level');
   });
 
-  it("never draws more rings than there is room for", () => {
+  it('never draws more rings than there is room for', () => {
     const html = renderToStaticMarkup(
-      createElement(Balloon, {
-        slot: 1,
-        scale: 1,
-        level: { id: "x", colour: "#123456", marks: 99 },
-      }),
+      createElement(Balloon, { slot: 1, scale: 1, level: { id: 'x', colour: '#123456', marks: 99 } }),
     );
     expect(rings(html)).toHaveLength(MAX_LEVEL_MARKS);
   });
 
-  it("keeps to the art: on the barrel, under the number dial, above the floor, 14% to 87% across", () => {
+  it('keeps to the art: on the barrel, under the number dial, above the floor, 14% to 87% across', () => {
     const html = renderToStaticMarkup(
-      createElement(Balloon, {
-        slot: 1,
-        scale: 1,
-        level: { id: "x", colour: "#123456", marks: MAX_LEVEL_MARKS },
-      }),
+      createElement(Balloon, { slot: 1, scale: 1, level: { id: 'x', colour: '#123456', marks: MAX_LEVEL_MARKS } }),
     );
-    const barrel =
-      /<rect class="pb-pump-barrel" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/.exec(
-        html,
-      );
-    const dial =
-      /<circle class="pb-tag-card" cx="[\d.]+" cy="([\d.]+)" r="([\d.]+)"/.exec(
-        html,
-      );
+    const barrel = /<rect class="pb-pump-barrel" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/.exec(html);
+    const dial = /<circle class="pb-tag-card" cx="[\d.]+" cy="([\d.]+)" r="([\d.]+)"/.exec(html);
     expect(barrel).not.toBeNull();
     expect(dial).not.toBeNull();
     const [bx, by, bw, bh] = [1, 2, 3, 4].map((i) => Number(barrel?.[i]));
@@ -212,31 +161,25 @@ describe("the rings on the pump", () => {
     }
   });
 
-  it("never moves: no animation or transition reaches the rings", () => {
+  it('never moves: no animation or transition reaches the rings', () => {
     // Any rule whose selector names a ring class (the whole drawing still
     // zooms with the view, as it always has).
     expect(css).toMatch(/\.pb-level-ring \{/);
-    expect(css).not.toMatch(
-      /\.pb-level[\w-]*[^{};]*\{[^}]*(animation|transition|transform)/,
-    );
+    expect(css).not.toMatch(/\.pb-level[\w-]*[^{};]*\{[^}]*(animation|transition|transform)/);
   });
 });
 
-describe("the cards pass the difficulty to the pump", () => {
+describe('the cards pass the difficulty to the pump', () => {
   const noop = (): void => undefined;
 
-  it.each(difficulties.map((d) => d.id))("a balloon in a round on %s", (id) => {
+  it.each(difficulties.map((d) => d.id))('a balloon in a round on %s', (id) => {
     const html = renderToStaticMarkup(
       createElement(BalloonCard, {
-        balloon: balloon({
-          rung: 2,
-          multiplierHundredths: 150,
-          cashOutCents: 150,
-        }),
+        balloon: balloon({ rung: 2, multiplierHundredths: 150, cashOutCents: 150 }),
         difficultyId: id,
         rtpBp: GAME_CONFIG.rtpBp,
         ladder: difficulties.find((d) => d.id === id)?.ladder ?? [],
-        beat: "idle",
+        beat: 'idle',
         patched: false,
         outcome: null,
         held: false,
@@ -259,30 +202,27 @@ describe("the cards pass the difficulty to the pump", () => {
     expect(rings(html)).toHaveLength(level.marks);
   });
 
-  it.each(difficulties.map((d) => d.id))(
-    "the pump before a bet on %s",
-    (id) => {
-      const ladder = difficulties.find((d) => d.id === id)?.ladder ?? [];
-      const html = renderToStaticMarkup(
-        createElement(PreviewCard, {
-          slot: 2,
-          difficultyId: id,
-          betCents: 100,
-          ladder,
-          maxPayoutCents: GAME_CONFIG.limits.maxPayoutCents,
-        }),
-      );
-      const level = levelOf(id);
-      expect(svgTag(html)).toContain(`data-level="${id}"`);
-      expect(svgTag(html)).toContain(`--pb-level:${level.colour}`);
-      expect(rings(html)).toHaveLength(level.marks);
-    },
-  );
+  it.each(difficulties.map((d) => d.id))('the pump before a bet on %s', (id) => {
+    const ladder = difficulties.find((d) => d.id === id)?.ladder ?? [];
+    const html = renderToStaticMarkup(
+      createElement(PreviewCard, {
+        slot: 2,
+        difficultyId: id,
+        betCents: 100,
+        ladder,
+        maxPayoutCents: GAME_CONFIG.limits.maxPayoutCents,
+      }),
+    );
+    const level = levelOf(id);
+    expect(svgTag(html)).toContain(`data-level="${id}"`);
+    expect(svgTag(html)).toContain(`--pb-level:${level.colour}`);
+    expect(rings(html)).toHaveLength(level.marks);
+  });
 });
 
-describe("the bet panel", () => {
-  it("puts the matching colour dot on each difficulty button", () => {
-    const setup = { difficultyId: difficulties[0]?.id ?? "", bets: ["1.00"] };
+describe('the bet panel', () => {
+  it('puts the matching colour dot on each difficulty button', () => {
+    const setup = { difficultyId: difficulties[0]?.id ?? '', bets: ['1.00'] };
     const html = renderToStaticMarkup(
       createElement(BetPanel, {
         config: GAME_CONFIG,
@@ -295,14 +235,11 @@ describe("the bet panel", () => {
         onStart: () => undefined,
       }),
     );
-    const group =
-      /<div class="segmented" role="radiogroup" aria-label="Difficulty">(.*?)<\/div>/.exec(
-        html,
-      )?.[1] ?? "";
+    const group = /<div class="segmented" role="radiogroup" aria-label="Difficulty">(.*?)<\/div>/.exec(html)?.[1] ?? '';
     const buttons = group.match(/<button[^>]*>.*?<\/button>/g) ?? [];
     expect(buttons).toHaveLength(difficulties.length);
     difficulties.forEach((d, i) => {
-      const button = buttons[i] ?? "";
+      const button = buttons[i] ?? '';
       expect(button).toContain(
         `<span class="level-dot" data-level="${d.id}" style="--level-colour:${levelColour(d.id)}" aria-hidden="true"></span>${d.label}`,
       );

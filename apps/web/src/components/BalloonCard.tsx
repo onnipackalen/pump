@@ -1,25 +1,16 @@
-import type { CSSProperties } from "react";
-import type { BalloonView, PumpOutcome } from "../api/contract";
-import { Balloon, balloonSize, type BalloonBeat } from "../balloon/Balloon";
-import {
-  afterRoundWords,
-  twoLineChars,
-  type AfterRoundWords,
-} from "../game/afterRound";
-import type { Beat } from "../game/useGame";
-import { levelOf } from "../game/level";
-import { balloonTension } from "../game/risk";
-import {
-  balloonSetUp,
-  firstPump,
-  useFirstLift,
-  type SetUpFrom,
-} from "../game/setUp";
-import { HoldButton } from "./HoldButton";
-import { StepRow } from "./StepRow";
-import type { WinTier } from "../game/winTier";
-import { formatCents, formatMultiplier } from "../money";
-import { topRungForBet } from "../game/rules";
+import type { CSSProperties } from 'react';
+import type { BalloonView, PumpOutcome } from '../api/contract';
+import { Balloon, balloonSize, type BalloonBeat } from '../balloon/Balloon';
+import { afterRoundWords, twoLineChars, type AfterRoundWords } from '../game/afterRound';
+import type { Beat } from '../game/useGame';
+import { levelOf } from '../game/level';
+import { balloonTension } from '../game/risk';
+import { balloonSetUp, firstPump, useFirstLift, type SetUpFrom } from '../game/setUp';
+import { HoldButton } from './HoldButton';
+import { StepRow } from './StepRow';
+import type { WinTier } from '../game/winTier';
+import { formatCents, formatMultiplier } from '../money';
+import { topRungForBet } from '../game/rules';
 
 interface BalloonCardProps {
   readonly balloon: BalloonView;
@@ -84,26 +75,26 @@ export function balloonBeat(
   beat: Beat,
   pending = false,
 ): BalloonBeat | undefined {
-  if (pending && beat === "idle") return undefined;
+  if (pending && beat === 'idle') return undefined;
   switch (beat) {
-    case "press":
-      return "press";
-    case "survived":
-      return "survive";
-    case "saved":
+    case 'press':
+      return 'press';
+    case 'survived':
+      return 'survive';
+    case 'saved':
       // The Patch stopped a pop: same size, no grow.
-      return "blocked";
-    case "popped":
-      return "pop";
-    case "cashed":
-    case "top":
+      return 'blocked';
+    case 'popped':
+      return 'pop';
+    case 'cashed':
+    case 'top':
       // Set only once the server has confirmed the cash-out.
-      return "cashout";
-    case "idle":
+      return 'cashout';
+    case 'idle':
       break;
   }
-  if (balloon.status === "popped") return "popped";
-  if (balloon.status === "cashed") return "cashed";
+  if (balloon.status === 'popped') return 'popped';
+  if (balloon.status === 'cashed') return 'cashed';
   return undefined;
 }
 
@@ -113,19 +104,16 @@ export function balloonBeat(
  * the balloon) or peels off if the pump survived anyway, the pump that
  * reached the top included.
  */
-export function balloonPatch(
-  beat: Beat,
-  patched: boolean,
-): "on" | "spent" | "torn" | undefined {
+export function balloonPatch(beat: Beat, patched: boolean): 'on' | 'spent' | 'torn' | undefined {
   if (!patched) return undefined;
   switch (beat) {
-    case "press":
-      return "on";
-    case "saved":
-      return "torn";
-    case "survived":
-    case "top":
-      return "spent";
+    case 'press':
+      return 'on';
+    case 'saved':
+      return 'torn';
+    case 'survived':
+    case 'top':
+      return 'spent';
     default:
       return undefined;
   }
@@ -143,9 +131,9 @@ export function cardScale(balloon: BalloonView): number {
 
 /** The big line under a balloon: its multiplier, or how it ended. */
 function mainText(balloon: BalloonView): string {
-  if (balloon.status === "popped") return "Popped";
-  if (balloon.status === "refunded") return "Refunded";
-  if (balloon.multiplierHundredths === null) return "—";
+  if (balloon.status === 'popped') return 'Popped';
+  if (balloon.status === 'refunded') return 'Refunded';
+  if (balloon.multiplierHundredths === null) return '—';
   return formatMultiplier(balloon.multiplierHundredths);
 }
 
@@ -161,19 +149,18 @@ export function subText(
   outcome: PumpOutcome | null,
 ): string {
   switch (balloon.status) {
-    case "popped":
+    case 'popped':
       return formatCents(-(balloon.betCents + balloon.patchesCents));
-    case "refunded":
+    case 'refunded':
       return formatCents(balloon.betCents);
-    case "cashed":
+    case 'cashed':
       return `Paid ${formatCents(balloon.payoutCents)}`;
-    case "active":
-      if (beat === "press" && patched) return "Patch on";
+    case 'active':
+      if (beat === 'press' && patched) return 'Patch on';
       // The pump would have popped the balloon; the Patch stopped it.
-      if (outcome === "saved") return "Patch stopped a pop";
-      if (outcome === "survived" && patched) return "Patch not needed";
-      if (balloon.cashOutCents === null)
-        return `Bet ${formatCents(balloon.betCents)}`;
+      if (outcome === 'saved') return 'Patch stopped a pop';
+      if (outcome === 'survived' && patched) return 'Patch not needed';
+      if (balloon.cashOutCents === null) return `Bet ${formatCents(balloon.betCents)}`;
       return formatCents(balloon.cashOutCents);
   }
 }
@@ -194,18 +181,11 @@ function SlotLabel({
   readonly won?: boolean;
   readonly live?: boolean;
 }) {
-  const style = {
-    "--main-chars": main.length,
-    "--sub-chars": sub.length,
-  } as CSSProperties;
+  const style = { '--main-chars': main.length, '--sub-chars': sub.length } as CSSProperties;
   return (
-    <p
-      className="slot-label"
-      style={style}
-      aria-live={live ? "polite" : undefined}
-    >
+    <p className="slot-label" style={style} aria-live={live ? 'polite' : undefined}>
       <span className="slot-main">{main}</span>
-      <span className={won ? "slot-sub win" : "slot-sub"}>{sub}</span>
+      <span className={won ? 'slot-sub win' : 'slot-sub'}>{sub}</span>
     </p>
   );
 }
@@ -245,9 +225,7 @@ function SlotAction({
 }) {
   const nextLine = next === null ? null : `next ${next}`;
   const nextStyle =
-    nextLine === null
-      ? undefined
-      : ({ "--next-chars": nextLine.length } as CSSProperties);
+    nextLine === null ? undefined : ({ '--next-chars': nextLine.length } as CSSProperties);
   return (
     <div className="slot-action">
       {!show && nextLine !== null && (
@@ -264,8 +242,8 @@ function SlotAction({
           className="slot-after"
           style={
             {
-              "--after-full-chars": twoLineChars(after.full),
-              "--after-short-chars": twoLineChars(after.short),
+              '--after-full-chars': twoLineChars(after.full),
+              '--after-short-chars': twoLineChars(after.short),
             } as CSSProperties
           }
           title={after.full}
@@ -284,11 +262,7 @@ function SlotAction({
           onPress={onPump}
           // The label replaces the button's text for a screen reader, so
           // it carries the next step too.
-          aria-label={
-            next === null
-              ? `Pump balloon ${slot}`
-              : `Pump balloon ${slot}, next ${next}`
-          }
+          aria-label={next === null ? `Pump balloon ${slot}` : `Pump balloon ${slot}, next ${next}`}
           title={`Pump balloon ${slot}. Hold to keep pumping.`}
         >
           Pump
@@ -336,8 +310,7 @@ export function BalloonCard({
   const lifting = useFirstLift(balloon.rung, beat);
   // Only a real gain is celebrated, judged over the whole round: never a
   // round that paid back no more than its bets and Patches.
-  const win =
-    balloon.status === "cashed" && roundWin !== null ? roundWin : undefined;
+  const win = balloon.status === 'cashed' && roundWin !== null ? roundWin : undefined;
   // The art plays the win once; the label keeps its win colour.
   const artWin = winShown ? undefined : win;
   // Where it would have popped: only once the round is over and still.
@@ -353,7 +326,7 @@ export function BalloonCard({
       data-status={balloon.status}
       onClick={selectable ? onSelect : undefined}
       aria-label={`Balloon ${slot}`}
-      aria-current={selected ? "true" : undefined}
+      aria-current={selected ? 'true' : undefined}
     >
       <StepRow
         slot={slot}
@@ -380,11 +353,9 @@ export function BalloonCard({
           hold={held}
           // The pump that reached the top: the handle comes back up as the
           // balloon grows to full size and is let go.
-          stroke={beat === "top" ? "up" : undefined}
+          stroke={beat === 'top' ? 'up' : undefined}
           value={
-            balloon.multiplierHundredths === null
-              ? ""
-              : formatMultiplier(balloon.multiplierHundredths)
+            balloon.multiplierHundredths === null ? '' : formatMultiplier(balloon.multiplierHundredths)
           }
         />
       </div>
@@ -395,7 +366,7 @@ export function BalloonCard({
         after={after}
         // The server's own number for the next pump; none once it is over.
         next={
-          balloon.status === "active" && balloon.next
+          balloon.status === 'active' && balloon.next
             ? formatMultiplier(balloon.next.multiplierHundredths)
             : null
         }
@@ -431,17 +402,11 @@ export function PreviewCard({
   ladder,
   maxPayoutCents,
 }: PreviewCardProps) {
-  const main = betCents === null ? "—" : formatCents(betCents);
+  const main = betCents === null ? '—' : formatCents(betCents);
   const topRung =
-    betCents === null
-      ? ladder.length
-      : topRungForBet(ladder, betCents, maxPayoutCents);
+    betCents === null ? ladder.length : topRungForBet(ladder, betCents, maxPayoutCents);
   return (
-    <article
-      className="slot"
-      data-status="preview"
-      aria-label={`Balloon ${slot}`}
-    >
+    <article className="slot" data-status="preview" aria-label={`Balloon ${slot}`}>
       <StepRow
         slot={slot}
         ladder={ladder}
@@ -456,12 +421,7 @@ export function PreviewCard({
         <Balloon slot={slot} level={levelOf(difficultyId)} scale={0.45} idle />
       </div>
       <SlotLabel main={main} sub="" />
-      <SlotAction
-        slot={slot}
-        show={false}
-        onPump={() => undefined}
-        onPumpHold={() => undefined}
-      />
+      <SlotAction slot={slot} show={false} onPump={() => undefined} onPumpHold={() => undefined} />
     </article>
   );
 }
