@@ -2021,3 +2021,36 @@ growth: Easy 0.56 / 0.63 / 0.68 / 0.76 after 1 / 3 / 5 / 10 pumps (was
 0.51 / 0.56 / 0.60 / 0.69), Expert 0.64 after one. Full size is still
 the top rung only, so the biggest balloon, its top at y = 22 and three
 balloons side by side at their biggest are unchanged.
+
+## 2026-11-21: the balloon points out of the nozzle; the re-check's fixes
+
+"make baloon in direction of nozzle": the small flat balloon now comes
+straight out of the hose's end, in line with it, and points left on the
+floor. It did not fit where the hose lay (its end at x 47.3 left 2 units
+before the 14% line under the push-in, and about 2 before the next pump
+with three balloons), so the lying hose now comes off the nozzle in a
+small arc and rests flat on the floor out to x 56 (66.6 long; standing
+79.2). The coordinator asked whether the length change would look like
+a stretch: it did, 76% of it in 3 of 27 frames. hoseAt now scales each
+frame to an even share of the length, so no frame carries more than
+0.8 units (a test holds it under 2.5 times the even share).
+
+The coordinator's re-check of f1a4fab found two majors, both in the
+hose motion: a cash-out during the first pump's lift snapped the hose
+upright (the old clean-up drew the old motion's end shape, and the fall
+started from there), and turning animations off mid-round left the hose
+standing (the clean-up redrew it after React drew the lying one). Every
+motion now starts from the pose drawn last (`hoseFrame`), and the
+clean-up only stops the frames. Live in headless Chrome: a cash-out 100
+ms into the lift turned the hose back to the floor in 34 frames, no step
+over 13.8 units; with motion off the hose lay down at once and stayed
+down at the next bet.
+
+Minor fixes from the same check: going to the stats or verify page and
+back no longer replays the set-up; with motion off the flat balloon
+fades; pop shards fly mostly up and down (a third of their old sideways
+travel) and fade from early on, so none leaves a phone screen still
+showing; the balloon hidden while a new one waits is not drawn at all,
+so its sway and strain loops stop. The fitting at the hose's end rests
+on the floor too, lifting the very end 1.5 units: dead flat, it poked
+1.5 units below the floor line (caught by the floor-line test).
