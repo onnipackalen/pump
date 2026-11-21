@@ -1718,3 +1718,34 @@ between rounds, so the panel jumped every round (it now stays, greyed).
 
 Worth knowing: rounding down means a small bet with a small percent can
 stay put. $0.10 up 5% is $0.105, so it stays $0.10 every round.
+
+## 2026-11-21: fixes from the review of auto-bet
+
+A review of the `auto-bet` branch found six things. Four are fixed:
+
+- The Pumps box hid the typed count. The reach text ("= 5,000.00×") sat
+  inside the box and could not shrink, so the count could not be seen on
+  the desktop card (7 of 77 counts) or on a 320-wide phone (28 of 77).
+  The text now sits under the box. Checked live at seven sizes, every
+  count of every difficulty: all fit.
+- The reach text ignored the max payout. On Expert at $1,000 it said
+  "= 5,000.00×", while the info line said top 100.00×. It now says
+  "top 7 = 100.00×", using the same top as the info line.
+- A Cash out pressed after Stop could be lost. If it came while auto-play
+  was sending an earlier one, the button said "queued" but nothing was
+  sent. Auto-play now reads the list again after each send. Seen live:
+  both cash-outs went, all answers 200, wallet equal to the ledger.
+- A press on an older round could wipe the current round's presses. The
+  App can't reach this today. Auto-play now names the round it plays, and
+  a press on any other round is ignored. The reviewer's fuzzer, which
+  failed when the screen could lag into the previous round, now passes.
+
+Two are left for the user. The Cash out amount during auto-play is often
+one step behind what it pays (a product call). The Ontario market entry
+waits for the user's answer. The off path itself was tried live on a
+scratch build: no On win or On loss, and every round used the bets
+entered.
+
+Found while checking: a $1,000 bet capped by the max payout shows as
+"$ 100" in its box, because the "Top 100.00×" label takes the room. This
+is on main too, so it is reported, not fixed here.
