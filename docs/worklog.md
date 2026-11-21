@@ -1296,3 +1296,45 @@ on the hose). Live in the game before the merge: 3 Expert balloons at
 375x667, no page scroll, same picture sizes, and a cash-out lifting off
 with the new knot. Layout files (styles.css, App.tsx, components) are
 identical to main.
+
+## 2026-11-20: a new round's pumps set up instead of snapping back
+
+When a round ends its balloons stay on screen as they ended: after a pop
+the hose lies on the floor with the torn scrap on its end, after a
+cash-out it is shrunk back to the pump. The next bet swapped that for a
+fresh pump in one frame. The user asked for an animation so the pump
+does not snap back.
+
+Now each new pump sets up from the picture that was in its place
+(`game/setUp.ts` works out which, per slot, from the round that was on
+screen; `data-setup` on the art; the "Set-up" section of balloon.css):
+after a pop the hose lifts off the floor (upright by 150 ms, a 4 degree
+swing past, still by 300 ms) while the scrap fades and the dimmed number
+plate comes back; after a cash-out the hose stretches back out. The new
+balloon then grows in from the end of the hose (150 to 390 ms). Each
+starts from exactly the end picture's transform, and a test holds the
+two together. With motion off the hose is simply there and the balloon
+fades in. Display only: the round is live at once, nothing waits.
+
+Two things decided on the way:
+
+- The air pocket moved inside the hose layer. Auto-play pumps straight
+  after the bet, so a pocket can run while the hose is still lifting;
+  outside the layer it ran up a hose that was not there yet. Inside, it
+  rides the hose (also on a pop or cash-out, where it is already hidden).
+- `data-setup` stays while the balloon is in play and goes in the same
+  update as its pop or cash-out. The first version dropped it after the
+  first pump; checking in the game showed that a quick first answer then
+  cut the set-up short and the picture jumped. Removing it at the end is
+  still needed: when the pop or cash-out motion is over, the hose would
+  otherwise pick the set-up rule back up and replay it. The set-up rules
+  also come before Pop and Cash-out in the file, so those always win.
+
+Checked in a real game on a local server (127.0.0.1, not localhost:
+every local server shares the localhost cookie, and another chat's game
+server on the same machine logged this one out mid-test): the cash-out
+set-up live, frame by frame; the pop set-up by stepping its animations
+(hose -82, -41, -12, 0, +3.8, 0 degrees at 0 to 300 ms); a pump 115 ms
+after the bet; the popped and cashed end pictures afterwards with no
+set-up running. A page refresh gets no set-up (nothing was on screen
+before), and neither does the first round after loading.
