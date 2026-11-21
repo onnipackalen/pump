@@ -28,7 +28,11 @@ services:
     # development dependency, and npm leaves those out when it thinks it is
     # installing for production.
     buildCommand: npm ci --include=dev && npm run build
-    startCommand: npm run start --workspace @pump/server
+    # The server is started directly, not through npm. Render's stop signal
+    # then reaches it at once, so it can finish the request in hand and close
+    # the database before it goes. (The checks on GitHub start it the same
+    # way, in the hammer test.)
+    startCommand: node --import tsx apps/server/src/index.ts
     healthCheckPath: /api/health
 
     # A push to main goes live only after the checks on GitHub have passed.
@@ -47,7 +51,9 @@ services:
         value: /var/data/pump.db
 
     # The only files that survive a deploy or a restart are the ones under
-    # mountPath. Render takes a snapshot of the disk once a day.
+    # mountPath. Render takes a snapshot of the disk once a day. That is a
+    # last resort, not a backup: restoring one loses everything since it was
+    # taken, and Render warns against restoring a disk that holds a database.
     disk:
       name: pump-data
       mountPath: /var/data
