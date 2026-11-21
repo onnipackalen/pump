@@ -950,15 +950,22 @@ input {
 /* A difficulty's colour on its button (game/level.ts): the same colour as
    the rings on the pump, so the player learns which is which. It sits
    under the name, out of the text's way: beside it, "Medium" no longer
-   fits the panel's narrowest buttons (70 px on a wide screen). */
+   fits the panel's narrowest buttons (70 px on a wide screen). The name
+   and the dot are stacked in the button's own flow and centred together,
+   so the dot never touches a "y" or a "p", however short the button gets
+   (--tap shrinks on short screens). */
 .segment:has(> .level-dot) {
-  position: relative;
-  padding-bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  line-height: 1.15;
 }
 .level-dot {
-  position: absolute;
-  bottom: 5px;
-  left: calc(50% - 3px);
+  /* The dot comes first in the markup; this puts it under the name. */
+  order: 1;
+  flex: none;
   width: 6px;
   height: 6px;
   border-radius: 50%;
