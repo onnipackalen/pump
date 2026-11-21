@@ -920,6 +920,9 @@ input {
 .settings-body {
   flex: 1 1 0;
   display: grid;
+  /* One column that never grows wider than the sheet: a wide history row
+     scrolls inside its own card instead of pushing every button off the edge. */
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 10px;
   min-height: 0;
