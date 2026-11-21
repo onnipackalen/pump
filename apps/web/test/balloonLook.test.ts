@@ -60,6 +60,17 @@ describe('balloonSize', () => {
     }
   });
 
+  it.each(tops)('takes the balloon a fifth of the way to full size on its first pump (top %i)', (top) => {
+    // The first pump lifts the flat balloon off the floor and blows it up:
+    // a clear jump, then the rest of the ladder shares what is left.
+    const jump = (balloonSize(1, top) - balloonSize(0, top)) / (1 - balloonSize(0, top));
+    expect(jump).toBeGreaterThanOrEqual(0.2);
+    // Full size only at the top rung: the biggest balloon is unchanged,
+    // so three side by side at their biggest still do not touch.
+    expect(balloonSize(top, top)).toBe(1);
+    if (top > 1) expect(balloonSize(top - 1, top)).toBeLessThan(1);
+  });
+
   it.each(tops)('makes the first pump the biggest step, at least a tenth bigger (top %i)', (top) => {
     const first = balloonSize(1, top) - balloonSize(0, top);
     for (let rung = 2; rung <= top; rung += 1) {

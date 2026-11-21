@@ -551,10 +551,15 @@ const BALLOON_SCALE_MIN = 0.45;
  * this balloon can make. (It used to follow the multiplier, and then the
  * first pump on a long ladder grew the balloon by a fifth of one percent.)
  *
- * The curve is half a straight line and half a square root. The square
- * root makes the first pumps big steps. The straight line keeps a floor
- * under the late ones: no pump grows the balloon by less than half an
- * even share of the way.
+ * The curve is a fifth straight line and four fifths progress to the
+ * power 0.4. The power makes the early pumps big steps, so the balloon
+ * fills the sky the user saw empty ("Zoom out, the balloon needs to grow
+ * more", 2026-11-20): on Easy it is 0.56 / 0.63 / 0.68 / 0.76 after 1 / 3 /
+ * 5 / 10 pumps, where it used to be 0.51 / 0.56 / 0.60 / 0.69. The
+ * straight line keeps a floor under the late ones: its slope at the top is
+ * 0.2 + 0.8 x 0.4 = 0.52 of an even share, so no pump grows the balloon
+ * by less than half an even share of the way. Full size still comes only
+ * at the top rung, so the biggest balloon is the same as before.
  *
  * Size shows how far up the ladder the balloon is, never risk. Display
  * only, so floats are fine here.
@@ -562,6 +567,6 @@ const BALLOON_SCALE_MIN = 0.45;
 export function balloonSize(rung: number, topRung: number): number {
   if (topRung <= 0) return BALLOON_SCALE_MIN;
   const progress = Math.min(1, Math.max(0, rung / topRung));
-  const curved = (progress + Math.sqrt(progress)) / 2;
+  const curved = 0.2 * progress + 0.8 * progress ** 0.4;
   return BALLOON_SCALE_MIN + (1 - BALLOON_SCALE_MIN) * curved;
 }
