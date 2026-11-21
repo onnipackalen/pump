@@ -31,6 +31,8 @@ import {
 import { market } from './market';
 import { formatCents, formatElapsed, formatSignedCents, parseDollarsToCents } from './money';
 import { useMotionSetting } from './motion';
+import { flowsOnChange, useStageFlow } from './stageFlow';
+import './flow.css';
 import { shownReveals } from './verify/shownReveals';
 import { cuesFor } from './sound/cues';
 import { soundBoard } from './sound/SoundBoard';
@@ -127,6 +129,10 @@ export function App() {
   const [view, setView] = useState<View>(viewFromHash);
   const [verifyRoundId, setVerifyRoundId] = useState<string | null>(null);
   const motion = useMotionSetting();
+  // A new number of balloons or difficulty glides into place (stageFlow.ts).
+  const slotsRef = useRef<HTMLDivElement>(null);
+  const goneRef = useRef<HTMLDivElement>(null);
+  const beforeFlow = useStageFlow(slotsRef, goneRef, motion.animationsOn);
   const sessionMs = useSessionClock(state.session?.startedAt ?? null);
 
   const round = state.round;
@@ -242,6 +248,16 @@ export function App() {
   };
   const holdAll = (): void => {
     if (round) hold.start({ kind: 'all', roundId: round.id }, 'pointer');
+  };
+
+  /**
+   * A change from the bet panel. A new number of balloons or difficulty
+   * flows into place on the stage (stageFlow.ts); anything else, like a
+   * typed bet, just changes.
+   */
+  const changeSetup = (next: BetSetup): void => {
+    if (flowsOnChange(setup, next)) beforeFlow();
+    setSetup(next);
   };
 
   const start = (): void => {
@@ -523,7 +539,7 @@ export function App() {
           {state.phase === 'loading' ? (
             <p className="stage-message">Loading…</p>
           ) : (
-            <div className="slots">
+            <div className="slots" ref={slotsRef}>
               {stage
                 ? stage.balloons.map((balloon) => (
                     <BalloonCard
@@ -578,6 +594,8 @@ export function App() {
                   ))}
             </div>
           )}
+          {/* Where a slot that goes sinks away (stageFlow.ts). */}
+          <div className="slots-gone" ref={goneRef} aria-hidden="true" />
         </section>
 
         {/* Live stats: between the stage and the controls, so on an upright
@@ -657,7 +675,7 @@ export function App() {
                   disabled={state.phase !== 'ready'}
                   starting={state.starting}
                   showBet={mode === 'manual' || !market.autoPlay}
-                  onChange={setSetup}
+                  onChange={changeSetup}
                   onStart={start}
                 />
                 {/* Last in the panel: how to play is chosen once, the rest every round. */}

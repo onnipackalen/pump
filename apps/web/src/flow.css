@@ -1,0 +1,11 @@
+/*
+ * The layer where a balloon's slot that goes sinks away when the player
+ * picks fewer balloons (stageFlow.ts). Over the slots, the same size, and
+ * never in the way of a tap.
+ */
+.slots-gone {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
