@@ -2941,3 +2941,20 @@ What went wrong, and how it was caught:
   passed when run alone; they are timeouts, not failures.
 - The Mac slept for about two hours overnight and stalled three
   builders; they restarted on their own.
+
+## 2026-11-21: 21841cf deployed to the live site
+
+The public-wins screen and the "Keep my wins private" switch, with public
+wins left off (the user: "Deploy, wins hidden"). Nineteen screen-only
+commits since c416258. Typecheck and build here, GitHub's check green,
+Manual Deploy > Deploy latest commit; live 41 seconds later, serving the new
+build's files. The log says `opened the existing file, 7 players`.
+`/api/wins` answers `"enabled": false` and the live page shows no wins lists.
+
+Turned out different from what `render.yaml` suggests: the log says
+`PUBLIC_WINS is not set`, although `render.yaml` sets it to "off". Render
+did not copy that value onto the service (a Manual Deploy builds the code;
+it does not re-read the Blueprint's settings). Off either way today, but
+turning the lists on later takes more than editing `render.yaml` and
+deploying: the value has to reach the service, through a Blueprint sync or
+the service's Environment page. Ask the user before either.
