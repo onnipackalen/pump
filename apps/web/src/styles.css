@@ -173,13 +173,23 @@ body {
  *
  * - In a round the panel fills exactly that room: one screen, no scrolling,
  *   with Pump under the thumb.
- * - The bet panel and the auto-play form are taller. They start in the same
- *   place and run on below the screen, and the page scrolls down to them.
- *   (The user chose this over a panel that fits: "scroll down for manual
- *   and auto, please don't pop up".)
- * - The top bar stays at the top while the page is scrolled, so the balance
- *   and the settings button are always there.
+ * - The bet panel and the auto-play form are taller, and they are a sheet,
+ *   the way a phone shows one: a card docked at the bottom with a handle,
+ *   its top (Bet and the amount) on screen. Swipe up and it slides up over
+ *   the balloons; swipe down and it goes back. (The user chose this over a
+ *   panel that fits, "scroll down for manual and auto, please don't pop
+ *   up", and then asked for the swipe "like on an iPhone".)
+ *   How: the swipe is the page's own scroll, so it moves the way every
+ *   other sheet on the phone does. The stage is stuck in place under the
+ *   top bar, so the page's scroll moves only the panel, over it. The page
+ *   comes to rest in one of two places, sheet down or sheet up.
+ * - The top bar stays at the top the whole time, so the balance and the
+ *   settings button are always there.
  * - The page never scrolls sideways: the app is clipped at its sides.
+ *
+ * A wide screen (a desktop browser, a phone on its side) is deliberately
+ * not the same: there the panel is a card beside the stage, nothing
+ * scrolls and there is no sheet.
  *
  * The button row under the balloons depends on one thing only, the number
  * of balloons on the stage: closed with one (the panel's big button is its
@@ -191,6 +201,8 @@ body {
     height: auto;
     overflow-x: hidden;
     overflow-y: auto;
+    /* Sheet down (the top of the page) or sheet up (its end), nothing between. */
+    scroll-snap-type: y mandatory;
   }
   body,
   #root {
@@ -211,6 +223,7 @@ body {
     overflow-x: hidden;
     overflow-x: clip;
     overflow-y: visible;
+    scroll-snap-align: start;
   }
   .topbar {
     position: sticky;
@@ -219,14 +232,22 @@ body {
     background: var(--stage);
   }
   .layout {
-    flex: none;
+    flex: 1 0 auto;
     flex-direction: column;
-    padding: 0 8px 8px;
+    padding: 0 8px;
   }
+  /*
+   * Stuck under the top bar: the page's scroll doesn't move it, the sheet
+   * slides over it. Its height comes from the screen at its smallest (svh):
+   * a phone's browser hides its own bars while the page scrolls, and a
+   * stage sized from the changing height would grow as the sheet came up.
+   */
   .stage {
+    position: sticky;
+    top: var(--bar);
     flex: none;
-    height: calc(100vh - var(--bar) - var(--round-room) - var(--gap) - 8px);
-    height: calc(100dvh - var(--bar) - var(--round-room) - var(--gap) - 8px);
+    height: calc(100vh - var(--bar) - var(--round-room) - var(--gap));
+    height: calc(100svh - var(--bar) - var(--round-room) - var(--gap));
     min-height: calc(var(--label-h) + var(--action-h) + 120px);
   }
   .stage:has(.slot:only-child) {
@@ -236,14 +257,44 @@ body {
     padding: 0;
     overflow: hidden;
   }
+  /*
+   * The sheet: docked at the bottom, as wide as the phone, rounded at the
+   * top only, with a shadow that lifts it off the stage. On a tablet it
+   * keeps a phone's width, in the middle.
+   */
   .controls {
     order: 0;
     flex: none;
     align-self: center;
-    width: min(100%, 560px);
+    width: min(calc(100% + 16px), 560px);
     min-height: var(--round-room);
     max-height: none;
+    margin-top: auto;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     overflow: visible;
+    border-bottom: 0;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -12px 32px rgba(5, 8, 18, 0.5);
+    scroll-snap-align: end;
+  }
+  /*
+   * The handle: the small bar a phone puts on anything that can be pulled
+   * up. Only while there is something to pull: not in a round and not while
+   * auto-play runs, when the panel is exactly its room.
+   */
+  .controls::before {
+    content: '';
+    flex: none;
+    align-self: center;
+    width: 36px;
+    height: 5px;
+    margin: -4px 0 -2px;
+    border-radius: 3px;
+    background: rgba(244, 242, 238, 0.32);
+  }
+  .controls:has(> .round)::before,
+  .controls:has(.auto-progress[data-running='true'])::before {
+    display: none;
   }
   /* The round panel takes up all of its room: the big button grows. */
   .controls > .round {
