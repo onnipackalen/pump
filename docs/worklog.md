@@ -779,8 +779,8 @@ site has a database, schema changes must be new migration steps.
 ## 2026-11-20: pumps on the floor, bigger pictures on phones (branch `one-screen-layout`)
 
 Two fixes to the game screen after a hostile review, both CSS, both in the
-stage and background rules only. On the branch `one-screen-layout`; not in
-main until the user says so.
+stage and background rules only. Built on the branch `one-screen-layout`
+and moved into main after the user approved them.
 
 - The pumps stand on the floor line again. The floor's height counted the
   two lines of numbers under a balloon but not the Pump button row that was
@@ -825,3 +825,39 @@ Found and left alone, because they are not these two fixes:
   that rule now also carries the scrolling above.
 - The 20% of sky left on a phone can only be used by taller art (a longer
   hose, say). That belongs to the graphics.
+## 2026-11-20: hostile review of the ladders and the Patch: designs, nothing applied
+
+A hostile review sent four points. Its numbers were checked and are right.
+Designs were worked out for the lead to say yes or no to; `config.ts` and
+the locked rules are unchanged.
+
+- Easy's first rung is 1.01x, and Easy's pop chance hardly builds (7.3% to
+  16.5%). Design "Easy B", checked with the whole engine suite and `npm run
+  rtp` at 9400, 9700 and 9900 on a scratch copy:
+
+  ```
+  102 112 123 137 154 175 200 230 266 309 361 424 500 591 701 835 1000
+  1210 1492 1894 2500 3452 5000
+  ```
+
+  23 rungs (today 32), pump 1 pops 4.9% (4.0%), later pumps 8.9% to 31.0%,
+  rungs at 2x, 5x, 10x, 25x and 50x, starts from an RTP of 92.90% (Easy
+  today: 93.59%). A balloon never cashed out climbs 7.6 rungs (9.9).
+- What limits the design: every later pump must pop more often than pump 1
+  does at the lowest RTP the game must start at. So a higher first rung
+  forces a steeper ladder; at 1.05x Easy would be Medium. And with
+  multipliers in hundredths, a gentle start can only rise in tiny steps.
+- A Patch costs (1 - pop chance) / RTP of what the step can win, on any
+  ladder. On today's Easy at a $1 bet the price is the whole gain on pumps
+  2 to 8. Proposed: do not sell a Patch that costs at least what its step
+  can win.
+- Patch spend has no limit: the largest single Patch is $25,773.20 (Hard,
+  $500 bet, pump 13). Options given to the lead: no limit; no Patch priced
+  above the largest bet ($1,000); no Patch priced above the balloon's own
+  bet; no Patch priced above ten times the bet. The RTP is the same under
+  all of them, because every Patch returns the RTP by itself.
+
+Turned out wrong while designing: two searches for an evenly rising Easy
+ladder found nothing. The cause was the constraint, not the search: five
+round rungs, whole hundredths and a strictly rising pop chance leave very
+few ladders. Caught by counting how long Easy can be for each first rung.
