@@ -363,8 +363,11 @@ export function AutoPlayPanel({
  *
  * A press doesn't go to the server here: auto-play sends it as that
  * balloon's next step, right after any pump already on its way (and only if
- * that pump holds). The amount is the balloon's cash-out value as the stage
- * shows it. Once pressed, the button says "queued" until the balloon is out.
+ * that pump holds). So the buttons show no amount: auto-play keeps a pump on
+ * its way almost all the time, and an amount would mostly be one step behind
+ * what the press pays (or show money a pop then takes). They say "after
+ * pump", steadily, never flickering with each pump. Once pressed, a button
+ * says "queued" until the balloon is out.
  */
 function HandCashOuts({
   round,
@@ -380,13 +383,12 @@ function HandCashOuts({
     b.status === 'active' && b.cashOutCents !== null && !asked.has(b.index);
   const cashable = round.balloons.filter(open);
   const queued = round.balloons.filter((b) => b.status === 'active' && asked.has(b.index));
-  const allCents = cashable.reduce((sum, b) => sum + (b.cashOutCents ?? 0), 0);
   const text = (b: BalloonView): string =>
     b.status !== 'active' || b.cashOutCents === null
       ? '—'
       : asked.has(b.index)
         ? 'queued'
-        : formatCents(b.cashOutCents);
+        : 'after pump';
   const hint = 'Cashes out right after any pump on its way, if that pump holds.';
 
   return (
@@ -401,7 +403,7 @@ function HandCashOuts({
           title={multi ? `Cash out balloon ${b.index + 1}. ${hint}` : `Cash out. ${hint}`}
           aria-label={
             open(b)
-              ? `Cash out${multi ? ` balloon ${b.index + 1}` : ''}, ${text(b)}`
+              ? `Cash out${multi ? ` balloon ${b.index + 1}` : ''} after the pump on its way`
               : undefined
           }
         >
@@ -422,7 +424,7 @@ function HandCashOuts({
         >
           <span>Cash out all</span>
           <strong>
-            {cashable.length > 0 ? formatCents(allCents) : queued.length > 0 ? 'queued' : '—'}
+            {cashable.length > 0 ? 'after pump' : queued.length > 0 ? 'queued' : '—'}
           </strong>
         </button>
       )}

@@ -478,9 +478,13 @@ describe('the auto-play panel while it runs: Cash out', () => {
   const buttons = (html: string): string[] =>
     [...html.matchAll(/<button[^>]*>(.*?)<\/button>/g)].map((m) => (m[1] ?? '').replace(/<[^>]+>/g, ''));
 
-  it('one balloon: Stop and one Cash out with its amount', () => {
+  // No amount while auto-play runs: a pump is almost always on its way, so
+  // an amount would mostly be one step behind what the press pays.
+  it('one balloon: Stop and one Cash out that says it goes after the pump, with no amount', () => {
     const r = round([balloon({ rung: 2, cashOutCents: 109 })]);
-    expect(buttons(render(running(), r))).toEqual(['Stop', `Cash out${formatCents(109)}`]);
+    const html = render(running(), r);
+    expect(buttons(html)).toEqual(['Stop', 'Cash outafter pump']);
+    expect(html).not.toContain(formatCents(109));
   });
 
   it('three balloons: a Cash out each and Cash out all, in fixed places', () => {
@@ -492,10 +496,10 @@ describe('the auto-play panel while it runs: Cash out', () => {
     const asked = { roundId: r.id, indexes: [2] };
     expect(buttons(render(running({ handCashOuts: asked }), r))).toEqual([
       'Stop',
-      `Cash out${formatCents(109)}`,
+      'Cash outafter pump',
       'Cash out—',
       'Cash outqueued',
-      `Cash out all${formatCents(109)}`,
+      'Cash out allafter pump',
     ]);
   });
 
