@@ -1645,3 +1645,38 @@ A note for whoever touches the round-ending code: a reveal that throws
 rolls back the action that ends the round. That is right, but it means any
 bug that throws only when a round ends tells the player the outcome, the
 same way. Never swallow such an error to "fix" it.
+
+## 2026-11-20: a better picture after a pop
+
+The user sent a screenshot of a popped balloon in another chat with "This
+can be better" and approved four changes there ("Yes, send them"). They
+were handed to this chat because the new-balloon set-up starts from that
+picture.
+
+- The hose lies loose on the floor. It used to be the standing hose
+  turned over, which made a stiff hook at the nozzle with its end in the
+  air. Now a separate lying shape (`FLAT_HOSE_PATH`) shows. The standing
+  hose still turns down, out of sight, because it carries the fitting and
+  the torn neck; at the new angle (-87 degrees, was -82) its end lands on
+  the floor exactly where the lying hose ends, pointing the same way. A
+  test holds the two ends together. During the fall the standing hose
+  hands over to the lying one in the last 60 ms. Safari cannot animate a
+  path's shape, so it is a hand-over, not a morph.
+- The grey star became the balloon's torn neck: its rolled lip and three
+  ragged flaps in a dull, darker shade of the balloon's own colour, with
+  a pale edge. The edge keeps the old scrap's contrast (3.1 to 1 on the
+  hose, 9.4 to 1 on the floor) on all three colours; violet's lands
+  exactly on it. The flying pieces stay grey.
+- Three small grey pieces stay on the floor, still, between the hose end
+  and the pump.
+- The pump number stays at full strength after a pop (it was dimmed to
+  0.6, which made the pump look switched off).
+
+Found on the way: fading the hose's tube and shine one by one would have
+lifted the shine from its own 30% to full for a moment; they now sit in
+one group that fades as a whole. With "Animations off" the torn neck
+would have flashed at the top of the standing hose during the set-up;
+it is in the motion-off list now.
+
+`balloonLook.test.ts` asked for the old grey scrap; it now checks the
+torn neck's colours on every balloon and that the number is not dimmed.
