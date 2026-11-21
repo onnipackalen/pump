@@ -36,6 +36,9 @@
   /* The table drops a column on a narrow card (below). */
   container-type: inline-size;
   display: grid;
+  /* One column no wider than the card: a wide table scrolls in its own box
+     (.table-scroll) instead of pushing the tabs and the gain past the edge. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   width: min(calc(100% - 24px), 960px);
   margin: 0 auto 12px;
@@ -89,6 +92,13 @@
   color: var(--muted);
 }
 
+/* A long difficulty name (one the config does not know) is cut, not the row. */
+.pw-table .pw-difficulty {
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* A narrow card keeps the gain and leaves out the payout (bet plus gain). */
 @container (max-width: 480px) {
   .pw-table .pw-payout {
@@ -111,14 +121,6 @@
     border-radius: 0;
     scroll-snap-align: end;
   }
-}
-
-/* Hidden during play where a drag could scroll the page (see the top of this file). */
-@media (orientation: portrait), (pointer: coarse) {
-  .app:has(.controls > .round, .auto-progress[data-running='true']) > .public-wins {
-    display: none;
-  }
-}
   /* Sheet down: off the page until it is up (wins/sheetFirst.ts). */
   .public-wins[data-waiting] {
     display: none;
@@ -127,3 +129,11 @@
   .app:has(> .public-wins) .controls {
     scroll-snap-stop: always;
   }
+}
+
+/* Hidden during play where a drag could scroll the page (see the top of this file). */
+@media (orientation: portrait), (pointer: coarse) {
+  .app:has(.controls > .round, .auto-progress[data-running='true']) > .public-wins {
+    display: none;
+  }
+}

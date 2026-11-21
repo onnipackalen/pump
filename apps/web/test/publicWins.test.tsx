@@ -280,6 +280,11 @@ describe('Public wins panel', () => {
     expect(at(false)).not.toContain('data-waiting');
   });
 
+  it('cuts a long difficulty name in its cell and keeps it whole in the title', () => {
+    const html = panel({ ...NONE, recent: [win({ difficultyId: 'some-future-difficulty' })] });
+    expect(html).toContain('<td class="pw-difficulty" title="some-future-difficulty">some-future-difficulty</td>');
+  });
+
   it('is kept but hidden while another page shows', () => {
     const html = renderToStaticMarkup(
       <PublicWinsPanel wins={lists} config={GAME_CONFIG} list="recent" onList={() => undefined} hidden />,

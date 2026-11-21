@@ -197,7 +197,9 @@ function WinRow({ win, difficulty }: { readonly win: PublicWin; readonly difficu
   return (
     <tr title={timeOfDay.format(new Date(win.finishedAt))}>
       <td className="pw-tag">{win.playerTag}</td>
-      <td>{difficulty}</td>
+      <td className="pw-difficulty" title={difficulty}>
+        {difficulty}
+      </td>
       <td className="num">{formatCents(win.wageredCents)}</td>
       <td className="num">{formatMultiplier(win.multiplierHundredths)}</td>
       <td className="num pw-payout">{formatCents(win.payoutCents)}</td>
