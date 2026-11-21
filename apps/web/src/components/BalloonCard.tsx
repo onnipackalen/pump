@@ -15,8 +15,8 @@ import { topRungForBet } from '../game/rules';
 interface BalloonCardProps {
   readonly balloon: BalloonView;
   /**
-   * The difficulty its pump shows: its round's, or once the round is over
-   * the one picked for the next (game/level.ts, stageLevelId).
+   * The difficulty its pump shows: its round's. A round that is over gives
+   * way to the next round's set-up once another one is picked (game/stage.ts).
    */
   readonly difficultyId: string;
   /** The RTP and ladder its round was played with (its own copies). */

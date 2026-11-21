@@ -15,7 +15,7 @@ import { VerifyPage } from './components/VerifyPage';
 import type { AutoPlaySettings } from './game/autoPlay';
 import { checkBets, type BetSetup } from './game/betSetup';
 import { controlTarget, panelActivity, showOwnPump, SWITCH_PAUSE_MS } from './game/controls';
-import { stageLevelId } from './game/level';
+import { stageRound } from './game/stage';
 import { useAutoPlay } from './game/useAutoPlay';
 import { useGame, type GameEvent } from './game/useGame';
 import { useHoldPump } from './game/useHoldPump';
@@ -126,23 +126,29 @@ export function App() {
   const sessionMs = useSessionClock(state.session?.startedAt ?? null);
 
   const round = state.round;
+  const setupDifficulty =
+    config.difficulties.find((d) => d.id === setup.difficultyId) ?? config.difficulties[0];
+  // The round the stage shows, or null for the next round's set-up: a
+  // round that is over gives way as soon as the bet panel picks another
+  // number of balloons or difficulty (game/stage.ts).
+  const stage = stageRound(round, setupDifficulty?.id, setup.bets.length);
   // How the balloons before this round ended, so each new pump sets up
   // from the picture that was in its place (game/setUp.ts).
-  const setUp = useSetUpFrom(round, state.phase !== 'loading' && round === null, view === 'game');
+  const setUp = useSetUpFrom(stage, state.phase !== 'loading' && stage === null, view === 'game');
   const roundActive = round?.status === 'active';
   const roundWin = round ? roundWinTier(round) : null;
   // Where each cashed-out balloon would have popped: only once the round is
   // over and every balloon's last motion has finished, so it never shows
-  // during play or over a pop, cash-out or win.
+  // during play or over a pop, cash-out or win. Only while the stage shows it.
   const afterRoundShown =
-    round?.status === 'finished' &&
+    stage?.status === 'finished' &&
     state.beats.every((beat) => beat === 'idle') &&
     !state.pending.some(Boolean);
   // Keep the lines as they go on screen, so the verify page can check later
   // that the round's record says the same.
   useEffect(() => {
-    if (afterRoundShown) shownReveals.remember(round);
-  }, [afterRoundShown, round]);
+    if (afterRoundShown) shownReveals.remember(stage);
+  }, [afterRoundShown, stage]);
   // And each balloon's top rung as the screen first shows the round: a
   // reveal stops there, so the verify page checks the record's top against it.
   useEffect(() => {
@@ -159,8 +165,6 @@ export function App() {
   const check = checkBets(setup, config.limits, balance);
   const target = autoRunning ? null : controlTarget(round, chosen);
   const targetBalloon = target === null ? null : (round?.balloons[target] ?? null);
-  const setupDifficulty =
-    config.difficulties.find((d) => d.id === setup.difficultyId) ?? config.difficulties[0];
   const autoOffered = market.autoPlay && setupDifficulty !== undefined && state.phase === 'ready';
   // Whether auto-play may change the bets after a win or a loss (market.ts).
   const autoBetSizing = market.autoPlay && market.autoBetSizing;
@@ -501,44 +505,42 @@ export function App() {
                 </button>
               </div>
             )}
-            {round?.status === 'finished' && <RoundResult round={round} />}
+            {stage?.status === 'finished' && <RoundResult round={stage} />}
           </div>
 
           {state.phase === 'loading' ? (
             <p className="stage-message">Loading…</p>
           ) : (
             <div className="slots">
-              {round
-                ? round.balloons.map((balloon) => (
+              {stage
+                ? stage.balloons.map((balloon) => (
                     <BalloonCard
-                      key={`${round.id}-${balloon.index}`}
+                      key={`${stage.id}-${balloon.index}`}
                       balloon={balloon}
-                      // The round's level while it runs; once it is over,
-                      // the one picked for the next round (game/level.ts).
-                      difficultyId={stageLevelId(round, setupDifficulty?.id)}
-                      rtpBp={round.rtpBp}
-                      ladder={round.ladder}
+                      difficultyId={stage.difficultyId}
+                      rtpBp={stage.rtpBp}
+                      ladder={stage.ladder}
                       beat={state.beats[balloon.index] ?? 'idle'}
                       setUp={setUp[balloon.index]}
                       patched={state.patched[balloon.index] ?? false}
                       outcome={state.outcomes[balloon.index] ?? null}
                       held={state.held[balloon.index] ?? false}
                       pending={state.pending[balloon.index] ?? false}
-                      winShown={state.winShownFor === round.id}
+                      winShown={state.winShownFor === stage.id}
                       roundWin={roundWin}
                       quiet={autoRunning}
                       selectable={
                         panel === 'round' &&
-                        round.balloons.length > 1 &&
+                        stage.balloons.length > 1 &&
                         balloon.status === 'active'
                       }
                       selected={
-                        panel === 'round' && round.balloons.length > 1 && target === balloon.index
+                        panel === 'round' && stage.balloons.length > 1 && target === balloon.index
                       }
                       onSelect={() => setChosen(balloon.index)}
                       // Its own Pump only while two or more balloons are in
                       // play: with one left, the panel's big button is Pump.
-                      canPump={panel === 'round' && showOwnPump(round, balloon)}
+                      canPump={panel === 'round' && showOwnPump(stage, balloon)}
                       onPump={() => {
                         setChosen(balloon.index);
                         game.pump(balloon.index, false);

@@ -1,5 +1,4 @@
 import { GAME_CONFIG, type Difficulty } from '@pump/engine';
-import type { RoundView } from '../api/contract';
 import type { BalloonLevel } from '../balloon/Balloon';
 
 /**
@@ -62,19 +61,4 @@ export function levelOf(
     colour: levelColour(difficultyId),
     marks: position < 0 ? 0 : Math.min(position + 1, MAX_LEVEL_MARKS),
   };
-}
-
-/**
- * Which difficulty the pumps of a round on the stage show. While the round
- * is in play: its own. Once it is over, its balloons stay on the stage
- * beside the bet panel, and that panel is now setting up the next round,
- * so the pumps show the difficulty picked there: picking another one
- * changes them at once, as it does before the first bet. With nothing
- * picked, the round's own.
- */
-export function stageLevelId(
-  round: Pick<RoundView, 'status' | 'difficultyId'>,
-  pickedId: string | undefined,
-): string {
-  return round.status === 'finished' && pickedId !== undefined ? pickedId : round.difficultyId;
 }
