@@ -723,3 +723,55 @@ simulator engines that are wrong on purpose.
 
 Left as it is: the volatility printed for Expert moves from run to run,
 because rare huge wins decide it. The line now says so.
+
+## 2026-11-20: the game screen plays against the real server
+
+Built:
+
+- The server hands out the built screen, so one address serves the game
+  and its API (`npm start`). `npm run dev` runs server and screen together
+  for working on the game.
+- `apps/web/src/api/httpClient.ts`: the screen's real client. The demo is
+  no longer part of the app. The API types moved to `packages/contract`,
+  shared by both halves.
+- The verify answer now carries each pump's draw and the payout cap the
+  round was played under (`rounds.max_payout_cents`), which the verify page
+  needs to check a round stopped by the cap.
+- `apps/server/test/screenClient.test.ts` runs the very file the browser
+  runs against the real routes. `apps/server/test/verifyRounds.test.ts`
+  plays rounds that end in every way a round can end, at 9400, 9700 and
+  9900, and checks each with `verifyRound`.
+
+Turned out wrong, and how it was caught:
+
+- Three readers compared the screen (built against the demo) with the
+  server. The worst find: with the cookie gone, the client opened a new
+  session and sent the request again as that new player, while the screen
+  still showed the old balance and round. Bet then answered "Set a client
+  seed" for ever. The client now passes the refusal on and the player is
+  told to reload (2d96a94).
+- In development React runs the first load twice, which made two players
+  on every first visit. A session load already on its way is now shared.
+- Playing in a real browser showed the settings sheet's buttons running
+  off the right edge once the history had a real row in it. One wide table
+  row widened the whole column (2c64a59). The demo history had the same
+  row, so this was there before; nobody had opened the sheet after a round
+  at that width.
+- A build left in `dist` shows the RTP it was built with. Under
+  `npm run dev` the server handed that build out on port 3000 while
+  playing rounds at the new RTP. The dev server is now API-only (d137ef6).
+
+Checked in a real browser against the real server: bet, pump, Patch +
+pump, cash-out, a refresh mid-round, a second tab acting on an
+out-of-date screen (409, no double pay), seed rotation, and the verify
+page on the finished round. No answer held a result before its pump.
+
+Left open, all in the screen and handed to its chat: a round closed by
+the 24-hour rule shows a refunded bet as lost; "next round uses nonce N"
+does not move after a round; the screen does not start over by itself
+after a lost session; before a bet the screen shows the RTP and ladders
+from its own build, not from the server.
+
+Note for later: migration 1 was edited in place to add the cap column.
+That was safe only because no database existed anywhere. Once a live
+site has a database, schema changes must be new migration steps.
