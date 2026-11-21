@@ -134,7 +134,7 @@ describe('a pop stays quiet', () => {
   it('lets the pieces float down and fade out completely', () => {
     const end = /@keyframes pb-shard-fly \{[\s\S]*?100% \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(end).toContain('opacity: 0;');
-    expect(end).toMatch(/translate\(var\(--dx\), calc\(var\(--dy\) \+ \d+px\)\)/);
+    expect(end).toMatch(/translate\(calc\(var\(--dx\) \* [\d.]+\), calc\(var\(--dy\) \+ \d+px\)\)/);
   });
 
   it('keeps the pump number at full strength after a pop', () => {

@@ -734,9 +734,10 @@
 /* No blown-up balloon before any bet, while a new balloon waits for its
  * first pump, when that pump popped it on the floor, or when its bet was
  * refunded. (The hose lies on the floor then; Balloon.tsx draws it,
- * hoseShape.ts.) */
+ * hoseShape.ts.) Not drawn at all, so its sway and strain loops stop too:
+ * with three pumps waiting they cost real work for nothing. */
 .pump-balloon:is([data-idle], [data-first="floor"], [data-first="floor-popped"], [data-first="floor-void"]) .pb-float {
-  opacity: 0;
+  display: none;
 }
 .pump-balloon:is([data-first="floor"], [data-first="floor-void"]) .pb-limp {
   opacity: 1;
@@ -830,6 +831,22 @@
 }
 :root[data-motion="reduce"] .pump-balloon[data-first="floor"] .pb-scene {
   transform: none;
+}
+/* With motion off the small flat balloon still fades in and out (no
+ * unrolling, no burst): switched in one frame it flickered. */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .pump-balloon[data-setup]:not([data-setup="void"]) .pb-limp {
+    animation-name: pb-fade-in;
+  }
+  :root:not([data-motion="full"]) .pump-balloon[data-first="floor-popped"][data-beat="pop"] .pb-limp {
+    animation-name: pb-limp-off;
+  }
+}
+:root[data-motion="reduce"] .pump-balloon[data-setup]:not([data-setup="void"]) .pb-limp {
+  animation-name: pb-fade-in;
+}
+:root[data-motion="reduce"] .pump-balloon[data-first="floor-popped"][data-beat="pop"] .pb-limp {
+  animation-name: pb-limp-off;
 }
 :root[data-motion="reduce"] .pump-balloon[data-first="lift"] .pb-grow {
   animation-name: pb-fade-in;
@@ -993,7 +1010,10 @@
   }
 }
 
-/* Fast out, then falls and fades. */
+/* Out and up, then a slow float down while they fade. Mostly up and down,
+ * little sideways (a third of --dx), and fading from early on, so with
+ * three balloons none crosses into the next slot or off the screen still
+ * showing. */
 @keyframes pb-shard-fly {
   0% {
     opacity: 1;
@@ -1001,18 +1021,18 @@
     animation-timing-function: cubic-bezier(0.15, 0.75, 0.35, 1);
   }
   22% {
-    opacity: 1;
-    transform: translate(calc(var(--dx) * 0.85), calc(var(--dy) * 0.85)) rotate(calc(var(--r) * 0.35));
+    opacity: 0.75;
+    transform: translate(calc(var(--dx) * 0.3), calc(var(--dy) * 0.85)) rotate(calc(var(--r) * 0.35));
     animation-timing-function: ease-in-out;
   }
   55% {
-    opacity: 0.85;
-    transform: translate(calc(var(--dx) * 0.95), calc(var(--dy) + 22px)) rotate(calc(var(--r) * 0.65));
+    opacity: 0.35;
+    transform: translate(calc(var(--dx) * 0.33), calc(var(--dy) + 22px)) rotate(calc(var(--r) * 0.65));
     animation-timing-function: ease-in;
   }
   100% {
     opacity: 0;
-    transform: translate(var(--dx), calc(var(--dy) + 60px)) rotate(var(--r));
+    transform: translate(calc(var(--dx) * 0.35), calc(var(--dy) + 60px)) rotate(var(--r));
   }
 }
 
@@ -1029,7 +1049,7 @@
  * ------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion="full"]) .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-limp, .pb-scene, .pb-shard, .pb-neck, .pb-tie, .pb-value) {
+  :root:not([data-motion="full"]) .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-scene, .pb-shard, .pb-neck, .pb-tie, .pb-value) {
     animation: none !important;
   }
   :root:not([data-motion="full"]) .pump-balloon .pb-grow {
@@ -1040,7 +1060,7 @@
   }
 }
 
-:root[data-motion="reduce"] .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-limp, .pb-scene, .pb-shard, .pb-neck, .pb-tie, .pb-value) {
+:root[data-motion="reduce"] .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-scene, .pb-shard, .pb-neck, .pb-tie, .pb-value) {
   animation: none !important;
 }
 :root[data-motion="reduce"] .pump-balloon[data-beat="pop"] :is(.pb-wobble, .pb-neck) {

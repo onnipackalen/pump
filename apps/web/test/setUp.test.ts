@@ -11,16 +11,23 @@ import {
 import {
   fallAt,
   FLAT,
+  FLAT_LENGTH,
   FLOOR_Y,
   HOSE_FALL_MS,
   HOSE_LIFT_MS,
   hoseAt,
+  hoseFrame,
+  hoseLength,
   hoseLies,
   liftAt,
+  LYING,
   onTip,
   STAND,
   STAND_END,
+  STAND_LENGTH,
+  STANDING,
   tipPose,
+  type HosePose,
   type Point,
 } from '../src/balloon/hoseShape';
 import { balloon, round } from './fixtures';
@@ -129,7 +136,10 @@ describe('which set-up a new round gets', () => {
 
   it('moves for SET_UP_MS at most, the time auto-play can wait after a bet', () => {
     expect(cssMs('--pb-setup-ms')).toBe(SET_UP_MS);
-    const setUps = animatedRules('.pb-scene').concat(animatedRules('.pb-limp')).filter((s) => s.includes('data-setup'));
+    // Rules that only rename the animation (motion off) keep the base timing.
+    const setUps = animatedRules('.pb-scene')
+      .concat(animatedRules('.pb-limp'))
+      .filter((s) => s.includes('data-setup') && /animation: /.test(rule(s)));
     expect(setUps.length).toBeGreaterThan(0);
     for (const selector of setUps) expect(endMs(selector)).toBeLessThanOrEqual(SET_UP_MS);
   });
@@ -195,7 +205,8 @@ describe('the first pump', () => {
     const hidden = rule(
       '.pump-balloon:is([data-idle], [data-first="floor"], [data-first="floor-popped"], [data-first="floor-void"]) .pb-float',
     );
-    expect(hidden).toContain('opacity: 0;');
+    // Not drawn at all, so its sway and strain loops stop too.
+    expect(hidden).toContain('display: none;');
     expect(rule('.pump-balloon[data-first="floor-popped"] .pb-shards')).toContain('display: none;');
   });
 
@@ -230,11 +241,16 @@ describe('the hose', () => {
     // The user asked for a fluid fall (2026-11-20): it used to turn over
     // stiffly and swap shapes as it landed. At 60 frames a second no point
     // may move more than 16 units in one frame, in the fall or the lift.
-    for (const [curve, duration] of [[fallAt, HOSE_FALL_MS], [liftAt, HOSE_LIFT_MS]] as const) {
+    for (const [lying, duration] of [[true, HOSE_FALL_MS], [false, HOSE_LIFT_MS]] as const) {
       const frames = Math.ceil(duration / (1000 / 60));
+      const from = lying ? STANDING : LYING;
+      const at = (i: number) => {
+        const p = hoseFrame(from, lying, i / frames);
+        return hoseAt(p.down, p.share);
+      };
       for (let i = 1; i <= frames; i += 1) {
-        const a = hoseAt(curve((i - 1) / frames));
-        const b = hoseAt(curve(i / frames));
+        const a = at(i - 1);
+        const b = at(i);
         a.forEach(([ax, ay], k) => {
           const [bx, by] = b[k] ?? [ax, ay];
           expect(Math.hypot(ax - bx, ay - by)).toBeLessThan(16);
@@ -243,13 +259,65 @@ describe('the hose', () => {
     }
   });
 
+  it('changes its length evenly over the whole fall and lift, so it never looks stretched', () => {
+    // Standing it is 79.2 long, lying about 66.6. Spread over the motion, no one
+    // frame may carry more than two and a half times its even share.
+    expect(STAND_LENGTH).toBeCloseTo(79.2, 1);
+    expect(FLAT_LENGTH).toBeGreaterThan(66);
+    expect(FLAT_LENGTH).toBeLessThan(67);
+    for (const [lying, duration] of [[true, HOSE_FALL_MS], [false, HOSE_LIFT_MS]] as const) {
+      const frames = Math.ceil(duration / (1000 / 60));
+      const from = lying ? STANDING : LYING;
+      const lengths = Array.from({ length: frames + 1 }, (_, i) => {
+        const p = hoseFrame(from, lying, i / frames);
+        return hoseLength(hoseAt(p.down, p.share));
+      });
+      expect(lengths[0]).toBeCloseTo(lying ? STAND_LENGTH : FLAT_LENGTH, 6);
+      expect(lengths[frames]).toBeCloseTo(lying ? FLAT_LENGTH : STAND_LENGTH, 6);
+      const even = Math.abs(STAND_LENGTH - FLAT_LENGTH) / frames;
+      for (let i = 1; i <= frames; i += 1) {
+        expect(Math.abs((lengths[i] ?? 0) - (lengths[i - 1] ?? 0))).toBeLessThanOrEqual(even * 2.5);
+      }
+    }
+  });
+
+  it('starts every motion from the shape drawn last, so a cut-off lift never jumps', () => {
+    // A cash-out during the first pump's lift: the fall starts where the
+    // lift had got to (it used to snap upright first, live check 2).
+    const midLift = hoseFrame(LYING, false, 0.4);
+    expect(hoseFrame(midLift, true, 0)).toEqual(midLift);
+    expect(hoseFrame(midLift, true, 1)).toEqual(LYING);
+    const midFall: HosePose = hoseFrame(STANDING, true, 0.3);
+    expect(hoseFrame(midFall, false, 0)).toEqual(midFall);
+    expect(hoseFrame(midFall, false, 1)).toEqual(STANDING);
+    // The hook draws from its last pose and never redraws on clean-up,
+    // which left the hose standing after a switch to motion off.
+    expect(art).toContain('return () => cancelAnimationFrame(frame);');
+    expect(art).not.toMatch(/return \(\) => \{\s*cancelAnimationFrame\(frame\);\s*drawHose/);
+  });
+
   it('never passes through the floor or outside 14% to 87% of the width', () => {
     for (let i = 0; i <= 100; i += 1) {
-      for (const [x, y] of hoseAt(i / 100).slice(1)) {
+      for (const [x, y] of hoseAt(i / 100, i / 100).slice(1)) {
         expect(y).toBeLessThanOrEqual(FLOOR_Y);
         expect(x).toBeGreaterThanOrEqual(28);
         expect(x).toBeLessThanOrEqual(174);
       }
+    }
+  });
+
+  it('points the flat balloon out of the hose end, the way the hose points', () => {
+    const pose = tipPose(FLAT);
+    const limp = /className="pb-limp-body" d="([^"]+)"/.exec(art)?.[1] ?? '';
+    const lying = pointsOf(limp).map((q) => onTip(q, pose));
+    const hoseEnd = FLAT[9]?.[0] ?? 0;
+    // All of it beyond the hose's end (to its left), none back along it.
+    for (const [x] of lying) expect(x).toBeLessThan(hoseEnd);
+    // Standing, it sits on the fitting where the blown-up balloon's neck
+    // will be, so the blow-up starts from it: above the fitting, around x 100.
+    for (const [x, y] of pointsOf(limp)) {
+      expect(y).toBeLessThanOrEqual(222);
+      expect(Math.abs(x - 100)).toBeLessThan(5);
     }
   });
 
@@ -264,6 +332,9 @@ describe('the hose', () => {
     for (const p of [...pointsOf(limp), ...fitting].map((q) => onTip(q, pose))) {
       // On the floor: no lower than the pump's base (y 311), with a little give.
       expect(p[1]).toBeLessThanOrEqual(311.5);
+      // Pointing out of the hose's end, but short of the next pump to the
+      // left with three balloons (it starts about x 39.3).
+      expect(p[0]).toBeGreaterThanOrEqual(39.3);
       // Inside 14% to 87%, even in the closer view of a waiting balloon.
       const [x, y] = zoomed(p);
       expect(x).toBeGreaterThanOrEqual(28);

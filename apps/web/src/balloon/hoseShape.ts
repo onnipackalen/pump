@@ -35,23 +35,26 @@ export const FLOOR_Y = 308.5;
 export const STAND: readonly Point[] = splitInThirds([116, 295], [88, 295], [100, 262], [100, 227]);
 
 /**
- * The hose lying loose on the floor: out of the nozzle, down to the floor,
- * then along it with one soft rise. Three cubic pieces. 73.6 long. Its end
- * is where the standing hose's end lands when that hose is turned
- * HOSE_DOWN_DEG around the nozzle, pointing the same way, so the fall can
- * end in it without a jump.
+ * The hose lying on the floor: off the nozzle in a small arc, down to the
+ * floor by x 85, then resting flat on it (bottom on the floor line, no
+ * bump) out to x 56, pointing left. Its very end rises 1.5 units: the
+ * fitting there is wider than the hose and rests on the floor too. Three cubic pieces, 66.5 long. Its end
+ * stays clear of the left edge so the small flat balloon can come straight
+ * out of it, pointing the same way (the user: "make baloon in direction of
+ * nozzle", 2026-11-20): the 14% line and the next pump to the left both
+ * start about x 39.
  */
 export const FLAT: readonly Point[] = [
   [116, 295],
-  [106, 295],
-  [103, 308.5],
-  [94, 308.5],
-  [84, 308.5],
-  [80, 305.5],
-  [70, 306],
-  [61, 306.5],
-  [55.3, 307.8],
-  [47.3, 307.4],
+  [106, 291],
+  [97, 292],
+  [93, 301],
+  [90.5, 306.5],
+  [85, 308.5],
+  [77, 308.5],
+  [69, 308.5],
+  [62, 308.4],
+  [56, 307],
 ];
 
 /** How far the standing hose turns to lie down (anticlockwise on screen). */
@@ -95,22 +98,69 @@ export function hosePath(points: readonly Point[]): string {
 }
 
 /**
- * The hose `down` of the way from standing (0) to lying (1).
+ * The hose `down` of the way from standing (0) to lying (1), at `share`
+ * of the way from its standing length (79.2) to its lying length (66.5).
  *
  * Turning: the standing hose turns around the nozzle by `down` of the full
  * angle. Bending: from a third of the way on, it blends into the lying
- * shape, all of it by the end. Floor: no point goes below the floor line,
- * so the hose lands on the floor instead of passing through it.
+ * shape, all of it by the end. Length: the result is then scaled around
+ * the nozzle to its share of the length, so the length can change evenly
+ * over the motion instead of all at once (it would look like a stretch).
+ * Floor: no point goes below the floor line, so the hose lands on the
+ * floor instead of passing through it.
  */
-export function hoseAt(down: number): Point[] {
+export function hoseAt(down: number, share = down): Point[] {
   const turned = STAND.map((p) => turn(p, HOSE_DOWN_DEG * down));
   const blend = smoothstep(1 / 3, 1, down);
-  return turned.map(([x, y], i) => {
+  const bent = turned.map(([x, y], i): Point => {
     const [fx, fy] = FLAT[i] ?? [x, y];
-    const bx = x + (fx - x) * blend;
-    const by = y + (fy - y) * blend;
-    return [bx, i === 0 ? by : Math.min(by, FLOOR_Y)] as const;
+    return [x + (fx - x) * blend, y + (fy - y) * blend];
   });
+  const k = (STAND_LENGTH + (FLAT_LENGTH - STAND_LENGTH) * clamp01(share)) / hoseLength(bent);
+  const [nx, ny] = NOZZLE;
+  return bent.map(([x, y], i): Point => (i === 0 ? [x, y] : [nx + (x - nx) * k, Math.min(ny + (y - ny) * k, FLOOR_Y)]));
+}
+
+/** The length of a hose line (ten points: a start and three cubic pieces). */
+export function hoseLength(points: readonly Point[]): number {
+  let total = 0;
+  for (let piece = 0; piece < 3; piece += 1) {
+    const [p0, p1, p2, p3] = points.slice(piece * 3, piece * 3 + 4) as [Point, Point, Point, Point];
+    let prev = p0;
+    for (let i = 1; i <= 24; i += 1) {
+      const t = i / 24;
+      const u = 1 - t;
+      const at = (k: 0 | 1) => u * u * u * p0[k] + 3 * u * u * t * p1[k] + 3 * u * t * t * p2[k] + t * t * t * p3[k];
+      const next: Point = [at(0), at(1)];
+      total += Math.hypot(next[0] - prev[0], next[1] - prev[1]);
+      prev = next;
+    }
+  }
+  return total;
+}
+
+/** Where the hose is in its motion: how far down, and its length share. */
+export interface HosePose {
+  readonly down: number;
+  readonly share: number;
+}
+
+export const STANDING: HosePose = { down: 0, share: 0 };
+export const LYING: HosePose = { down: 1, share: 1 };
+
+/**
+ * The hose `t` of the way (0 to 1) through a fall (`lying`) or a lift,
+ * starting from `from`: wherever it was drawn last, so a motion that
+ * starts while another is under way (a cash-out during the first pump's
+ * lift) carries on from there instead of jumping. The length share moves
+ * evenly with the time.
+ */
+export function hoseFrame(from: HosePose, lying: boolean, t: number): HosePose {
+  const time = clamp01(t);
+  if (lying) {
+    return { down: from.down + (1 - from.down) * fallAt(time), share: from.share + (1 - from.share) * time };
+  }
+  return { down: from.down * liftAt(time), share: from.share * (1 - time) };
 }
 
 /**
@@ -211,3 +261,7 @@ function clamp01(x: number): number {
 function round(x: number): number {
   return Math.round(x * 100) / 100;
 }
+
+/** The standing and lying lengths (79.2 and 66.5). */
+export const STAND_LENGTH = hoseLength(STAND);
+export const FLAT_LENGTH = hoseLength(FLAT);

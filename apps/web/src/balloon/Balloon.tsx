@@ -2,16 +2,18 @@ import { useLayoutEffect, useRef, type CSSProperties } from 'react';
 import './balloon.css';
 import './balloon-app.css';
 import {
-  fallAt,
   FLAT,
   HOSE_FALL_MS,
   HOSE_LIFT_MS,
   hoseAt,
+  hoseFrame,
   hoseLies,
   hosePath,
-  liftAt,
+  LYING,
   STAND,
+  STANDING,
   tipTransform,
+  type HosePose,
   type Point,
 } from './hoseShape';
 
@@ -278,13 +280,17 @@ export function Balloon({
                way the hose points there. */}
           <g className="pb-hose-tip" transform={lying ? FLAT_TIP : undefined}>
             {/* limp: the new balloon before its first pump: small, flat, not
-                 blown up, hanging down the hose from the fitting. When the
-                 hose lies on the floor it lies along the hose's end, its
-                 lowest point on the floor line, and when the first pump
-                 lifts the hose it comes up with it. Hidden unless a balloon waits for its first pump. */}
+                 blown up, coming straight out of the fitting and pointing the
+                 way the hose points (the user: "make baloon in direction of
+                 nozzle"). Drawn on the standing hose's end, where the blown-up
+                 balloon's neck will be, so the blow-up starts from it. When the
+                 hose lies on the floor it lies on the floor in line with it,
+                 pointing left, its flat side down on the floor line; when the
+                 first pump lifts the hose it comes up with it. Hidden unless a
+                 balloon waits for its first pump. */}
             <g className="pb-limp">
-              <path className="pb-limp-body" d="M101.4 226.2C99.8 228.8 97.4 231.6 97.2 236.4C97 240.4 98.6 244.2 100.2 243.8C101.4 243.4 101.4 238.6 101.3 234.6C101.2 231 101.9 228.4 102.6 226.6Z" />
-              <path className="pb-limp-crease" d="M99.2 232.2C98.8 235.4 99.6 238.4 99.4 241" />
+              <path className="pb-limp-body" d="M98.4 221.8C97.8 218.4 97.6 214.6 98 212.4C98.4 210.8 100.6 210.6 102.2 211.6C104 212.8 104.4 215.8 103.8 218.4C103.4 220 102.6 221.2 101.6 221.8Z" />
+              <path className="pb-limp-crease" d="M100.4 220.8C100.2 218.4 100.6 215.6 101.2 213.4" />
             </g>
             <rect className="pb-hose-end" x="96" y="221" width="8" height="7" rx="2" />
           </g>
@@ -480,39 +486,52 @@ export function Balloon({
  * it falls when a round ends and lifts when a new balloon's first pump
  * holds (hoseShape.ts has the shapes and the timing). React draws the end
  * shape; this draws the frames on the way there, straight onto the lines,
- * so a frame never waits for React. The first drawing (a page load, a
- * restored round, a new balloon) shows its shape at once, and so does
- * every change when animations are off.
+ * so a frame never waits for React.
+ *
+ * Every motion starts from the shape drawn last (`pose`), so one that
+ * starts while another is under way (a cash-out during the first pump's
+ * lift) carries on from there instead of jumping. The first drawing (a
+ * page load, a restored round, a new balloon) and every change with
+ * animations off show the end shape at once.
  */
 function useHoseMotion(lying: boolean, beat: BalloonBeat | undefined) {
   const layer = useRef<SVGGElement>(null);
-  const shown = useRef<boolean | null>(null);
+  const pose = useRef<HosePose | null>(null);
   const latestBeat = useRef(beat);
   useLayoutEffect(() => {
     latestBeat.current = beat;
   }, [beat]);
   useLayoutEffect(() => {
     const g = layer.current;
-    const was = shown.current;
-    shown.current = lying;
-    if (!g || was === null || was === lying || animationsOff()) return undefined;
+    if (!g) return undefined;
+    const target = lying ? LYING : STANDING;
+    const from = pose.current;
+    if (from === null || animationsOff()) {
+      pose.current = target;
+      drawHose(g, hoseAt(target.down, target.share));
+      return undefined;
+    }
+    if (from.down === target.down && from.share === target.share) return undefined;
     // A cash-out lets the balloon go first (after its glow, on a real win).
+    // A hose already on its way, cut off by the cash-out, just carries on.
+    const atRest = from.down === 0 && from.share === 0;
     const svg = g.ownerSVGElement;
-    const wait = lying && latestBeat.current === 'cashout' && svg ? releaseDelayMs(svg) + 40 : 0;
+    const wait = lying && atRest && latestBeat.current === 'cashout' && svg ? releaseDelayMs(svg) + 40 : 0;
     const duration = lying ? HOSE_FALL_MS : HOSE_LIFT_MS;
     const start = performance.now() + wait;
+    const show = (next: HosePose) => {
+      pose.current = next;
+      drawHose(g, hoseAt(next.down, next.share));
+    };
     let frame = 0;
     const step = (now: number) => {
       const t = (now - start) / duration;
-      drawHose(g, hoseAt(lying ? fallAt(t) : liftAt(t)));
+      show(hoseFrame(from, lying, t));
       if (t < 1) frame = requestAnimationFrame(step);
     };
-    drawHose(g, hoseAt(lying ? 0 : 1));
+    show(from);
     frame = requestAnimationFrame(step);
-    return () => {
-      cancelAnimationFrame(frame);
-      drawHose(g, hoseAt(lying ? 1 : 0));
-    };
+    return () => cancelAnimationFrame(frame);
   }, [lying]);
   return layer;
 }

@@ -126,7 +126,7 @@ export function App() {
   const round = state.round;
   // How the balloons before this round ended, so each new pump sets up
   // from the picture that was in its place (game/setUp.ts).
-  const setUp = useSetUpFrom(round, state.phase !== 'loading' && round === null);
+  const setUp = useSetUpFrom(round, state.phase !== 'loading' && round === null, view === 'game');
   const roundActive = round?.status === 'active';
   const roundWin = round ? roundWinTier(round) : null;
   // Where each cashed-out balloon would have popped: only once the round is

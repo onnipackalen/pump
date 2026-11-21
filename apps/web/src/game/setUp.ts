@@ -83,17 +83,25 @@ export function balloonSetUp(
  * screen. The round object changes on every answer; only a new round id
  * starts a new set-up. `idleShown`: the picture before any bet is on screen
  * now (no round, not loading). A round restored after a page load gets no
- * set-up: only the loading message was on screen before it.
+ * set-up: only the loading message was on screen before it. `onStage`:
+ * the game is on screen (not the stats or verify page). Once it is not,
+ * the round's set-up is over: coming back shows the waiting picture, and
+ * the set-up does not play again.
  */
 export function useSetUpFrom(
   round: RoundView | null,
   idleShown: boolean,
+  onStage = true,
 ): readonly (SetUpFrom | undefined)[] {
   const [shown, setShown] = useState<{
     readonly round: RoundView | null;
     readonly idleShown: boolean;
     readonly from: readonly (SetUpFrom | undefined)[];
   }>({ round, idleShown, from: [] });
+  if (!onStage && shown.from.length > 0) {
+    setShown({ ...shown, from: [] });
+    return [];
+  }
   if (round === shown.round && idleShown === shown.idleShown) return shown.from;
   // The round changed since the last render. React's way to keep a value
   // derived from the previous render: set it during this one.
