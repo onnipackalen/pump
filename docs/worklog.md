@@ -1377,3 +1377,110 @@ on the hose). Live in the game before the merge: 3 Expert balloons at
 375x667, no page scroll, same picture sizes, and a cash-out lifting off
 with the new knot. Layout files (styles.css, App.tsx, components) are
 identical to main.
+
+## 2026-11-20: upright screens scroll down to bet, and Bet is at the top
+
+Two user decisions, both newer than "Make it fit" (the entry "upright
+phones fit on one screen again"), which they replace for upright screens.
+
+1. "Lets scroll down for manual and auto please dont pop up", then the
+   choice "Scroll down to bet" (made in the merge coordinator's chat).
+   After a round the tall bet panel had popped up and squeezed the stage.
+2. "bet should be at top reverse the order" (in the layout chat, with a
+   screenshot of the bet panel).
+
+Built, on the branch `one-screen-layout`:
+
+- On an upright screen the stage has one height: the screen minus the top
+  bar and the room the round panel needs (`--round-room`). It is the same
+  on the bet screen, in a round, after a round and during auto-play.
+- In a round the panel fills that room, so a round is one screen with no
+  scrolling. What is spare goes to the big Pump button.
+- The bet panel and the auto-play form are taller. They start in the same
+  place and run on below the screen; the page scrolls down to them. The
+  top bar stays at the top while scrolled, so the balance and the settings
+  button are always there. The page cannot move sideways.
+- The Pump row under the balloons depends only on the number of balloons:
+  closed with one, open with two or three.
+- The panel's order is reversed, in the markup: Bet (or Start auto-play),
+  the amounts, the number of balloons, the ladder line, the difficulty,
+  Manual or Auto. So on an upright screen Bet sits where Pump sits in a
+  round and needs no scrolling; scrolling is only for changing the bet.
+- Wide screens and phones on their side keep the panel beside the stage and
+  do not scroll. Their panel has the new order too.
+
+Checked on the real server: 32 sizes, nine states with three balloons
+unless said (one-balloon round, after it, three-balloon round, the same
+round down to its last balloon, after it, the bet screen with every bet
+capped, the bet screen with three error notes, the Auto form, auto-play
+running). 31 sizes pass; the one left is still 568x320 on its side.
+What "pass" means now: a round never scrolls; the page never moves
+sideways; on an upright screen the stage's height, the picture's size and
+the horizon are the same in every state; the main button (Bet, Start
+auto-play, Pump or Stop) is on screen without scrolling; after scrolling
+to the end the last control is on screen and the top bar is still at the
+top; no two controls overlap; the pumps stand on the floor.
+Also checked by hand at 375x812: scrolled to the end of the bet screen,
+pressed Bet, and the page was back at the top by itself with Pump on
+screen, because a round's page is exactly one screen tall.
+
+Numbers at 375x812: the stage is 550 px tall in every state (it was
+squeezed to as little as 104 px on the bet screen before). The bet screen
+is 939 px tall with one balloon, so it scrolls 127 px.
+
+Turned out wrong, and how it was caught:
+
+- The round panel's room was first a guess (206 px) and 24 px too much.
+  Measured instead: the panel was laid out at its natural height at 13
+  upright sizes, with one and three balloons and with the largest numbers
+  ($1,000 bets on Expert). It needs 181, 171 and 150 px at the three
+  button sizes; the room is now 192, 182 and 160.
+- The first measuring run stopped with an error: its one-balloon round had
+  popped on the first pump, so there was no round panel to measure. The
+  run now starts again when that happens.
+- Not checked: the screen after an auto-play run has ended (its result
+  line under Start). The run was stopped mid-round in the check, which
+  leaves the balloons for the player.
+
+Applies to upright tablets as well as phones, since they share the stacked
+layout. Not asked for and not done: a smooth opening of the Pump row.
+## 2026-11-20: the game is live on Render
+
+The site is at https://pump-wysj.onrender.com. Render built it from commit
+8562809 in 44 seconds, on Node 26.13.1, from `render.yaml` with nothing
+typed in by hand except the Blueprint's name. It was set up from the
+repository's public address, so Render was given no access to GitHub.
+
+Checked on the live site:
+
+- From outside: the health check answers, the game page loads, the player
+  cookie is HttpOnly and Secure, a request without a session gets 401, and
+  plain http is sent on to https.
+- Render's Disk page shows 1 GB mounted at `/var/data`, and the first start
+  logged "the database file is /var/data/pump.db: made a NEW, EMPTY file".
+- The deploy test: a bet was placed and the balloon pumped once, the round
+  left open. Then the service was deployed again from Render's page. After
+  it, the same balance and the same open round came back, the log said
+  "opened the existing file, 3 players", and the round was cashed out.
+
+Turned out different from what was written, and how it was seen:
+
+- The README said a push goes live by itself once the checks pass. With
+  the public-address setup it does not: another chat's push (297760c) got
+  its green check and Render started nothing. The README and `render.yaml`
+  now say a new version goes live with Manual Deploy.
+- "A Blueprint file was found, but there was an issue" on Render's page
+  meant only that no payment card was on file yet. It cleared after the
+  card was added.
+- In Render's Manual Deploy menu, a click made while the menu was still
+  sliding open landed on "Deploy a specific commit", which would have
+  switched automatic deploys off. It was cancelled before anything was
+  chosen. The README now warns about that entry.
+
+Cost: $7.25 a month (Render's own figure on the review page), counted by
+the second. The owner's limit is $10 in total, so the service has to be
+deleted by about 20 December 2026.
+
+Left as it is: Render calls the health check every five seconds and the
+server logs each call, so the log is mostly health checks. Search the log
+for `the database file is` to find the start line.

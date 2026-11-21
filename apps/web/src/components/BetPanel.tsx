@@ -56,46 +56,23 @@ export function BetPanel({
 
   return (
     <section className="bet" aria-label="Bet">
-      <div className="segmented" role="radiogroup" aria-label="Difficulty">
-        {config.difficulties.map((d) => (
-          <button
-            key={d.id}
-            type="button"
-            role="radio"
-            aria-checked={d.id === difficulty.id}
-            className="segment"
-            disabled={disabled}
-            onClick={() => onChange({ ...setup, difficultyId: d.id })}
-          >
-            {d.label}
-          </button>
-        ))}
-      </div>
-      <p className="note bet-info">
-        {ladder.length} pumps · top {formatMultiplier(fullTop)} · first pop{' '}
-        {formatChance(popChance(config.rtpBp, ladder, 1))}
-      </p>
+      {/* Top to bottom, the order runs from what is pressed every round to
+          what is seldom changed: Bet, the amounts, the number of balloons,
+          the difficulty. On an upright screen the top of this panel is on
+          screen and the rest is a scroll away (see styles.css). */}
+      {showBet && (
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={disabled || starting || check.betsCents === null}
+          onClick={onStart}
+          title="Bet (Enter)"
+        >
+          {starting ? 'Starting…' : `Bet ${formatCents(check.totalCents)}`}
+        </button>
+      )}
 
-      <div className="row">
-        <span className="field-label" id="balloon-count-label">
-          Balloons
-        </span>
-        <div className="segmented" role="radiogroup" aria-labelledby="balloon-count-label">
-          {counts.map((count) => (
-            <button
-              key={count}
-              type="button"
-              role="radio"
-              aria-checked={count === setup.bets.length}
-              className="segment"
-              disabled={disabled}
-              onClick={() => onChange(withBalloonCount(setup, count))}
-            >
-              {count}
-            </button>
-          ))}
-        </div>
-      </div>
+      {check.problem !== null && <p className="note error">{check.problem}</p>}
 
       <ul className="bets">
         {setup.bets.map((text, index) => {
@@ -160,19 +137,46 @@ export function BetPanel({
         })}
       </ul>
 
-      {check.problem !== null && <p className="note error">{check.problem}</p>}
+      <div className="row">
+        <span className="field-label" id="balloon-count-label">
+          Balloons
+        </span>
+        <div className="segmented" role="radiogroup" aria-labelledby="balloon-count-label">
+          {counts.map((count) => (
+            <button
+              key={count}
+              type="button"
+              role="radio"
+              aria-checked={count === setup.bets.length}
+              className="segment"
+              disabled={disabled}
+              onClick={() => onChange(withBalloonCount(setup, count))}
+            >
+              {count}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      {showBet && (
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={disabled || starting || check.betsCents === null}
-          onClick={onStart}
-          title="Bet (Enter)"
-        >
-          {starting ? 'Starting…' : `Bet ${formatCents(check.totalCents)}`}
-        </button>
-      )}
+      <p className="note bet-info">
+        {ladder.length} pumps · top {formatMultiplier(fullTop)} · first pop{' '}
+        {formatChance(popChance(config.rtpBp, ladder, 1))}
+      </p>
+      <div className="segmented" role="radiogroup" aria-label="Difficulty">
+        {config.difficulties.map((d) => (
+          <button
+            key={d.id}
+            type="button"
+            role="radio"
+            aria-checked={d.id === difficulty.id}
+            className="segment"
+            disabled={disabled}
+            onClick={() => onChange({ ...setup, difficultyId: d.id })}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
     </section>
   );
 }

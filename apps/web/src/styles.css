@@ -1,10 +1,11 @@
 /*
  * Page styles.
  *
- * One rule shapes this file: the game is one screen. The page never
- * scrolls, at any size. The top bar and the control panel take the room
- * they need and the stage (the balloons) gets what is left, so the
- * balloons shrink before anything is pushed off the screen.
+ * One rule shapes this file: playing a round is one screen with no
+ * scrolling, at any size. On a wide screen the whole game is one screen:
+ * the panel sits beside the stage. On an upright screen the stage keeps
+ * one size and the bet panel runs on below it, so the page scrolls down to
+ * bet (see the upright rule).
  *
  * The screen shows only what the next tap needs. Everything else (sound,
  * fairness, past rounds, rules, keys) is behind the settings button, which
@@ -44,6 +45,12 @@
   /* The Pump button row under those numbers. The floor in background.css is
      measured from this too, so the pumps always stand on the horizon line. */
   --action-h: calc(var(--tap) + 10px);
+  /* Upright screens: the height kept free under the stage for the round
+     panel (see the upright rule). It must be at least as tall as the round
+     panel at this size, or a round would scroll. Measured: the panel needs
+     181, 171 and 150 px at the three sizes of --tap; what is spare goes to
+     the big Pump button. The size check measures it again. */
+  --round-room: 192px;
   --main-max: 30px; /* largest size of the multiplier under a balloon */
   --sub-max: 14px; /* largest size of the line under it */
 
@@ -150,8 +157,8 @@ body {
 }
 
 /*
- * Upright phones and tablets: the stage on top, the panel under the thumb.
- * Still one screen that never scrolls, like every other size.
+ * Upright phones and tablets: the stage on top, the panel underneath, and
+ * the page may scroll down.
  *
  * An upright screen is taller than it is wide. Beside a side panel the
  * stage would be a narrow strip with half of it empty sky, so the panel
@@ -159,53 +166,104 @@ body {
  * panel keeps a phone's width, in the middle, so its buttons don't stretch
  * from edge to edge.
  *
- * The panel takes the height it needs and the stage gets the rest, so the
- * balloons shrink to make room. Two things keep that from going wrong on a
- * small phone with three bets:
+ * The stage has one height, whatever the panel is showing: the screen minus
+ * the top bar and the room the round panel needs (--round-room). So the
+ * balloons are the same size on the bet screen, in a round, after it and
+ * during auto-play, and nothing pops up and squeezes them.
  *
- * - The button row under the balloons is closed, and the pictures get its
- *   height, whenever no balloon can have a Pump button of its own: before a
- *   round and after it (no balloon in play), in a round of one balloon
- *   (the panel's big button is its Pump), and while auto-play runs (rounds
- *   and the gaps between them alike). It was an empty strip exactly when
- *   the bet panel is at its tallest.
- *   In a round of two or three played by hand the row stays for the whole
- *   round, also when it is empty because only one balloon is left. So
- *   nothing on the stage moves while a balloon is in play.
- *   One exception: a finished round with a reveal line ("Next pump would
- *   have popped") keeps the row open (.stage-after-round), because the line
- *   is shown in that row. Not while auto-play runs: the row stays closed
- *   there, so it never comes and goes between auto-play rounds.
- * - The stage never gets smaller than its two lines of numbers and a small
- *   picture. Only if even that does not fit (no real phone in the size
- *   check) does the panel scroll inside itself, as a last resort.
+ * - In a round the panel fills exactly that room: one screen, no scrolling,
+ *   with Pump under the thumb.
+ * - The bet panel and the auto-play form are taller. They start in the same
+ *   place and run on below the screen, and the page scrolls down to them.
+ *   (The user chose this over a panel that fits: "scroll down for manual
+ *   and auto, please don't pop up".)
+ * - The top bar stays at the top while the page is scrolled, so the balance
+ *   and the settings button are always there.
+ * - The page never scrolls sideways: the app is clipped at its sides.
+ *
+ * The button row under the balloons depends on one thing only, the number
+ * of balloons on the stage: closed with one (the panel's big button is its
+ * Pump), open with two or three. So the pictures and the floor don't move
+ * between rounds either. After a round, the line saying where a cashed-out
+ * balloon would have popped sits in that row; with one balloon, where the
+ * row is closed, it floats in the empty sky where the balloon was instead,
+ * so it takes no room and still nothing moves.
  */
 @media (orientation: portrait) {
+  html {
+    height: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  body,
+  #root {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  body {
+    overflow: visible;
+  }
+  .app {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    /* The scene is drawn wider than the screen (background.css). Clipped at
+       the sides, so the page can't be dragged left and right; open below,
+       so the panel can run on. */
+    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: visible;
+  }
+  .topbar {
+    position: sticky;
+    z-index: 5;
+    top: 0;
+    background: var(--stage);
+  }
   .layout {
+    flex: none;
     flex-direction: column;
     padding: 0 8px 8px;
   }
   .stage {
-    min-height: calc(var(--label-h) + 56px);
+    flex: none;
+    height: calc(100vh - var(--bar) - var(--round-room) - var(--gap) - 8px);
+    height: calc(100dvh - var(--bar) - var(--round-room) - var(--gap) - 8px);
+    min-height: calc(var(--label-h) + var(--action-h) + 120px);
   }
-  .stage:not(:has(.slot[data-status='active'])):not(.stage-after-round),
-  .stage:has(.slot:only-child):not(:has(.slot-pump)):not(.stage-after-round),
-  .layout:has(.auto-progress[data-running='true']) .stage {
+  .stage:has(.slot:only-child) {
     --action-h: 0px;
   }
-  .stage:not(:has(.slot[data-status='active'])):not(.stage-after-round) .slot-action,
-  .stage:has(.slot:only-child):not(:has(.slot-pump)):not(.stage-after-round) .slot-action,
-  .layout:has(.auto-progress[data-running='true']) .stage .slot-action {
+  .stage:has(.slot:only-child) .slot-action {
     padding: 0;
     overflow: hidden;
   }
+  /* One balloon: the row is closed, so the after-round line floats in the
+     sky where the balloon was. Its box is the slot (positioned), not the
+     closed row, so the row's overflow doesn't hide it, and it takes no room. */
+  .stage:has(.slot:only-child) .slot-after {
+    position: absolute;
+    top: 28%;
+    right: 12%;
+    left: 12%;
+  }
   .controls {
     order: 0;
-    flex: 0 1 auto;
+    flex: none;
     align-self: center;
     width: min(100%, 560px);
-    min-height: 0;
+    min-height: var(--round-room);
     max-height: none;
+    overflow: visible;
+  }
+  /* The round panel takes up all of its room: the big button grows. */
+  .controls > .round {
+    flex: 1 1 auto;
+  }
+  .controls > .round > .round-actions {
+    flex: 1 1 auto;
+    grid-template-rows: auto minmax(calc(var(--tap) + 6px), 1fr);
   }
 }
 
@@ -906,11 +964,6 @@ input {
   font-size: 12px;
 }
 
-/* The last run's result takes the place of the ladder line, not extra room. */
-.controls:has(.auto-summary) .bet-info {
-  display: none;
-}
-
 /*
  * One status line for auto-play, always in the page so screen readers hear
  * it change: progress while it runs (shown above Stop), the result after.
@@ -1285,6 +1338,7 @@ th {
     --label-h: 52px;
     --main-max: 24px;
     --sub-max: 13px;
+    --round-room: 182px;
   }
 }
 
@@ -1297,6 +1351,7 @@ th {
     --label-h: 44px;
     --main-max: 19px;
     --sub-max: 12px;
+    --round-room: 160px;
   }
   .controls {
     padding: 8px;
@@ -1307,39 +1362,19 @@ th {
 }
 
 /*
- * Very small upright phones have no spare line in the panel, so the result
- * of the last auto-play run floats over the top of the stage instead, in
- * place of the last round's result.
- */
-@media (max-height: 660px) and (orientation: portrait) {
-  .auto-summary {
-    position: fixed;
-    z-index: 3;
-    top: calc(var(--bar) + 4px);
-    right: 8px;
-    left: 8px;
-    padding: 6px 10px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--panel-raised);
-    text-align: center;
-  }
-  .app:has(.auto-summary) .round-result {
-    display: none;
-  }
-}
-
-/*
  * Phones on their side: the screen is wide and very short, so the panel
- * goes two columns wide instead of tall. Left: how to play, difficulty,
- * balloons. Right: the bets. Buttons run the full width underneath.
- * The half and double buttons are left out here to make room; the bet can
- * still be typed.
+ * goes two columns wide instead of tall. The Bet button runs the full
+ * width at the top, as everywhere. Under it, left: balloons, difficulty,
+ * how to play. Right: the bets. The half and double buttons are left out
+ * here to make room; the bet can still be typed.
  */
 @media (max-height: 480px) and (min-width: 640px) and (orientation: landscape) {
   .controls {
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    /* Dense: the left column's rows fill in beside the bets, whatever
+       notes happen to be showing above them. */
+    grid-auto-flow: row dense;
     align-content: start;
     column-gap: 8px;
     width: min(64vw, 520px);
@@ -1359,7 +1394,7 @@ th {
     grid-column: 1;
   }
   .bet > .bets {
-    grid-row: 1 / span 3;
+    grid-row: span 3;
     grid-column: 2;
     align-content: start;
   }

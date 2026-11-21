@@ -35,7 +35,10 @@ services:
     startCommand: node --import tsx apps/server/src/index.ts
     healthCheckPath: /api/health
 
-    # A push to main goes live only after the checks on GitHub have passed.
+    # If Render is connected to the repository on GitHub, a push to main goes
+    # live only after the checks there have passed. The live site was set up
+    # from the repository's public address instead, and there a push deploys
+    # nothing: a new version goes live with Manual Deploy on Render's page.
     autoDeployTrigger: checksPass
 
     envVars:

@@ -14,7 +14,6 @@ import { SoundToggle } from './components/SoundToggle';
 import { VerifyPage } from './components/VerifyPage';
 import type { AutoPlaySettings } from './game/autoPlay';
 import { checkBets, type BetSetup } from './game/betSetup';
-import { afterRoundLine } from './game/afterRound';
 import { controlTarget, panelActivity, showOwnPump, SWITCH_PAUSE_MS } from './game/controls';
 import { useAutoPlay } from './game/useAutoPlay';
 import { useGame, type GameEvent } from './game/useGame';
@@ -142,12 +141,6 @@ export function App() {
   useEffect(() => {
     if (round) shownReveals.rememberTops(round);
   }, [round]);
-  // A finished round with a reveal line keeps the row under the balloons
-  // open on upright phones, where an empty row is closed (styles.css): the
-  // line goes in that row, and the pictures do not jump when it appears.
-  const afterRoundRow =
-    round?.status === 'finished' &&
-    round.balloons.some((balloon) => afterRoundLine(balloon) !== null);
   // Net position since this visit began (UK RTS 2E). No deposits happen
   // here, so it is the change in balance.
   const sessionNet =
@@ -456,7 +449,7 @@ export function App() {
       ) : (
       <main className="layout">
         <section
-          className={afterRoundRow ? 'stage stage-after-round' : 'stage'}
+          className="stage"
           aria-label="Balloons"
         >
           <div className="stage-top">
@@ -562,8 +555,36 @@ export function App() {
               />
             )}
 
+            {/* Always mounted, so the typed auto-play settings are kept. Before the
+                bet panel, so on the Auto tab Start is the first thing in the panel. */}
+            {autoOffered && (
+              <div hidden={!(panel === 'auto-running' || (panel === 'bet' && mode === 'auto'))}>
+                <AutoPlayPanel
+                  maxPumps={setupDifficulty.ladder.length}
+                  roundBetCents={check.totalCents}
+                  betsValid={check.betsCents !== null}
+                  roundActive={roundActive && !autoRunning}
+                  starting={state.starting && !autoRunning}
+                  status={autoPlay.status}
+                  onStart={startAutoPlay}
+                  onStop={autoPlay.stop}
+                />
+              </div>
+            )}
+
             {panel === 'bet' && (
               <>
+                <BetPanel
+                  config={config}
+                  setup={setup}
+                  check={check}
+                  disabled={state.phase !== 'ready'}
+                  starting={state.starting}
+                  showBet={mode === 'manual' || !market.autoPlay}
+                  onChange={setSetup}
+                  onStart={start}
+                />
+                {/* Last in the panel: how to play is chosen once, the rest every round. */}
                 {market.autoPlay && (
                   <div className="segmented" role="radiogroup" aria-label="How to play">
                     <button
@@ -586,33 +607,7 @@ export function App() {
                     </button>
                   </div>
                 )}
-                <BetPanel
-                  config={config}
-                  setup={setup}
-                  check={check}
-                  disabled={state.phase !== 'ready'}
-                  starting={state.starting}
-                  showBet={mode === 'manual' || !market.autoPlay}
-                  onChange={setSetup}
-                  onStart={start}
-                />
               </>
-            )}
-
-            {/* Always mounted, so the typed auto-play settings are kept. */}
-            {autoOffered && (
-              <div hidden={!(panel === 'auto-running' || (panel === 'bet' && mode === 'auto'))}>
-                <AutoPlayPanel
-                  maxPumps={setupDifficulty.ladder.length}
-                  roundBetCents={check.totalCents}
-                  betsValid={check.betsCents !== null}
-                  roundActive={roundActive && !autoRunning}
-                  starting={state.starting && !autoRunning}
-                  status={autoPlay.status}
-                  onStart={startAutoPlay}
-                  onStop={autoPlay.stop}
-                />
-              </div>
             )}
           </aside>
         )}

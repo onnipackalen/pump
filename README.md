@@ -7,8 +7,7 @@ Work in progress. Built so far: the engine (game rules and math), the exact RTP
 check and the simulator, the provably fair draw code, the server (wallet, game
 routes and the hammer test), and the game screen with its verify page, which
 play against the real server. The verify page checks every pump and every
-reveal. Not live yet: the site is set up for Render but not deployed (see
-"The live site").
+reveal. It is live at <https://pump-wysj.onrender.com> (see "The live site").
 
 ## Run it locally
 
@@ -37,22 +36,25 @@ there is nothing native to compile.
 
 ## The live site
 
-The live site runs on [Render](https://render.com): one web service with one
-1 GB disk, set up from `render.yaml` in this repo. No setting is typed in by
-hand on Render's pages, and none should be changed there: Render puts back
-what `render.yaml` says.
+The game is live at **<https://pump-wysj.onrender.com>**.
+
+It runs on [Render](https://render.com): one web service with one 1 GB disk,
+set up from `render.yaml` in this repo. No setting is typed in by hand on
+Render's pages, and none should be changed there: Render puts back what
+`render.yaml` says.
 
 It costs about 7.25 US dollars a month (7 for the server, 0.25 for the disk),
 and less for part of a month. A service with a disk needs a paid plan, so add
 a payment card under Billing on Render first.
 
-To set it up:
+How it was set up, and how to set it up again from nothing:
 
 1. `main` on GitHub must contain `render.yaml`, with a green check on its
    newest commit.
-2. On Render choose **New > Blueprint** and connect this repository. The first
-   time, Render sends you to GitHub to connect your account; allow it for this
-   repository. Give the Blueprint any name and leave the branch as `main`.
+2. On Render choose **New > Blueprint**. Under **Public Git Repository** paste
+   this repository's address and continue. (Connecting Render to GitHub works
+   too and is not needed: the repository is public.) Give the Blueprint any
+   name and leave the branch as `main`.
 3. Render lists what `render.yaml` will create: a web service named `pump`.
    If the file has a mistake, Render shows the mistake here instead. Choose
    **Deploy Blueprint**.
@@ -71,14 +73,18 @@ Then check it, once:
   `opened the existing file`, not `made a NEW, EMPTY file`.
 
 If the first deploy fails, do not make a second Blueprint: that creates a
-second paid service with its own empty disk. Fix the cause and push; the new
-deploy starts by itself.
+second paid service with its own empty disk. Fix the cause, push, and deploy
+the same service again.
 
-After that, a push to `main` goes live by itself once the checks on GitHub
-have passed. If a push does not go live, look at its check on GitHub: Render
-does not deploy a push whose check failed or that has no check. The site is
-down for a few seconds on each deploy: Render stops the old copy before it
-starts the new one, so two versions never write to the same database.
+A new version goes live by hand: push to `main`, wait for the green check on
+GitHub, then on the service's page choose **Manual Deploy > Deploy latest
+commit**. Render is not connected to the repository on GitHub, so a push does
+not deploy by itself (seen on 2026-11-20: a push with a green check started
+nothing). Use "Deploy latest commit" only; "Deploy a specific commit" also
+switches automatic deploys off. The site is down for a few seconds on each
+deploy: Render stops the old copy before it starts the new one, so two
+versions never write to the same database. Balances and rounds in play are
+kept.
 
 ### Where the wallets are
 
