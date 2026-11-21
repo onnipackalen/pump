@@ -51,6 +51,7 @@ const settings = (overrides: Partial<AutoPlaySettings> = {}): AutoPlaySettings =
 const hooks = (overrides: Partial<AutoPlayHooks> = {}): AutoPlayHooks => ({
   shouldStop: () => false,
   report: () => undefined,
+  roundStarted: () => undefined,
   handCashOuts: () => new Set(),
   ...overrides,
 });

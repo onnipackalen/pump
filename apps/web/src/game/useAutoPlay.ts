@@ -56,6 +56,7 @@ export interface AutoPlay {
   /**
    * The player's own Cash out while auto-play runs, for these balloons of the
    * round on screen. Auto-play sends it on its next beat (see runAutoPlay).
+   * A press on any round but the one auto-play is playing is ignored.
    */
   readonly cashOut: (round: RoundView, balloonIndexes: readonly number[]) => void;
 }
@@ -73,6 +74,11 @@ export interface AutoPlayHooks {
   readonly shouldStop: () => boolean;
   /** Called after each round: the new progress, and the next round's bets. */
   readonly report: (progress: AutoPlayProgress, bets: RoundBets) => void;
+  /**
+   * Called as soon as a round has started, with its id: the round auto-play
+   * now plays. A hand Cash out counts only on this round (addHandCashOuts).
+   */
+  readonly roundStarted: (roundId: string) => void;
   /** The balloons of this round the player has cashed out by hand so far. */
   readonly handCashOuts: (roundId: string) => ReadonlySet<number>;
 }
@@ -168,6 +174,7 @@ export async function runAutoPlay(
     if (!started) return end('error');
     let round: RoundView = started.round;
     balanceCents = started.wallet.balanceCents;
+    hooks.roundStarted(round.id);
 
     const stepLimit = maxStepsPerRound(round.balloons.length, settings.targetPumps);
     let taken = 0;
@@ -230,6 +237,8 @@ export function useAutoPlay(actions: GameActions): AutoPlay {
   const stopRequested = useRef(false);
   // The player's hand cash-outs. A ref, so the loop reads the newest at once.
   const handCashOuts = useRef<HandCashOuts | null>(null);
+  // The round auto-play is playing: a hand press counts only on this one.
+  const playingRoundId = useRef<string | null>(null);
 
   // Leaving the page (or this component) stops auto-play for good: it never
   // carries on, or starts again, without the player.
@@ -246,6 +255,7 @@ export function useAutoPlay(actions: GameActions): AutoPlay {
       running.current = true;
       stopRequested.current = false;
       handCashOuts.current = null;
+      playingRoundId.current = null;
       setStatus({
         running: true,
         stopping: false,
@@ -260,10 +270,14 @@ export function useAutoPlay(actions: GameActions): AutoPlay {
           shouldStop: () => stopRequested.current,
           report: (latest, nextRound) =>
             setStatus((s) => ({ ...s, progress: latest, bets: nextRound })),
+          roundStarted: (roundId) => {
+            playingRoundId.current = roundId;
+          },
           handCashOuts: (roundId) => handCashOutsFor(handCashOuts.current, roundId),
         });
         running.current = false;
         handCashOuts.current = null;
+        playingRoundId.current = null;
         setStatus((s) => ({
           ...s,
           running: false,
@@ -286,7 +300,12 @@ export function useAutoPlay(actions: GameActions): AutoPlay {
 
   const cashOut = useCallback((round: RoundView, balloonIndexes: readonly number[]) => {
     if (!running.current) return;
-    const next = addHandCashOuts(handCashOuts.current, round, balloonIndexes);
+    const next = addHandCashOuts(
+      handCashOuts.current,
+      round,
+      balloonIndexes,
+      playingRoundId.current,
+    );
     if (next === handCashOuts.current) return;
     handCashOuts.current = next;
     setStatus((s) => ({ ...s, handCashOuts: next }));

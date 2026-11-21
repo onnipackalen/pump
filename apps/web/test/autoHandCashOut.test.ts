@@ -44,13 +44,17 @@ const settings = (overrides: Partial<AutoPlaySettings> = {}): AutoPlaySettings =
  */
 function player(overrides: Partial<AutoPlayHooks> = {}) {
   let asked: HandCashOuts | null = null;
+  let playing: string | null = null;
   return {
     press: (seen: RoundView, indexes: readonly number[]): void => {
-      asked = addHandCashOuts(asked, seen, indexes);
+      asked = addHandCashOuts(asked, seen, indexes, playing);
     },
     hooks: {
       shouldStop: () => false,
       report: () => undefined,
+      roundStarted: (roundId: string) => {
+        playing = roundId;
+      },
       handCashOuts: (roundId: string) => handCashOutsFor(asked, roundId),
       ...overrides,
     } satisfies AutoPlayHooks,
@@ -110,23 +114,44 @@ describe('addHandCashOuts', () => {
   ]);
 
   it('takes a balloon in play with a cash-out value, once', () => {
-    const asked = addHandCashOuts(null, live, [0]);
+    const asked = addHandCashOuts(null, live, [0], live.id);
     expect(asked).toEqual({ roundId: live.id, indexes: [0] });
     // A second press changes nothing, and says so by returning the same list.
-    expect(addHandCashOuts(asked, live, [0])).toBe(asked);
+    expect(addHandCashOuts(asked, live, [0], live.id)).toBe(asked);
   });
 
   it('leaves out a balloon not yet pumped, or out of play', () => {
-    expect(addHandCashOuts(null, live, [1, 2])).toBeNull();
-    expect(addHandCashOuts(null, live, [0, 1, 2])).toEqual({ roundId: live.id, indexes: [0] });
+    expect(addHandCashOuts(null, live, [1, 2], live.id)).toBeNull();
+    expect(addHandCashOuts(null, live, [0, 1, 2], live.id)).toEqual({
+      roundId: live.id,
+      indexes: [0],
+    });
   });
 
   it('starts a new list in a new round, and only reads the list for its own round', () => {
-    const asked = addHandCashOuts(null, live, [0]);
+    const asked = addHandCashOuts(null, live, [0], live.id);
     const next = round([balloon({ rung: 2, cashOutCents: 109 })], { id: 'round-2' });
-    expect(addHandCashOuts(asked, next, [0])).toEqual({ roundId: 'round-2', indexes: [0] });
+    expect(addHandCashOuts(asked, next, [0], 'round-2')).toEqual({
+      roundId: 'round-2',
+      indexes: [0],
+    });
     expect(handCashOutsFor(asked, 'round-2').size).toBe(0);
     expect([...handCashOutsFor(asked, live.id)]).toEqual([0]);
+  });
+
+  it('ignores a press on a round auto-play is not playing, and keeps the list', () => {
+    // Auto-play plays round-2 and the player has cashed out its balloon 1.
+    const playing = round(
+      [balloon({ rung: 1, cashOutCents: 101 }), balloon({ rung: 1, cashOutCents: 101 })],
+      { id: 'round-2' },
+    );
+    const asked = addHandCashOuts(null, playing, [1], 'round-2');
+    // A press on an older view of the screen (round-1, shown as still in
+    // play) is too late: it must not replace round-2's list.
+    expect(addHandCashOuts(asked, live, [0], 'round-2')).toBe(asked);
+    expect([...handCashOutsFor(asked, 'round-2')]).toEqual([1]);
+    // Before any round has started, nothing counts.
+    expect(addHandCashOuts(null, live, [0], null)).toBeNull();
   });
 });
 
@@ -263,6 +288,33 @@ describe('auto-play with a cash-out by hand, scripted', () => {
     expect(requestsFor(game.sent, 'round-1', 1)).toEqual(['pump@0', 'pump@1']);
     expect(end.progress.roundsPlayed).toBe(0);
     expect(game.sent.filter((r) => r.kind === 'start')).toHaveLength(1);
+  });
+
+  it('a late press on the round before does not undo a press in the round in play', async () => {
+    const game = scriptedGame(1_000_000, () => false);
+    const you = player();
+    // A view of round 1 while it was still in play, as a screen that lags
+    // behind could still show it during round 2.
+    let oldView: RoundView | null = null;
+    const actions = onPump(game.actions, (seen, i) => {
+      if (seen.id === 'round-1' && seen.balloons[i]?.drawIndex === 1) oldView = seen;
+      if (seen.id === 'round-2' && seen.balloons[i]?.drawIndex === 1) {
+        you.press(seen, [0]);
+        if (oldView) you.press(oldView, [0]);
+      }
+    });
+    const end = await runAutoPlay(
+      { settings: settings({ rounds: 2 }), difficultyId: 'easy', betsCents: [100], balanceCents: 1_000_000, limits },
+      actions,
+      you.hooks,
+      NO_PAUSES,
+    );
+    expect(oldView).not.toBeNull();
+    expect(end.reason).toBe('rounds-done');
+    // Round 1 is untouched by the late press; round 2 cashes out as pressed.
+    expect(requestsFor(game.sent, 'round-1', 0).at(-1)).toBe('cash-out@5');
+    expect(requestsFor(game.sent, 'round-2', 0)).toEqual(['pump@0', 'pump@1', 'cash-out@2']);
+    expectNoDoubleSend(game.sent);
   });
 
   it('Stop, then a cash-out pressed while the first one is on its way: both go', async () => {

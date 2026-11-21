@@ -280,14 +280,21 @@ export interface HandCashOuts {
  * The hand cash-outs after the player presses Cash out on these balloons,
  * as the round on screen shows them. A balloon counts only while it is in
  * play and has a cash-out value (it has been pumped): the same rule as the
- * Cash out button. A press in a new round starts a new list. Returns the
- * same object when the press changes nothing, so a second press is a no-op.
+ * Cash out button. Returns the same object when the press changes nothing,
+ * so a second press is a no-op.
+ *
+ * `playingRoundId` is the round auto-play is playing now. A press counts
+ * only on that round: one made on an older round still on screen is too
+ * late and is ignored, so it can never wipe the presses already made in
+ * the round in play. The first press in a new round starts a new list.
  */
 export function addHandCashOuts(
   asked: HandCashOuts | null,
   round: RoundView,
   indexes: readonly number[],
+  playingRoundId: string | null,
 ): HandCashOuts | null {
+  if (round.id !== playingRoundId) return asked;
   const before = asked?.roundId === round.id ? asked.indexes : [];
   const added = indexes.filter((index) => {
     const balloon = round.balloons[index];
