@@ -1,6 +1,7 @@
 /*
- * App-side choices on top of the copied balloon art (balloon.css stays an
- * exact copy of graphics/balloon/balloon.css).
+ * App-side choices on top of the balloon art. (balloon.css began as a copy
+ * of graphics/balloon/balloon.css; its motion has since been tuned in the
+ * game, see the note at its top.)
  *
  * The user asked that only signs commonly used in the gambling industry
  * ship. An industry check against live casino games and UK and Ontario rules
@@ -13,4 +14,13 @@
  */
 .pump-balloon :is(.pb-ghost, .pb-remnant, .pb-tick) {
   display: none;
+}
+
+/*
+ * A balloon that is let go floats up out of its own box. An inline svg
+ * clips to its box by default, which cut the balloon off at the top edge
+ * part way up, so it seemed to vanish in a jump.
+ */
+.pump-balloon {
+  overflow: visible;
 }

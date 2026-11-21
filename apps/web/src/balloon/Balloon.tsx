@@ -5,8 +5,8 @@ import './balloon-app.css';
 /**
  * The balloon picture, copied from graphics/balloon/balloon.svg (the
  * "Game graphics list" chat owns the art). Keep the markup and class names
- * as they are there; balloon.css drives every layer. Re-copy both files
- * when the art changes.
+ * as they are there; balloon.css drives every layer. The markup here still
+ * matches graphics/; balloon.css is now ahead of it (see the note at its top).
  *
  * This component only sets attributes. Which ones the game uses, and when,
  * is decided in BalloonCard.
@@ -37,13 +37,33 @@ export interface BalloonProps {
   /** Reached its top rung, only together with `win`. */
   readonly top?: boolean | undefined;
   /**
+   * Its own cash-out ended the round in a real win, so it waits a moment
+   * before it floats away (--pb-release-delay). Set once, when the cash-out
+   * motion starts, and never added later: that would restart a float that
+   * is already on its way.
+   */
+  readonly hold?: boolean | undefined;
+  /** "up": the handle comes back up, for the pump that reached the top. */
+  readonly stroke?: 'up' | undefined;
+  /**
    * The multiplier printed on the balloon, like "1.37×". Empty before the
    * first pump: an unpumped balloon has no multiplier yet.
    */
   readonly value?: string | undefined;
 }
 
-export function Balloon({ slot, scale, beat, strain, patch, win, top, value }: BalloonProps) {
+export function Balloon({
+  slot,
+  scale,
+  beat,
+  strain,
+  patch,
+  win,
+  top,
+  hold,
+  stroke,
+  value,
+}: BalloonProps) {
   const style = { '--balloon-scale': scale.toFixed(4) } as CSSProperties;
   return (
     <svg
@@ -56,6 +76,8 @@ export function Balloon({ slot, scale, beat, strain, patch, win, top, value }: B
       data-patch={patch}
       data-win={win}
       data-top={win !== undefined && top ? 'true' : undefined}
+      data-hold={hold ? 'true' : undefined}
+      data-stroke={stroke}
       role="img"
       aria-label={`Balloon ${slot}`}
       style={style}
@@ -102,8 +124,8 @@ export function Balloon({ slot, scale, beat, strain, patch, win, top, value }: B
         </g>
       </g>
 
-      {/* hose: from the pump into the knot. It shrinks back to the pump when
-           the balloon is let go. */}
+      {/* hose: from the pump into the neck. It curls back to the pump on a
+           cash-out and drops to the floor on a pop. */}
       <g className="pb-hose">
         <path className="pb-hose-tube" d="M116 295C88 295 100 262 100 227" />
         <path className="pb-hose-shine" d="M116 295C88 295 100 262 100 227" />
