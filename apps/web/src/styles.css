@@ -41,6 +41,9 @@
   --gap: 10px; /* space between controls */
   --bar: 52px; /* top bar height */
   --label-h: 60px; /* the two lines of numbers under a balloon */
+  /* The Pump button row under those numbers. The floor in background.css is
+     measured from this too, so the pumps always stand on the horizon line. */
+  --action-h: calc(var(--tap) + 10px);
   --main-max: 30px; /* largest size of the multiplier under a balloon */
   --sub-max: 14px; /* largest size of the line under it */
 
@@ -333,7 +336,7 @@ body {
   flex: none;
   display: flex;
   justify-content: center;
-  height: calc(var(--tap) + 10px);
+  height: var(--action-h);
   padding: 0 4px 10px;
 }
 
