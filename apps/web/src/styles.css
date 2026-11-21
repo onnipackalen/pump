@@ -970,8 +970,9 @@ input {
 }
 
 /* A bet's lower top, when the max payout caps it. Sits inside the bet box. */
+/* A bet's capped top, on its own line under the bet box. */
 .cap {
-  flex: none;
+  margin: 2px 0 0;
   color: var(--risk);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -1052,6 +1053,83 @@ input {
 
 .auto-progress:empty {
   display: none;
+}
+
+/* A bet change held at a bet limit: its own small line under the progress. */
+.auto-held {
+  display: block;
+  color: var(--risk);
+  font-size: 12px;
+}
+
+/*
+ * The Pumps box, and under it what the count reaches on the chosen
+ * difficulty: "= 1.18×", or "top 7 = 100.00×" when the max payout holds
+ * the bets lower. Under the box, not in it: in the box it took the room the
+ * typed count needed on a narrow card. The line always keeps its height,
+ * so the form doesn't jump while the count is retyped; it may wrap.
+ */
+.field-cell {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  min-width: 0;
+}
+
+.field-reach {
+  min-height: 1.25em;
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Topped out: the same colour as a bet's own "Top" in its box. */
+.field-reach[data-top='true'] {
+  color: var(--risk);
+  cursor: help;
+}
+
+/* On win and On loss: a name, Reset or Increase, and the percent. */
+.auto-sizing {
+  display: grid;
+  gap: var(--gap);
+}
+
+.auto-sizing-row {
+  display: grid;
+  grid-template-columns: 4.2em minmax(0, 1fr) 5.6em;
+  align-items: center;
+  gap: 6px;
+}
+
+.field-pct {
+  padding: 0 8px;
+}
+
+/* With Reset there is no percent: the box keeps its place, so nothing moves. */
+.field-pct[data-off='true'] {
+  visibility: hidden;
+}
+
+/* The player's own Cash out while auto-play runs: one per balloon, then all. */
+.auto-cash {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 6px;
+}
+
+.auto-cash .btn-two span {
+  white-space: nowrap;
+}
+
+/* Four buttons across a phone: the names a little smaller, so they fit. */
+.auto-cash[data-count='3'] .btn-two span {
+  font-size: 11px;
 }
 
 /*

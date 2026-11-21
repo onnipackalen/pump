@@ -90,6 +90,13 @@ export interface GameState {
    * The art then gets no win, so the burst never plays a second time.
    */
   readonly winShownFor: string | null;
+  /**
+   * The id of a round that came to the screen already finished, in a
+   * refusal: the 24-hour rule closed it, or it ended somewhere else. No
+   * answer to this screen's own pump or cash-out ended it, so it was not
+   * played here (the live stats leave it out). Null until that happens.
+   */
+  readonly endedElsewhere: string | null;
   readonly starting: boolean;
   readonly notice: Notice | null;
   /**
@@ -303,6 +310,7 @@ const initialState: GameState = {
   outcomes: [],
   held: [],
   winShownFor: null,
+  endedElsewhere: null,
   starting: false,
   notice: null,
   session: null,
@@ -335,6 +343,7 @@ export function openedState(s: GameState, opened: OpenedGame, nowMs: number): Ga
     outcomes: each<PumpOutcome | null>(null),
     held: each(false),
     winShownFor: null,
+    endedElsewhere: null,
     starting: false,
   };
 }
@@ -562,7 +571,9 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           if (round && !isOlder(round, s.round)) {
             next = { ...next, round, ...(wallet ? { wallet } : {}) };
             // Its win effects never play: they belong to a click that won.
-            if (round.status === 'finished') next = { ...next, winShownFor: round.id };
+            if (round.status === 'finished') {
+              next = { ...next, winShownFor: round.id, endedElsewhere: round.id };
+            }
           } else if (!round && wallet) {
             next = { ...next, wallet };
           }

@@ -1,0 +1,293 @@
+/*
+ * Live stats: this visit's Profit, Wagered, Wins, Losses and profit line, in
+ * a small panel the player opens from the chart button in the top bar and
+ * can keep open beside the game.
+ *
+ * Where it goes. One rule above all: nothing covers the balloons or the sky
+ * above them, where they grow, and the stage never changes size or moves.
+ *
+ * - Computer (a wide screen at least 600px tall): its own card in the side
+ *   column, under the controls card, as wide as it, resting on the bottom.
+ *   The controls keep their own height and the card takes the room they
+ *   leave (its line goes first when that is short), so no control is
+ *   pushed out of sight; the stage keeps its exact size and place.
+ * - Upright phone or tablet: a strip at the top of the sheet, between the
+ *   stage and the bet controls, in the sheet's own flow: it pushes the bet
+ *   panel down and scrolls with it, and the sheet keeps its two resting
+ *   places (down at the top of the page, up at its end; styles.css). Its
+ *   height is fixed and short enough that Bet stays in sight with the sheet
+ *   down: if long amounts wrap the figures to a second row, the line gets
+ *   lower instead. During a round or auto-play the round panel needs all of
+ *   its room, so the strip waits until play stops (useLiveStats leaves it
+ *   out, and the button says it is waiting).
+ * - Sideways phone, or any wide screen under 600px tall: there is no room
+ *   beside or under the stage, so the button and the panel are hidden.
+ *
+ * Colour: the game's own roles (graphics/README.md). Mint only for a real
+ * gain; a loss is plain text, never red.
+ *
+ * This file is loaded before styles.css (App imports it first), so every
+ * rule here that changes a styles.css element is more specific than that
+ * element's own rule.
+ */
+
+/* The button in the top bar: lit while the panel is open. */
+.live-opener[aria-expanded='true'] {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+
+.live-stats {
+  /* Above the scene, which is drawn wider than the stage (background.css). */
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  font-variant-numeric: tabular-nums;
+}
+
+.ls-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ls-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Small icon buttons; the negative margin lets their tap area reach into the padding. */
+.ls-tools {
+  display: flex;
+  margin: -6px -6px -6px 0;
+}
+
+.ls-tools .ls-tool {
+  width: 36px;
+  min-height: 36px;
+}
+
+.ls-tool svg {
+  width: 18px;
+  height: 18px;
+}
+
+.ls-figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.ls-figures > div {
+  min-width: 0;
+}
+
+.ls-figures dt {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+/* An amount is never cut short: past the width it wraps. */
+.ls-figures dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+/* The small chart: the plot fills what the panel gives it. */
+.profit-chart-compact {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.profit-chart-compact .profit-plot {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+/* The pointed-at round's net, over the chart's corner while pointing. */
+.profit-chart-compact .profit-readout {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  margin: 0;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------- Computer */
+
+@media (orientation: landscape) and (height >= 600px) {
+  /* The side column holds the controls at their own height and the card
+     under them, in the room they leave; the stage spans both rows, so it
+     is exactly as wide and as tall as beside the controls alone. The
+     controls come first: the card gets at most --live-h and at least
+     --live-min (its figures, without the line), and only if even that
+     does not fit do the controls scroll inside themselves. */
+  .layout:has(> .live-stats) {
+    --live-h: 236px;
+    --live-min: 136px;
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-rows: minmax(0, auto) minmax(var(--live-min), 1fr);
+  }
+  .layout:has(> .live-stats) > .stage {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .layout:has(> .live-stats) > .controls {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  /* Resting on the bottom of the column, as wide as the controls card. */
+  .layout > .live-stats {
+    container: live-card / size;
+    grid-column: 1;
+    grid-row: 2;
+    align-self: end;
+    height: min(100%, var(--live-h));
+    grid-template-rows: auto auto minmax(0, 1fr);
+    animation: live-stats-in 160ms ease-out;
+  }
+}
+
+/* Squeezed by tall controls: the figures stay, the line goes. */
+@container live-card (height < 150px) {
+  .live-stats .profit-chart {
+    display: none;
+  }
+}
+
+@media (orientation: landscape) and (600px <= height <= 720px) {
+  .layout:has(> .live-stats) {
+    --live-h: 212px;
+  }
+}
+
+/* Sideways phones and short windows: no room. */
+@media (orientation: landscape) and (height < 600px) {
+  .topbar .live-opener,
+  .layout > .live-stats {
+    display: none;
+  }
+}
+
+@keyframes live-stats-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Animations off (the player's setting, else the device's): it just appears. */
+:root[data-motion='reduce'] .live-stats {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='full']) .live-stats {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------------- Upright phone */
+
+@media (orientation: portrait) {
+  /* The top of the sheet: as wide as it, rounded at the top, with its handle. */
+  .layout > .live-stats {
+    flex: none;
+    align-self: center;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'figures tools'
+      'chart chart';
+    gap: 6px 8px;
+    width: min(calc(100% + 16px), 560px);
+    /* Fixed, so Bet never moves down: the line takes what the figures leave
+       (60px with one row of figures, about 30px if long amounts wrap them). */
+    height: var(--live-strip-h, 115px);
+    /* It now pushes the sheet to the bottom (the controls did, styles.css). */
+    margin-top: auto;
+    padding: 16px 12px 0;
+    border-bottom: 0;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -12px 32px rgba(5, 8, 18, 0.5);
+  }
+  .layout > .live-stats::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    left: calc(50% - 18px);
+    width: 36px;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(244, 242, 238, 0.32);
+  }
+  /* The controls carry on under the strip: one sheet, one handle. */
+  .layout > .live-stats + .controls {
+    margin-top: calc(-1 * var(--gap));
+    border-top: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .layout > .live-stats + .controls::before {
+    display: none;
+  }
+  /* One row of figures beside the buttons, the line under them. */
+  .live-stats .ls-head {
+    display: contents;
+  }
+  .live-stats .ls-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .live-stats .ls-tools {
+    grid-area: tools;
+    align-self: start;
+    margin: -4px -6px 0 0;
+  }
+  .live-stats .ls-figures {
+    grid-area: figures;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 14px;
+  }
+  .live-stats .ls-figures dd {
+    font-size: 14px;
+  }
+  .live-stats .profit-chart {
+    grid-area: chart;
+    min-height: 0;
+  }
+}
+
+/* A short phone: a lower line (48px with one row of figures). */
+@media (orientation: portrait) and (max-height: 660px) {
+  .layout > .live-stats {
+    --live-strip-h: 103px;
+  }
+}

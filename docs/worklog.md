@@ -1821,6 +1821,74 @@ Left as it is, on purpose:
 - One engine test (the sweep over every bet in math.test.ts) timed out once
   while this Mac was running many agents at a load of 18. It passes alone
   and on GitHub. Nothing in it was changed.
+## 2026-11-20: auto-bet, cash out during auto-play, and three panel fixes
+
+From the user's notes on a competitor: "Auto-bet: more control. It can
+change the bet size by itself on win or on loss", "Off switch: some of
+this might not be allowed in Ontario", and "Auto mode: it goes by itself,
+but you still have the cash out option". Built on the `auto-bet` branch.
+
+- Auto-bet. Two new auto-play settings, On win and On loss: Reset (back
+  to the bets entered) or Increase by a whole percent, 0 to 1000. A round
+  is a win only if it paid more than it cost (refunds void), the same
+  test as the win effects. The next bet is floor(bet * (100 + N) / 100) in
+  whole cents, held at the $0.10 and $1,000 limits; the screen says when a
+  bet was held. Every round still goes through checkBeforeRound with the
+  new bets, so the loss limit looks ahead at the grown bets. Defaults are
+  Reset both ways, and the percent box starts empty: the game never
+  suggests a number. The running line shows the round's bet.
+- Off switch. `autoBetSizing` in market.ts: on for default, off for gb
+  and for any market the file doesn't know. Off hides On win and On loss
+  and forces Reset both ways, so the bets never change.
+- Cash out during auto-play. Cash out per balloon (and Cash out all) sit
+  under Stop while it runs. The press goes through auto-play, which sends
+  it as that balloon's next step. Sending it straight to the server
+  would have broken the run: auto-play's next pump would find the balloon
+  busy or already cashed out and stop with an error. Found by reading
+  useGame before building, not by a failure.
+- Fixes from the critique: the bet panel's info line shows the top the
+  entered bets can reach (it said 5,000x on Expert at a $1,000 bet that
+  tops out at 100x); ½ and 2× no longer take focus, so Enter bets; the
+  Pumps box says what the count reaches ("3 = 1.18×").
+
+Caught while trying it live (desktop and 375x812): choosing Increase
+focused the percent box a moment too late, so a fast first keystroke was
+lost (now drawn at once with flushSync); and the Cash out row vanished
+between rounds, so the panel jumped every round (it now stays, greyed).
+
+Worth knowing: rounding down means a small bet with a small percent can
+stay put. $0.10 up 5% is $0.105, so it stays $0.10 every round.
+
+## 2026-11-21: fixes from the review of auto-bet
+
+A review of the `auto-bet` branch found six things. Four are fixed:
+
+- The Pumps box hid the typed count. The reach text ("= 5,000.00×") sat
+  inside the box and could not shrink, so the count could not be seen on
+  the desktop card (7 of 77 counts) or on a 320-wide phone (28 of 77).
+  The text now sits under the box. Checked live at seven sizes, every
+  count of every difficulty: all fit.
+- The reach text ignored the max payout. On Expert at $1,000 it said
+  "= 5,000.00×", while the info line said top 100.00×. It now says
+  "top 7 = 100.00×", using the same top as the info line.
+- A Cash out pressed after Stop could be lost. If it came while auto-play
+  was sending an earlier one, the button said "queued" but nothing was
+  sent. Auto-play now reads the list again after each send. Seen live:
+  both cash-outs went, all answers 200, wallet equal to the ledger.
+- A press on an older round could wipe the current round's presses. The
+  App can't reach this today. Auto-play now names the round it plays, and
+  a press on any other round is ignored. The reviewer's fuzzer, which
+  failed when the screen could lag into the previous round, now passes.
+
+Two are left for the user. The Cash out amount during auto-play is often
+one step behind what it pays (a product call). The Ontario market entry
+waits for the user's answer. The off path itself was tried live on a
+scratch build: no On win or On loss, and every round used the bets
+entered.
+
+Found while checking: a $1,000 bet capped by the max payout shows as
+"$ 100" in its box, because the "Top 100.00×" label takes the room. This
+is on main too, so it is reported, not fixed here.
 ## 2026-11-20: the swipe-up sheet, checked again on top of the reveal and the new pump set-up
 
 The sheet waited for two other merges (the after-round reveal and the
@@ -2099,3 +2167,165 @@ Left as it is, and why:
 - Everyone starts with wins shown. With the lists off on the live site
   nobody's wins are shown until the owner switches them on, so the other
   default can still be chosen then, as a new database step.
+## 2026-11-21: the step row after an independent review
+
+The coordinator had the step row read by a second checker, apart from
+the chat that built it. Its verdict: the numbers are right (checked
+against the engine at 9400, 9700 and 9900 on all four ladders, with bets
+at every cap edge: locked steps are exactly where bet x multiplier is over
+the cap, current and next match the server, nothing shows early). It
+found four smaller things, each confirmed by a second tester. All four
+were real, and all four are fixed here on `one-screen-layout`.
+
+What was wrong, and what was done:
+
+1. No test covered how the cards hand a balloon to its row. The reviewer
+   broke the payout-cap wiring on purpose and all 296 web tests still
+   passed: the tests only knew the pure rules in `stepRow.ts`. New
+   `test/stepRowCards.test.ts` reads the markup the cards write: a card
+   locks exactly the steps above its balloon's own top (every ladder, the
+   cap-edge bets, three RTPs); a preview card locks what `topRungForBet`
+   says; "next" is the server's own number, inside the Pump button or
+   alone, and never on a balloon that is over, even one that still
+   carries a next pump; a result that is being held back shows nothing.
+   To make the preview's cap testable at all, `PreviewCard` now works out
+   its own top from the bet and the cap (it was worked out in `App.tsx`,
+   which no test can draw). Checked the way the reviewer did: five
+   wrong versions of the card (the ladder's length as the top, the cap
+   ignored in the preview, "next" on finished balloons, a wrong "next",
+   no next step in the button's label) each fail the new tests. A test
+   named for "every status" that only tried a refund was renamed and
+   widened to every ladder. The three widths at which a row along the top
+   changes are now tested against the step width, gap and fade in
+   `steps.css`, so one cannot be changed without the other.
+2. On an upright phone the row jumped when a Patch stopped a pop. The
+   hole around the amount was as wide as the longer of the two lines, and
+   "Patch stopped a pop" is longer than any amount, so the hole grew and
+   shrank with words that have nothing to do with the steps. The hole now
+   follows the big multiplier only, and is never narrower than a
+   five-character one, so "—" turning into "1.01×" does not move it
+   either. A step is now no taller than the big line (it was 24 px on a
+   21 px line on the smallest phones), so it cannot reach the small line
+   under it.
+3. On an upright phone the row did not slide on the first pump, and on
+   later pumps the next step blinked out instead of sliding under the
+   amount. The place in view was a wide, hidden item, and the item before
+   the first step was only there before the first pump, so the first pump
+   swapped two items in place. Now every place is one step wide, the
+   place before the first step is always there, and the rest of the hole
+   is a margin on the step after the current one. On a pump the row moves
+   one place and that margin moves on to the following step, with the
+   same time and curve, so every step simply moves one place and the next
+   one goes in under the amount. Measured at 390x844 by stopping the
+   slide at five points, for the first and for the second pump: the next
+   step goes from 62 px right of the middle to 55 px left of it (inside
+   the hole, hidden), the one after it from 124 to 62, the step before
+   comes out to 117 px left.
+4. A screen reader got all 32 steps of the ladder for every balloon, with
+   "out of reach" and "popped" only as labels on list items, which most
+   readers skip. The row is now hidden from screen readers. Each card has
+   one short hidden line instead ("Next 1.18×. Top at this bet 50.00×.",
+   or "First step ..." before the round), outside the live region, so
+   auto-play stays quiet. The Pump button's label names its next step,
+   since a label replaces the button's own text.
+
+Judged by the reviewer to be as meant, and left alone: the row stays on a
+computer after a pop or cash-out, and the stage shows the last round
+until the next bet.
+
+Checked: 34 sizes, thirteen states, on the real server. 33 pass, 568x320
+on its side as always; the row checks all pass, with new ones for the
+hole (as wide as the multiplier, centred on it, the place in view inside
+it) and for the small line (no step reaches it). The picture sizes are
+unchanged. 1500 tests, lint and typecheck pass.
+
+What went wrong on the way, and how it was caught:
+
+- The size check failed at 40 size-and-state pairs on its first run. It
+  was the check again, the same way as before: the row now has a second
+  slide (the margin), and the check only switched off the first, so it
+  measured mid-slide. With both off it finds nothing. The smallest phone
+  was then looked at by eye.
+- One full test run failed one engine test that this work does not touch
+  (`math.test.ts`, cashOutCents "for every bet swept"), with the machine
+  at load average 26. It passes alone (1.1 s; the limit is 5 s) and in
+  the next full run. The failure's own message was not kept, so "it ran
+  out of time" is a guess. This is probably what the 13 failures in the
+  entry before were.
+- The browser pane was closed in the middle of a run, which ended that
+  run; it was started again.
+
+Not checked: Safari and a real iPhone, as before. The slide was measured
+in Chromium by stepping its animations, not watched on a phone.
+## 2026-11-20: live stats beside the game
+
+Built on `live-stats`: a chart button in the top bar, next to the session
+net, opens this visit's Profit, Wagered, Wins, Losses and profit line,
+with Reset and Close. Closed at the start of every visit, kept in memory
+only (a refresh starts it afresh, as Stake's does).
+
+- The figures come from `stats/liveTally.ts`, pure and tested: a round is
+  added once by its id, refunded bets are left out as on the stats page,
+  a round of refunds only is not a round, Patches count as wagered, and a
+  round that breaks even is neither a win nor a loss. Reset keeps the ids,
+  so a round counted before it can't come back.
+- A round counts when the screen shows its end (the round as drawn, with
+  a pop, top or cash-out beat), so nothing shows before the balloon does,
+  and only if it was seen in play on this screen: a round closed by the
+  24-hour rule while the player was away is left out.
+- Computer: its own card in the side column under the controls, laid over
+  the layout so the stage keeps its size. Upright phone: the top of the
+  sheet, pushing the bet panel down, short enough that Bet stays in sight;
+  it steps aside in a round and during auto-play, when the round panel
+  needs all the room. Sideways phones and windows under 560px tall: no
+  room, so the button is hidden.
+- The stats page's chart got a `compact` prop instead of a copy.
+
+What went wrong, and how it was caught:
+- `liveStats.ts` and `LiveStats.tsx` are one name on macOS's disk; the
+  compiler picked up the wrong file. Caught by `npm run typecheck`; the
+  tally module is `liveTally.ts` now.
+- The opener first took a React ref through the hook's result object;
+  the React lint rule flagged every read of that object as a ref read
+  during render. Caught by `npm run lint`; the opener is found by its id.
+- The live check could not be done: the `live-stats` server was started
+  before this worktree had a build, so it serves the API only (its log
+  says so, and the page is a 404). It reads the build folder only when it
+  starts, and stopping it was not allowed from this session.
+
+## 2026-11-21: live stats, review fixes
+
+Three reviews of the live stats branch (money logic, the live screen,
+trying to break it). Fixed:
+- A round now counts once it shows as finished, after being seen in play,
+  unless it came to the screen finished in a refusal (`endedElsewhere` in
+  useGame: the 24-hour rule, or an end elsewhere). It no longer needs a
+  pop, top or cash-out beat, which goes back to idle after 1.5 s: a round
+  whose last answer was lost could be missed for good.
+- A round that leaves the screen before its end shows (its answer lost
+  twice, then the catch-up finds no round in play) is counted from its
+  line in the history list, unless the line shows the 24-hour rule (a
+  refund, or a round that lasted a day). Live stats and the session net
+  agreed to the cent after both lost-answer cases, played on the server.
+- Upright phone: during a round or auto-play the strip is left out (the
+  round panel needs all the room), and the button now says so: unlit,
+  unavailable, "Live stats after this round". Before, a tap lit it and
+  showed nothing.
+- Upright phone: the strip has a fixed height and the line takes what the
+  figures leave, so six-figure amounts no longer push Bet off the screen.
+- Computer: with the card open the layout is a grid; the controls keep
+  their own height and the card takes the room left. Before, a fixed card
+  cut the Manual/Auto toggle at 1024x560, and the auto form with three
+  balloons at 1440x730, 1280x720 and 1024x768. No card under 600px tall.
+- The small chart shows no "$0.00" twice and no lone dot before a round.
+
+What went wrong, and how it was caught:
+- The beat rule was the first version's own choice; the money review
+  found the 1.5 s gap by feeding a held round through `shownRound` by hand.
+  Tests now run `shownRound` into `watchShown` for that case.
+- The auto form with three balloons being cut was wider than the review
+  said: found by measuring every control against the controls card at
+  eight window sizes in four panel states.
+- The `live-stats` server still serves the API only, so the live checks
+  ran in a headless Chrome with no port, the page files served from
+  `apps/web/dist` and every /api call going to that server.

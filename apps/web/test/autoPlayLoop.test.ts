@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { BalloonView, RoundView } from '../src/api/contract';
 import { DemoClient } from '../src/demo/DemoClient';
 import type { AutoPlaySettings } from '../src/game/autoPlay';
-import { runAutoPlay } from '../src/game/useAutoPlay';
+import { runAutoPlay, type AutoPlayHooks } from '../src/game/useAutoPlay';
 import type { GameActions } from '../src/game/useGame';
 import { balloon, round } from './fixtures';
 
@@ -38,6 +38,19 @@ const settings = (overrides: Partial<AutoPlaySettings> = {}): AutoPlaySettings =
   targetPumps: 3,
   stopOnProfitCents: null,
   stopOnLossCents: null,
+  onWin: { kind: 'reset' },
+  onLoss: { kind: 'reset' },
+  ...overrides,
+});
+
+const limits = GAME_CONFIG.limits;
+
+/** The screen's side of a run: no Stop and no hand cash-out unless a test says so. */
+const hooks = (overrides: Partial<AutoPlayHooks> = {}): AutoPlayHooks => ({
+  shouldStop: () => false,
+  report: () => undefined,
+  roundStarted: () => undefined,
+  handCashOuts: () => new Set(),
   ...overrides,
 });
 
@@ -45,10 +58,9 @@ describe('runAutoPlay against the demo game', () => {
   it('plays exactly the chosen number of rounds, and its net matches the wallet', async () => {
     const { client, balance } = await newDemo();
     const { reason, progress } = await runAutoPlay(
-      { settings: settings({ rounds: 25 }), difficultyId: 'easy', betsCents: [100, 250], balanceCents: balance },
+      { settings: settings({ rounds: 25 }), difficultyId: 'easy', betsCents: [100, 250], balanceCents: balance, limits },
       actionsFor(client),
-      () => false,
-      () => undefined,
+      hooks(),
       NO_PAUSES,
     );
     expect(reason).toBe('rounds-done');
@@ -67,10 +79,10 @@ describe('runAutoPlay against the demo game', () => {
           difficultyId: 'expert',
           betsCents: [100, 100, 50],
           balanceCents: balance,
+          limits,
         },
         actionsFor(client),
-        () => false,
-        () => undefined,
+        hooks(),
         NO_PAUSES,
       );
       expect(progress.netCents).toBeGreaterThanOrEqual(-750);
@@ -87,10 +99,10 @@ describe('runAutoPlay against the demo game', () => {
         difficultyId: 'easy',
         betsCents: [100],
         balanceCents: 10_000,
+        limits,
       },
       alwaysSurvives(),
-      () => false,
-      () => undefined,
+      hooks(),
       NO_PAUSES,
     );
     // Each round wins $1 (2x on $1), so the $2.50 target is passed after round 3.
@@ -106,10 +118,10 @@ describe('runAutoPlay against the demo game', () => {
         difficultyId: 'expert',
         betsCents: [100_000, 100_000, 100_000],
         balanceCents: balance,
+        limits,
       },
       actionsFor(client),
-      () => false,
-      () => undefined,
+      hooks(),
       NO_PAUSES,
     );
     const after = await client.getSession();
@@ -126,12 +138,14 @@ describe('runAutoPlay against the demo game', () => {
     const { client, balance } = await newDemo();
     let reports = 0;
     const { reason, progress } = await runAutoPlay(
-      { settings: settings({ rounds: 50 }), difficultyId: 'easy', betsCents: [100], balanceCents: balance },
+      { settings: settings({ rounds: 50 }), difficultyId: 'easy', betsCents: [100], balanceCents: balance, limits },
       actionsFor(client),
-      () => reports >= 3,
-      () => {
-        reports += 1;
-      },
+      hooks({
+        shouldStop: () => reports >= 3,
+        report: () => {
+          reports += 1;
+        },
+      }),
       NO_PAUSES,
     );
     expect(reason).toBe('player');
@@ -158,10 +172,9 @@ describe('runAutoPlay against the demo game', () => {
       },
     };
     const { reason, progress } = await runAutoPlay(
-      { settings: settings({ rounds: 5 }), difficultyId: 'easy', betsCents: [100, 100, 100], balanceCents: balance },
+      { settings: settings({ rounds: 5 }), difficultyId: 'easy', betsCents: [100, 100, 100], balanceCents: balance, limits },
       watching,
-      () => false,
-      () => undefined,
+      hooks(),
       NO_PAUSES,
     );
     expect(reason).toBe('rounds-done');
@@ -183,10 +196,9 @@ describe('runAutoPlay against the demo game', () => {
       pump: (r, i, patch) => (++pumps === 2 ? Promise.resolve(null) : actions.pump(r, i, patch)),
     };
     const { reason } = await runAutoPlay(
-      { settings: settings({ targetPumps: 5 }), difficultyId: 'easy', betsCents: [100], balanceCents: balance },
+      { settings: settings({ targetPumps: 5 }), difficultyId: 'easy', betsCents: [100], balanceCents: balance, limits },
       failing,
-      () => false,
-      () => undefined,
+      hooks(),
       NO_PAUSES,
     );
     expect(reason).toBe('error');

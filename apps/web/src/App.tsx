@@ -4,7 +4,7 @@ import { gameClient } from './api';
 import type { RoundView } from './api/contract';
 import { AutoPlayPanel } from './components/AutoPlayPanel';
 import { BalloonCard, PreviewCard } from './components/BalloonCard';
-import { BetPanel } from './components/BetPanel';
+import { BetPanel, shownTopRung, typedBetCents } from './components/BetPanel';
 import { FairnessPanel } from './components/FairnessPanel';
 import { GameInfo } from './components/GameInfo';
 import { History } from './components/History';
@@ -15,7 +15,6 @@ import { VerifyPage } from './components/VerifyPage';
 import type { AutoPlaySettings } from './game/autoPlay';
 import { checkBets, type BetSetup } from './game/betSetup';
 import { controlTarget, panelActivity, showOwnPump, SWITCH_PAUSE_MS } from './game/controls';
-import { topRungForBet } from './game/rules';
 import { useAutoPlay } from './game/useAutoPlay';
 import { useGame, type GameEvent } from './game/useGame';
 import { useHoldPump } from './game/useHoldPump';
@@ -33,7 +32,9 @@ import { useMotionSetting } from './motion';
 import { shownReveals } from './verify/shownReveals';
 import { cuesFor } from './sound/cues';
 import { soundBoard } from './sound/SoundBoard';
+import { LiveStats, LiveStatsOpener } from './stats/LiveStats';
 import { StatsPage } from './stats/StatsPage';
+import { useLiveStats } from './stats/useLiveStats';
 
 const config = GAME_CONFIG;
 
@@ -160,9 +161,21 @@ export function App() {
   const setupDifficulty =
     config.difficulties.find((d) => d.id === setup.difficultyId) ?? config.difficulties[0];
   const autoOffered = market.autoPlay && setupDifficulty !== undefined && state.phase === 'ready';
+  // Whether auto-play may change the bets after a win or a loss (market.ts).
+  const autoBetSizing = market.autoPlay && market.autoBetSizing;
+  // The top the entered bets can reach, the same one the bet panel's info
+  // line shows: the auto-play panel says where its pump count stops.
+  const autoTopRung = setupDifficulty
+    ? shownTopRung(setupDifficulty.ladder, typedBetCents(setup, check), config.limits.maxPayoutCents)
+    : 0;
   // What the panel shows: Stop while auto-play runs, the round's buttons
   // during a round played by hand, and the bet otherwise.
   const panel = autoRunning ? 'auto-running' : roundActive ? 'round' : 'bet';
+  // This visit's live stats, counted from the game as the screen shows it.
+  const liveStats = useLiveStats(
+    state,
+    panel === 'auto-running' ? 'auto-play' : panel === 'round' ? 'round' : null,
+  );
   // The balloons still in play in a round played by hand.
   const live =
     panel === 'round' && round
@@ -228,7 +241,17 @@ export function App() {
       difficultyId: setup.difficultyId,
       betsCents: check.betsCents,
       balanceCents: balance,
+      limits: config.limits,
     });
+  };
+
+  /**
+   * The player's own Cash out while auto-play runs. It goes through
+   * auto-play, which sends it as the balloon's next step, so the balloon
+   * never gets a pump or a second cash-out after it.
+   */
+  const autoCashOut = (indexes: readonly number[]): void => {
+    if (round && autoRunning) autoPlay.cashOut(round, indexes);
   };
 
   /** Opens the verify page, on a round if one is given. Back returns to the game. */
@@ -387,6 +410,13 @@ export function App() {
               <span title="Time played this session">{formatElapsed(sessionMs)}</span>
             </span>
           </div>
+          {/* Live stats opens from here, next to the session net it spells
+              out. The top bar is on screen at every size and in every state
+              (betting, in a round, during auto-play), so the button is
+              always in reach, yet away from Bet, Pump and Cash out, where a
+              stray tap costs money. Only on the game: the stats and verify
+              pages have no room for the panel. */}
+          {view === 'game' && <LiveStatsOpener live={liveStats} />}
           <SettingsMenu open={settingsOpen} onOpenChange={setSettingsOpen}>
             <div className="card settings-row">
               <span>Sound</span>
@@ -428,7 +458,11 @@ export function App() {
               </button>
             </div>
             <History config={config} rounds={state.history} onVerify={openVerify} />
-            <GameInfo config={config} autoPlay={market.autoPlay} />
+            <GameInfo
+              config={config}
+              autoPlay={market.autoPlay}
+              autoBetSizing={autoBetSizing}
+            />
           </SettingsMenu>
         </div>
       </header>
@@ -512,29 +546,23 @@ export function App() {
                       afterRoundShown={afterRoundShown}
                     />
                   ))
-                : setup.bets.map((text, index) => {
-                    const betCents =
-                      check.errors[index] === null ? parseDollarsToCents(text) : null;
-                    const ladder = setupDifficulty?.ladder ?? [];
-                    return (
-                      <PreviewCard
-                        key={index}
-                        slot={index + 1}
-                        betCents={betCents}
-                        ladder={ladder}
-                        // The steps above this bet's top are shown as out of
-                        // reach before the round starts (the payout cap).
-                        topRung={
-                          betCents === null
-                            ? ladder.length
-                            : topRungForBet(ladder, betCents, config.limits.maxPayoutCents)
-                        }
-                      />
-                    );
-                  })}
+                : setup.bets.map((text, index) => (
+                    <PreviewCard
+                      key={index}
+                      slot={index + 1}
+                      betCents={check.errors[index] === null ? parseDollarsToCents(text) : null}
+                      ladder={setupDifficulty?.ladder ?? []}
+                      maxPayoutCents={config.limits.maxPayoutCents}
+                    />
+                  ))}
             </div>
           )}
         </section>
+
+        {/* Live stats: between the stage and the controls, so on an upright
+            phone it is the top of the sheet. Where it sits at each size is
+            in stats/live-stats.css. */}
+        {liveStats.shown && <LiveStats live={liveStats} />}
 
         {state.phase !== 'loading' && (
           <aside className="controls" aria-label="Controls">
@@ -579,14 +607,20 @@ export function App() {
             {autoOffered && (
               <div hidden={!(panel === 'auto-running' || (panel === 'bet' && mode === 'auto'))}>
                 <AutoPlayPanel
-                  maxPumps={setupDifficulty.ladder.length}
+                  ladder={setupDifficulty.ladder}
+                  topRung={autoTopRung}
+                  difficultyLabel={setupDifficulty.label}
                   roundBetCents={check.totalCents}
                   betsValid={check.betsCents !== null}
+                  limits={config.limits}
+                  betSizing={autoBetSizing}
                   roundActive={roundActive && !autoRunning}
                   starting={state.starting && !autoRunning}
                   status={autoPlay.status}
+                  round={autoRunning ? round : null}
                   onStart={startAutoPlay}
                   onStop={autoPlay.stop}
+                  onCashOut={autoCashOut}
                 />
               </div>
             )}

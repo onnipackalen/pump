@@ -6,6 +6,7 @@ import {
   MAX_AUTO_ROUNDS,
   nextSteps,
   roundNetCents,
+  type AutoPlayForm,
   type AutoPlaySettings,
 } from '../src/game/autoPlay';
 import { balloon, round } from './fixtures';
@@ -15,6 +16,8 @@ const settings = (overrides: Partial<AutoPlaySettings> = {}): AutoPlaySettings =
   targetPumps: 3,
   stopOnProfitCents: null,
   stopOnLossCents: null,
+  onWin: { kind: 'reset' },
+  onLoss: { kind: 'reset' },
   ...overrides,
 });
 
@@ -98,53 +101,59 @@ describe('maxStepsPerRound', () => {
 });
 
 describe('checkAutoPlayForm', () => {
-  const form = (overrides = {}) => ({
+  const form = (overrides: Partial<AutoPlayForm> = {}): AutoPlayForm => ({
     rounds: '10',
     targetPumps: '3',
     stopOnProfit: '',
     stopOnLoss: '',
+    onWin: 'reset',
+    onWinPercent: '',
+    onLoss: 'reset',
+    onLossPercent: '',
     ...overrides,
   });
 
   it('reads a valid form, with blank limits switched off', () => {
-    expect(checkAutoPlayForm(form(), 24, 300).settings).toEqual({
+    expect(checkAutoPlayForm(form(), 24, 300, true).settings).toEqual({
       rounds: 10,
       targetPumps: 3,
       stopOnProfitCents: null,
       stopOnLossCents: null,
+      onWin: { kind: 'reset' },
+      onLoss: { kind: 'reset' },
     });
   });
 
   it('reads limits as exact cents', () => {
-    const check = checkAutoPlayForm(form({ stopOnProfit: '5.25', stopOnLoss: '20' }), 24, 300);
+    const check = checkAutoPlayForm(form({ stopOnProfit: '5.25', stopOnLoss: '20' }), 24, 300, true);
     expect(check.settings?.stopOnProfitCents).toBe(525);
     expect(check.settings?.stopOnLossCents).toBe(2000);
   });
 
   it('rejects rounds outside 1 to the maximum', () => {
     for (const rounds of ['0', String(MAX_AUTO_ROUNDS + 1), '1.5', '-1', 'ten', '']) {
-      const check = checkAutoPlayForm(form({ rounds }), 24, 300);
+      const check = checkAutoPlayForm(form({ rounds }), 24, 300, true);
       expect(check.settings).toBeNull();
       expect(check.errors.rounds).not.toBeNull();
     }
   });
 
   it('rejects a pump target longer than the ladder', () => {
-    expect(checkAutoPlayForm(form({ targetPumps: '25' }), 24, 300).settings).toBeNull();
-    expect(checkAutoPlayForm(form({ targetPumps: '24' }), 24, 300).settings).not.toBeNull();
-    expect(checkAutoPlayForm(form({ targetPumps: '0' }), 24, 300).settings).toBeNull();
+    expect(checkAutoPlayForm(form({ targetPumps: '25' }), 24, 300, true).settings).toBeNull();
+    expect(checkAutoPlayForm(form({ targetPumps: '24' }), 24, 300, true).settings).not.toBeNull();
+    expect(checkAutoPlayForm(form({ targetPumps: '0' }), 24, 300, true).settings).toBeNull();
   });
 
   it('rejects a zero profit target', () => {
-    expect(checkAutoPlayForm(form({ stopOnProfit: '0' }), 24, 300).errors.stopOnProfit).not.toBe(
+    expect(checkAutoPlayForm(form({ stopOnProfit: '0' }), 24, 300, true).errors.stopOnProfit).not.toBe(
       null,
     );
   });
 
   it('rejects a loss limit smaller than one round of bets', () => {
-    const check = checkAutoPlayForm(form({ stopOnLoss: '2.99' }), 24, 300);
+    const check = checkAutoPlayForm(form({ stopOnLoss: '2.99' }), 24, 300, true);
     expect(check.settings).toBeNull();
     expect(check.errors.stopOnLoss).toContain('$3.00');
-    expect(checkAutoPlayForm(form({ stopOnLoss: '3' }), 24, 300).settings).not.toBeNull();
+    expect(checkAutoPlayForm(form({ stopOnLoss: '3' }), 24, 300, true).settings).not.toBeNull();
   });
 });
