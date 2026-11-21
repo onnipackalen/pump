@@ -1,5 +1,4 @@
 import type { BalloonView } from '../api/contract';
-import { riskStep } from '../game/risk';
 import { formatCents, formatChance, formatMultiplier } from '../money';
 import { HoldButton } from './HoldButton';
 
@@ -111,12 +110,6 @@ export function RoundControls({
         aria-label={balloon ? `Balloon ${balloon.index + 1}` : 'No balloon picked'}
       >
         <div>
-          <dt title="The chance that the next pump pops this balloon">Pop chance</dt>
-          <dd data-risk={next ? riskStep(next.popChance) : undefined}>
-            {next ? formatChance(next.popChance) : '—'}
-          </dd>
-        </div>
-        <div>
           <dt title="The multiplier after the next pump, if it survives">Next</dt>
           <dd>{next ? formatMultiplier(next.multiplierHundredths) : '—'}</dd>
         </div>
@@ -127,6 +120,13 @@ export function RoundControls({
         <div>
           <dt title="Pumps survived, out of the most this bet can reach">Rung</dt>
           <dd>{balloon ? `${balloon.rung}/${balloon.topRung}` : '—'}</dd>
+        </div>
+        {/* The brief asks for the chance that the next pump pops the balloon.
+            The user wants it quiet: last in the row, small and grey, with
+            no warning colours. */}
+        <div className="readout-quiet">
+          <dt title="The chance that the next pump pops this balloon">Pop chance</dt>
+          <dd>{next ? formatChance(next.popChance) : '—'}</dd>
         </div>
       </dl>
 
