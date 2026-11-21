@@ -29,8 +29,38 @@ carries its own copy of those numbers for what it shows before a bet, and
 the API only, so an older build can never be mistaken for the game.
 
 The server keeps everything in one SQLite file, `apps/server/data/pump.db`,
-created on first start. Set `DATABASE_PATH` to put it somewhere else. It uses
-Node's built-in SQLite, so there is nothing native to compile.
+created on first start. Set `DATABASE_PATH` to put it somewhere else; the
+folder you name must already be there. It uses Node's built-in SQLite, so
+there is nothing native to compile.
+
+## The live site
+
+The live site runs on [Render](https://render.com): one web service with one
+1 GB disk, set up from `render.yaml` in this repo. Nothing is typed in by hand
+on Render's pages.
+
+To set it up:
+
+1. On Render choose **New > Blueprint** and connect this repository.
+2. Render shows what `render.yaml` will create: a web service named `pump`
+   and a disk named `pump-data`. Choose **Deploy Blueprint**.
+3. When the deploy is live, open the service's `onrender.com` address.
+
+After that, a push to `main` goes live by itself once the checks on GitHub
+have passed. The site is down for a few seconds on each deploy: Render stops
+the old copy before it starts the new one, so two versions never write to the
+same database.
+
+Every wallet is in one file on that disk, `/var/data/pump.db`. Render keeps
+only what is on the disk; the rest of the machine is thrown away on every
+deploy. So that a setup mistake cannot quietly lose the wallets, the server
+will not start on a host unless `DATABASE_PATH` is set and its folder is
+already there (`apps/server/src/db/location.ts`). The first lines of the
+service's log say which file is in use. Render also takes a snapshot of the
+disk once a day and keeps it for a week.
+
+To check a new setup: play a round, deploy again from Render's page, and see
+that the balance is still there.
 
 ## Scripts
 
