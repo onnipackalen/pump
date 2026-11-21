@@ -129,7 +129,7 @@ without touching the game's math. All of them are listed here.
 | Switch | Where | What it turns off |
 |---|---|---|
 | `VITE_MARKET` | Set when the web app is built, e.g. `VITE_MARKET=gb npm run build`. The rules per market are in `apps/web/src/market.ts`. | `autoPlay`: the Auto tab. `autoBetSizing`: auto-play's "On win" / "On loss" bet changes (the bets then stay as the player entered them). |
-| `PUBLIC_WINS` | Set when the server starts (`"on"` or `"off"`; on Render it is in `render.yaml`). On a host it is off unless set to `"on"`; run from the repo it is on. The server logs `public wins: ON` or `OFF` at every start. | The public lists of other players' wins (`GET /api/wins`); the screen hides them when they are off. Details under "The API". |
+| `PUBLIC_WINS` | Set when the server starts (`"on"` or `"off"`; on Render it is in `render.yaml`, applied by a Blueprint sync, not by a Manual Deploy). On a host it is off unless set to `"on"`; run from the repo it is on. The server logs `public wins: ON` or `OFF` at every start. | The public lists of other players' wins (`GET /api/wins`); the screen hides them when they are off. Details under "The API". |
 | Keep my wins private | Each player, in the game's settings menu (`PUT /api/settings`). | That player's wins, past ones too, in the public lists. |
 
 Known markets: no value means `default` (everything on); `gb` (or `uk`) has
@@ -247,9 +247,17 @@ an off switch, `PUBLIC_WINS`, read when the server starts:
   never switches it on.
 - Nothing set: on when the game is run from this repo, so you see it; off on
   a host, where showing players' results to others has to be a written
-  choice. `render.yaml` says `"off"` for the live site until the game screen
-  has the switch described below. Write the value in quotes there: a bare
-  `on` or `off` in a YAML file can be read as `true` or `false`.
+  choice. `render.yaml` says `"off"` for the live site. Write the value in
+  quotes there: a bare `on` or `off` in a YAML file can be read as `true` or
+  `false`.
+
+On the live site today the server logs "PUBLIC_WINS is not set": a Manual
+Deploy builds the new code but does not apply `render.yaml`'s settings, and
+the service was made before this setting existed. It is off all the same,
+because nothing set means off on a host. To switch the lists on, set
+`PUBLIC_WINS` to `"on"` in `render.yaml` and sync the Blueprint on Render,
+which is what applies `render.yaml`'s settings; a Manual Deploy alone will
+not. Then read the `public wins:` line in the log.
 
 The server cannot see a typo in the variable's name, so it says
 `public wins: ON` or `public wins: OFF` in its log at every start. Read that
