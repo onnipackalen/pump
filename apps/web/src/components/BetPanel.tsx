@@ -11,6 +11,7 @@ import {
   formatMultiplier,
   parseDollarsToCents,
 } from '../money';
+import { GuardedButton } from './GuardedButton';
 
 interface BetPanelProps {
   readonly config: GameConfig;
@@ -101,7 +102,7 @@ export function BetPanel({
           the difficulty. On an upright screen the top of this panel is on
           screen and the rest is a scroll away (see styles.css). */}
       {showBet && (
-        <button
+        <GuardedButton
           type="button"
           className="btn btn-primary"
           disabled={disabled || starting || check.betsCents === null}
@@ -109,7 +110,7 @@ export function BetPanel({
           title="Bet (Enter)"
         >
           {starting ? 'Starting…' : `Bet ${formatCents(check.totalCents)}`}
-        </button>
+        </GuardedButton>
       )}
 
       {check.problem !== null && <p className="note error">{check.problem}</p>}
