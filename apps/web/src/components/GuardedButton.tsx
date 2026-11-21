@@ -1,34 +1,36 @@
-import { useLayoutEffect, useState, type ButtonHTMLAttributes, type MouseEvent } from 'react';
-import { BET_GUARD_MS, pressGuard } from '../game/controls';
+import type { ButtonHTMLAttributes, MouseEvent, RefObject } from 'react';
+import { BET_GUARD_MS, guardedClickActs, guardedDown } from '../game/controls';
+import { useShownGuard } from '../game/useShownGuard';
 
 interface GuardedButtonProps
   extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'onPointerDown'> {
   readonly onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+  /** For a caller that moves focus to the button. */
+  readonly ref?: RefObject<HTMLButtonElement | null>;
 }
 
 /**
  * A button that starts a round (Bet, Start auto-play). It sits where the big
  * Pump button is during a round, so it ignores a click whose press began
- * before it appeared or less than BET_GUARD_MS after: a quick tap on Pump
- * as the balloon pops, or a tap that began on Pump and lifted here, must
- * never place a bet.
+ * before it could be seen or less than BET_GUARD_MS after: a quick tap on
+ * Pump as the balloon pops, or a tap that began on Pump and lifted here,
+ * must never place a bet.
  */
-export function GuardedButton({ onClick, ...rest }: GuardedButtonProps) {
-  const [guard] = useState(() => pressGuard(BET_GUARD_MS));
-  // Committed to the page: it is on screen from now on.
-  useLayoutEffect(() => {
-    guard.shown(performance.now());
-  }, [guard]);
+export function GuardedButton({ onClick, ref, ...rest }: GuardedButtonProps) {
+  const { guard, ref: buttonRef } = useShownGuard(BET_GUARD_MS, ref);
 
   return (
     <button
       type="button"
       {...rest}
+      ref={buttonRef}
+      // Says the guard is on (the tests and a live check look for it).
+      data-guard-ms={BET_GUARD_MS}
       onPointerDown={(event) => {
-        guard.pointerDown(event.timeStamp, performance.now());
+        guardedDown(guard, event, performance.now());
       }}
       onClick={(event) => {
-        if (guard.click(event.detail, event.timeStamp, performance.now())) onClick(event);
+        if (guardedClickActs(guard, event, performance.now())) onClick(event);
       }}
     />
   );

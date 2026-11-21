@@ -1,11 +1,23 @@
+import { GAME_CONFIG } from '@pump/engine';
 import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { BalloonView } from '../src/api/contract';
 import { AutoPlayPanel } from '../src/components/AutoPlayPanel';
+import { BetPanel } from '../src/components/BetPanel';
 import { RoundControls } from '../src/components/RoundControls';
-import { BET_GUARD_MS, pressCounts, pressGuard } from '../src/game/controls';
+import { checkBets } from '../src/game/betSetup';
+import {
+  BET_GUARD_MS,
+  guardedClickActs,
+  guardedDown,
+  holdClickActs,
+  holdDownActs,
+  pressCounts,
+  pressGuard,
+  watchShown,
+} from '../src/game/controls';
 import { balloon } from './fixtures';
 
 /*
@@ -139,6 +151,218 @@ describe('the guard on a button that appears in the Bet and Pump spot', () => {
       bet.shown(9000);
       expect(bet.click(1, 9050, 9050)).toBe(false);
     });
+  });
+});
+
+describe('a button that is in the page but hidden (Start auto-play during a round finished by hand)', () => {
+  const G = BET_GUARD_MS;
+
+  it('ignores a tap within the guard of being shown, not of being put in the page', () => {
+    const start = pressGuard(G);
+    // Stop pressed mid-round: Start is put in the page at 1000, hidden
+    // behind the round's buttons while the player finishes the round.
+    start.seen(false, 1000);
+    // The last balloon pops at 9000 and Start shows up under the finger.
+    start.seen(true, 9000);
+    // A quick tap meant for Pump, 100 ms later: no new auto-play run.
+    expect(start.pointerDown(9100, 9100)).toBe(false);
+    expect(start.click(1, 9150, 9150)).toBe(false);
+    // A tap the player means, after the guard, starts it.
+    expect(start.pointerDown(9000 + G, 9000 + G)).toBe(true);
+    expect(start.click(1, 9000 + G + 60, 9000 + G + 60)).toBe(true);
+  });
+
+  it('never counts a press while hidden, and starts over each time it comes back', () => {
+    const start = pressGuard(G);
+    start.seen(true, 0);
+    start.seen(false, 5000);
+    expect(start.pointerDown(6000, 6000)).toBe(false);
+    start.seen(true, 7000);
+    expect(start.pointerDown(7000 + G - 1, 7000 + G - 1)).toBe(false);
+    expect(start.pointerDown(7000 + G, 7000 + G)).toBe(true);
+  });
+
+  it('does not start over while it stays in view (its box only changed size)', () => {
+    const bet = pressGuard(G);
+    bet.seen(true, 0);
+    bet.seen(true, 2000);
+    expect(bet.pointerDown(2010, 2010)).toBe(true);
+  });
+
+  /** A button whose visibility the test sets, and an observer the test fires. */
+  function fakePage(visible: boolean) {
+    const box = { visible, observed: false, disconnected: false };
+    const target = { getClientRects: () => ({ length: box.visible ? 1 : 0 }) };
+    let fire = (): void => undefined;
+    class Observer {
+      constructor(onChange: () => void) {
+        fire = onChange;
+      }
+      observe(): void {
+        box.observed = true;
+      }
+      disconnect(): void {
+        box.disconnected = true;
+      }
+    }
+    return { box, target, Observer, fire: () => fire() };
+  }
+
+  it('watchShown: looks once when the button is put in the page, and again on each box change', () => {
+    const page = fakePage(false);
+    let now = 1000;
+    const guard = pressGuard(G);
+    const stop = watchShown(page.target, guard, () => now, page.Observer);
+    expect(page.box.observed).toBe(true);
+    // Hidden: even a press long after does nothing.
+    expect(guard.pointerDown(5000, 5000)).toBe(false);
+    // Shown at 9000: the guard runs from then.
+    now = 9000;
+    page.box.visible = true;
+    page.fire();
+    expect(guard.pointerDown(9100, 9100)).toBe(false);
+    expect(guard.pointerDown(9000 + G, 9000 + G)).toBe(true);
+    stop();
+    expect(page.box.disconnected).toBe(true);
+  });
+
+  it('watchShown: a button shown when put in the page is guarded from then, with or without an observer', () => {
+    for (const withObserver of [true, false]) {
+      const page = fakePage(true);
+      const guard = pressGuard(G);
+      watchShown(page.target, guard, () => 500, withObserver ? page.Observer : undefined);
+      expect(guard.pointerDown(500 + G - 1, 500 + G - 1)).toBe(false);
+      expect(guard.pointerDown(500 + G, 500 + G)).toBe(true);
+    }
+  });
+});
+
+describe('what the buttons do with each event (the code they run)', () => {
+  const G = BET_GUARD_MS;
+  const down = (timeStamp: number, button = 0) => ({ button, timeStamp });
+  const click = (detail: number, timeStamp: number) => ({ detail, timeStamp });
+
+  it('Pump (HoldButton) starts a hold only with the main button, while enabled, past the guard', () => {
+    const guard = pressGuard(G);
+    guard.shown(0);
+    expect(holdDownActs(guard, down(G - 1), G - 1, false)).toBe(false);
+    expect(holdDownActs(guard, down(G + 5, 2), G + 5, false)).toBe(false);
+    expect(holdDownActs(guard, down(G + 5), G + 5, true)).toBe(false);
+    expect(holdDownActs(guard, down(G + 5), G + 5, false)).toBe(true);
+    // A guard whose button was never shown counts nothing.
+    expect(holdDownActs(pressGuard(G), down(99_999), 99_999, false)).toBe(false);
+    // A balloon's own Pump has no guard: it acts at once.
+    expect(holdDownActs(null, down(0), 0, false)).toBe(true);
+  });
+
+  it('Pump acts on a click only from the keyboard, judged by that key press\'s own time', () => {
+    const guard = pressGuard(G);
+    guard.shown(1000);
+    // A finger or mouse already acted when it went down.
+    expect(holdClickActs(guard, click(1, 9000), 9000)).toBe(false);
+    expect(holdClickActs(null, click(1, 9000), 9000)).toBe(false);
+    expect(holdClickActs(guard, click(0, 1000 + G - 1), 1000 + G - 1)).toBe(false);
+    expect(holdClickActs(guard, click(0, 1000 + G), 1000 + G)).toBe(true);
+    expect(holdClickActs(pressGuard(G), click(0, 99_999), 99_999)).toBe(false);
+    expect(holdClickActs(null, click(0, 0), 0)).toBe(true);
+  });
+
+  it('Bet and Start auto-play (GuardedButton) act on a click whose press began on them, past the guard', () => {
+    const guard = pressGuard(G);
+    guard.shown(5000);
+    // A tap that began on Pump and lifted here: nothing went down on this button.
+    expect(guardedClickActs(guard, click(1, 9000), 9000)).toBe(false);
+    guardedDown(guard, down(5100), 5100);
+    expect(guardedClickActs(guard, click(1, 5150), 5150)).toBe(false);
+    guardedDown(guard, down(5000 + G), 5000 + G);
+    expect(guardedClickActs(guard, click(1, 5000 + G + 60), 5000 + G + 60)).toBe(true);
+    // From the keyboard (or an assistive tool's click), judged by its own time.
+    expect(guardedClickActs(guard, click(0, 5000 + G), 5000 + G)).toBe(true);
+    // Never shown: never acts.
+    const hidden = pressGuard(G);
+    guardedDown(hidden, down(99_999), 99_999);
+    expect(guardedClickActs(hidden, click(1, 99_999), 99_999)).toBe(false);
+  });
+});
+
+describe('the guard is on the buttons that share the Bet and Pump spot', () => {
+  const noop = (): void => undefined;
+  const guarded = `data-guard-ms="${BET_GUARD_MS}"`;
+  /** The opening tag of the first button whose text starts with `text`. */
+  function tag(html: string, text: string): string {
+    const found = [...html.matchAll(/(<button[^>]*>)(.*?)<\/button>/g)].find((m) =>
+      (m[2] ?? '').replace(/<[^>]+>/g, '').startsWith(text),
+    );
+    return found?.[1] ?? '';
+  }
+  const status = (running: boolean) => ({
+    running,
+    stopping: false,
+    settings: running
+      ? { rounds: 10, targetPumps: 3, stopOnProfitCents: null, stopOnLossCents: null }
+      : null,
+    progress: { roundsPlayed: 0, netCents: 0 },
+    stopReason: null,
+  });
+  const auto = (running: boolean): string =>
+    renderToStaticMarkup(
+      createElement(AutoPlayPanel, {
+        maxPumps: 10,
+        roundBetCents: 100,
+        betsValid: true,
+        roundActive: false,
+        starting: false,
+        status: status(running),
+        onStart: noop,
+        onStop: noop,
+      }),
+    );
+
+  it('the big Pump and Pump all, but not Cash out, Patch + Pump or Cash out all', () => {
+    const live = balloon({ rung: 1, drawIndex: 1, multiplierHundredths: 160, cashOutCents: 160 });
+    for (const count of [1, 2, 3]) {
+      const balloons = Array.from({ length: count }, (_, index) => ({ ...live, index }));
+      const html = renderToStaticMarkup(
+        createElement(RoundControls, {
+          balloon: balloons[0] ?? null,
+          balloons,
+          multi: count > 1,
+          pending: false,
+          activity: balloons.map(() => 'free' as const),
+          onPump: noop,
+          onPumpHold: noop,
+          onPatchPump: noop,
+          onCashOut: noop,
+          onCashOutAll: noop,
+          liveCount: count,
+          onPumpAll: noop,
+          onPumpAllHold: noop,
+        }),
+      );
+      expect(tag(html, count > 1 ? 'Pump all' : 'Pump')).toContain(guarded);
+      expect(html.match(/data-guard-ms/g)).toHaveLength(1);
+    }
+  });
+
+  it('Bet', () => {
+    const setup = { difficultyId: GAME_CONFIG.difficulties[0]?.id ?? '', bets: ['1.00'] };
+    const html = renderToStaticMarkup(
+      createElement(BetPanel, {
+        config: GAME_CONFIG,
+        setup,
+        check: checkBets(setup, GAME_CONFIG.limits, 1_000_000),
+        disabled: false,
+        starting: false,
+        showBet: true,
+        onChange: noop,
+        onStart: noop,
+      }),
+    );
+    expect(tag(html, 'Bet $')).toContain(guarded);
+  });
+
+  it('Start auto-play', () => {
+    expect(tag(auto(false), 'Start auto-play')).toContain(guarded);
   });
 });
 

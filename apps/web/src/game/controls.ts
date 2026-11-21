@@ -23,6 +23,10 @@ export const SWITCH_PAUSE_MS = 500;
  * double-tap, and short enough that a player who means to press again
  * never notices. (To be lined up with the start animation's SET_UP_MS.)
  * Stop is never held back: stopping must always work at once.
+ *
+ * "Appeared" means could be seen, not only put in the page: Start
+ * auto-play stays in the page, hidden, while a round is finished by hand,
+ * and shows up in the Pump button's place when that round ends.
  */
 export const BET_GUARD_MS = 350;
 
@@ -36,6 +40,13 @@ export const BET_GUARD_MS = 350;
 export interface PressGuard {
   /** The button has appeared. */
   readonly shown: (at: number) => void;
+  /**
+   * The button was looked at: whether it can be seen now. Going from hidden
+   * (or never looked at) to seen is appearing, so the guard starts then.
+   * Staying seen changes nothing (its box only changed size). While it is
+   * hidden, no press counts.
+   */
+  readonly seen: (visible: boolean, at: number) => void;
   /**
    * A finger or mouse went down on the button. Returns whether this press
    * counts. It is remembered for the click it ends in.
@@ -69,6 +80,11 @@ export function pressGuard(guardMs: number): PressGuard {
       shownAt = at;
       downAt = null;
     },
+    seen: (visible, at) => {
+      if (visible && shownAt !== null) return;
+      shownAt = visible ? at : null;
+      downAt = null;
+    },
     pointerDown: (at, now) => {
       downAt = Math.min(at, now);
       return pressCounts(downAt, shownAt, now, guardMs);
@@ -79,6 +95,98 @@ export function pressGuard(guardMs: number): PressGuard {
       return pressCounts(pressedAt, shownAt, now, guardMs);
     },
   };
+}
+
+/** The parts of a pointer or click event the guard goes by. */
+export interface PressEvent {
+  /** Which mouse button went down: 0 is the main one (and any finger). */
+  readonly button: number;
+  /** For a click: 0 from the keyboard, 1 or more from a finger or mouse. */
+  readonly detail: number;
+  readonly timeStamp: number;
+}
+
+/*
+ * What a button does with each event, as plain functions, so the tests
+ * check the very code the buttons run. `now` is performance.now() when the
+ * event is handled. A null guard is a button with none: it always acts.
+ */
+
+/**
+ * A HoldButton (Pump), a finger or mouse going down: whether it starts a
+ * hold. Only the main button, only while enabled, only a press that counts.
+ */
+export function holdDownActs(
+  guard: PressGuard | null,
+  event: Pick<PressEvent, 'button' | 'timeStamp'>,
+  now: number,
+  disabled: boolean,
+): boolean {
+  if (event.button !== 0 || disabled) return false;
+  return guard === null || guard.pointerDown(event.timeStamp, now);
+}
+
+/**
+ * A HoldButton, a click: whether it acts. A finger or mouse already acted
+ * when it went down, so only a click from the keyboard (detail 0) does.
+ */
+export function holdClickActs(
+  guard: PressGuard | null,
+  event: Pick<PressEvent, 'detail' | 'timeStamp'>,
+  now: number,
+): boolean {
+  if (event.detail !== 0) return false;
+  return guard === null || guard.click(0, event.timeStamp, now);
+}
+
+/** A GuardedButton (Bet, Start auto-play), a finger or mouse going down: noted for its click. */
+export function guardedDown(
+  guard: PressGuard | null,
+  event: Pick<PressEvent, 'timeStamp'>,
+  now: number,
+): void {
+  guard?.pointerDown(event.timeStamp, now);
+}
+
+/** A GuardedButton, a click: whether it acts. */
+export function guardedClickActs(
+  guard: PressGuard | null,
+  event: Pick<PressEvent, 'detail' | 'timeStamp'>,
+  now: number,
+): boolean {
+  return guard === null || guard.click(event.detail, event.timeStamp, now);
+}
+
+/** What watchShown needs of a button: in the browser, the button itself. */
+export interface ShownTarget {
+  /** None while it is hidden (it, or a box around it, has display: none). */
+  getClientRects(): { readonly length: number };
+}
+
+/** What watchShown needs of an observer: in the browser, ResizeObserver. */
+export type BoxObserverClass<T> = new (onChange: () => void) => {
+  observe(target: T): void;
+  disconnect(): void;
+};
+
+/**
+ * Keeps a guard told whether its button can be seen (see PressGuard.seen):
+ * once now, and again each time the button's box changes, which includes
+ * being hidden and shown again. Call it once the button is in the page.
+ * Returns the clean-up.
+ */
+export function watchShown<T extends ShownTarget>(
+  target: T,
+  guard: PressGuard,
+  clock: () => number,
+  Observer: BoxObserverClass<T> | undefined,
+): () => void {
+  const look = (): void => guard.seen(target.getClientRects().length > 0, clock());
+  look();
+  if (Observer === undefined) return () => undefined;
+  const observer = new Observer(look);
+  observer.observe(target);
+  return () => observer.disconnect();
 }
 
 /**

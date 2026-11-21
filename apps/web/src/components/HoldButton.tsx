@@ -1,5 +1,6 @@
-import { useLayoutEffect, useState, type ButtonHTMLAttributes } from 'react';
-import { pressGuard, type PressGuard } from '../game/controls';
+import type { ButtonHTMLAttributes } from 'react';
+import { holdClickActs, holdDownActs } from '../game/controls';
+import { useShownGuard } from '../game/useShownGuard';
 
 interface HoldButtonProps
   extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type' | 'onClick' | 'onPointerDown'> {
@@ -21,23 +22,18 @@ interface HoldButtonProps
  * keyboard it acts once per press.
  */
 export function HoldButton({ onHoldStart, onPress, guardMs, className, ...rest }: HoldButtonProps) {
-  const [guard] = useState<PressGuard | null>(() =>
-    guardMs === undefined ? null : pressGuard(guardMs),
-  );
-  // Committed to the page: it is on screen from now on.
-  useLayoutEffect(() => {
-    guard?.shown(performance.now());
-  }, [guard]);
+  const { guard, ref } = useShownGuard(guardMs);
 
   return (
     <button
       type="button"
       {...rest}
+      ref={ref}
+      // Says the guard is on (the tests and a live check look for it).
+      data-guard-ms={guardMs}
       className={className ? `${className} hold` : 'hold'}
       onPointerDown={(event) => {
-        if (event.button !== 0 || rest.disabled) return;
-        if (guard && !guard.pointerDown(event.timeStamp, performance.now())) return;
-        onHoldStart();
+        if (holdDownActs(guard, event, performance.now(), rest.disabled === true)) onHoldStart();
       }}
       // A mouse press doesn't take focus, so Space keeps meaning "pump the
       // picked balloon", and holding Space keeps pumping it.
@@ -47,9 +43,7 @@ export function HoldButton({ onHoldStart, onPress, guardMs, className, ...rest }
         event.stopPropagation();
         // A finger or mouse already acted on pointer down. Only a click from
         // the keyboard (detail 0) acts here.
-        if (event.detail !== 0) return;
-        if (guard && !guard.click(0, event.timeStamp, performance.now())) return;
-        onPress();
+        if (holdClickActs(guard, event, performance.now())) onPress();
       }}
       // A long press on a phone must not open a menu.
       onContextMenu={(event) => event.preventDefault()}
