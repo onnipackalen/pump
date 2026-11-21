@@ -25,6 +25,10 @@
  *   GET  /api/history?limit=10            -> { rounds: RoundSummary[] }
  *   GET  /api/stats                       -> PlayerStats
  *        The player's results over every round they have finished.
+ *   GET  /api/settings                    -> PlayerSettings
+ *   PUT  /api/settings                    PlayerSettings    -> PlayerSettings
+ *        The player's own choices. winsPrivate: true keeps all of their
+ *        wins, past ones too, out of the public lists.
  *   GET  /api/wins                        -> PublicWinsResponse
  *        All players' latest, largest and luckiest wins (the viewer's own
  *        are among them). Needs no player and no cookie. Empty lists when
@@ -346,6 +350,20 @@ export interface VerifiableRound {
 /** The shape of every error response. */
 export interface ApiErrorResponse {
   readonly error: ApiErrorBody;
+}
+
+/**
+ * What a player has chosen for themselves. The same shape is sent to
+ * PUT /api/settings and comes back from it and from GET /api/settings.
+ */
+export interface PlayerSettings {
+  /**
+   * True: none of this player's wins is shown in the public lists
+   * (GET /api/wins), past wins included. It takes effect at once. False,
+   * which every player starts with: their wins may be listed there, under a
+   * tag. Switching back to false shows them again within a few seconds.
+   */
+  readonly winsPrivate: boolean;
 }
 
 /**
