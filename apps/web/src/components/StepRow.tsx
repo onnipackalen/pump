@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { stepAnchor, stepRow, stepWords, type StepRowInput } from '../game/stepRow';
+import { stepAnchor, stepRow, stepTarget, stepWords, type StepRowInput } from '../game/stepRow';
 import '../steps.css';
 
 interface StepRowProps extends StepRowInput {
@@ -29,6 +29,7 @@ export function StepRow({ slot, mainChars, ...input }: StepRowProps) {
   const steps = stepRow(input);
   const anchor = stepAnchor(input);
   const words = stepWords(input);
+  const target = stepTarget(input);
   // How many steps lie before the one in view.
   const lead = Math.max(0, anchor - 1);
   const style = {
@@ -61,6 +62,8 @@ export function StepRow({ slot, mainChars, ...input }: StepRowProps) {
               className="step"
               data-step={step.state}
               data-anchor={step.rung === anchor ? 'true' : undefined}
+              // Auto-play's target: ringed in the balloon's colour.
+              data-target={step.rung === target ? 'true' : undefined}
               style={{ '--chars': step.text.length } as CSSProperties}
             >
               {step.text}

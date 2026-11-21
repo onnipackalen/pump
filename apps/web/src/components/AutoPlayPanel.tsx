@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { flushSync } from 'react-dom';
 import type { BalloonView, RoundView } from '../api/contract';
 import {
@@ -14,6 +14,7 @@ import {
   type BetChangeKind,
   type BetLimits,
 } from '../game/autoPlay';
+import { FIRST_TARGET_PUMPS, stepTargetPumps } from '../game/targetSteps';
 import type { AutoPlayStatus } from '../game/useAutoPlay';
 import { formatCents, formatSignedCents } from '../money';
 import { GuardedButton } from './GuardedButton';
@@ -53,11 +54,16 @@ interface AutoPlayPanelProps {
   readonly onStop: () => void;
   /** The player's own Cash out for these balloons, while auto-play runs. */
   readonly onCashOut: (balloonIndexes: readonly number[]) => void;
+  /**
+   * The target pump count as typed, kept by the screen so the stage can
+   * mark it while it changes. Without it the panel keeps its own.
+   */
+  readonly targetPumps?: string;
+  readonly onTargetPumpsChange?: (text: string) => void;
 }
 
-const initialForm: AutoPlayForm = {
+const initialForm: Omit<AutoPlayForm, 'targetPumps'> = {
   rounds: '10',
-  targetPumps: '3',
   stopOnProfit: '',
   stopOnLoss: '',
   // The bets stay as entered unless the player chooses otherwise. No
@@ -69,7 +75,7 @@ const initialForm: AutoPlayForm = {
 };
 
 interface FieldSpec {
-  readonly name: 'rounds' | 'targetPumps' | 'stopOnProfit' | 'stopOnLoss';
+  readonly name: 'rounds' | 'stopOnProfit' | 'stopOnLoss';
   /** Short, shown inside the box. */
   readonly label: string;
   /** Full, for the tooltip, the error line and screen readers. */
@@ -77,9 +83,9 @@ interface FieldSpec {
   readonly money: boolean;
 }
 
+// The pump count has its own row, the Target row, above these.
 const FIELDS: readonly FieldSpec[] = [
   { name: 'rounds', label: 'Rounds', full: 'Rounds', money: false },
-  { name: 'targetPumps', label: 'Pumps', full: 'Pumps per balloon', money: false },
   { name: 'stopOnProfit', label: 'Stop profit', full: 'Stop at profit', money: true },
   { name: 'stopOnLoss', label: 'Stop loss', full: 'Stop at loss', money: true },
 ];
@@ -97,10 +103,17 @@ const SIZING: readonly SizingSpec[] = [
 
 /** Every field that can be wrong, in screen order, with its name for the error line. */
 const ERROR_NAMES: readonly (readonly [AutoPlayField, string])[] = [
+  ['targetPumps', 'Pumps per balloon'],
   ...FIELDS.map((field) => [field.name, field.full] as const),
   ['onWinPercent', 'On win'],
   ['onLossPercent', 'On loss'],
 ];
+
+/**
+ * A mouse press on − or + must not take focus: one that greys out at the
+ * end of the ladder would drop focus to the page.
+ */
+const keepFocus = (event: MouseEvent<HTMLButtonElement>): void => event.preventDefault();
 
 /**
  * Auto-play: a number of rounds, a target pump count, stop limits, and what
@@ -124,16 +137,28 @@ export function AutoPlayPanel({
   onStart,
   onStop,
   onCashOut,
+  targetPumps,
+  onTargetPumpsChange,
 }: AutoPlayPanelProps) {
-  const [form, setForm] = useState<AutoPlayForm>(initialForm);
+  const [otherFields, setForm] = useState(initialForm);
+  const [ownTarget, setOwnTarget] = useState(FIRST_TARGET_PUMPS);
+  const targetText = targetPumps ?? ownTarget;
+  const changeTarget = onTargetPumpsChange ?? setOwnTarget;
+  const form: AutoPlayForm = { ...otherFields, targetPumps: targetText };
   const check = checkAutoPlayForm(form, ladder.length, roundBetCents, betSizing);
   const { running, stopping, progress, settings, stopReason, bets } = status;
   const firstWrong = ERROR_NAMES.find(([name]) => check.errors[name] !== null);
-  // What the pump count reaches, shown under the Pumps box (pumpReach).
+  // What the pump count reaches, shown big in the Target box (pumpReach).
   const reach =
     check.errors.targetPumps === null
       ? pumpReach(ladder, Number(form.targetPumps), topRung, difficultyLabel)
       : null;
+  // What − and + would set the count to; null greys the button out.
+  const fewer = stepTargetPumps(form.targetPumps, -1, ladder.length, topRung);
+  const more = stepTargetPumps(form.targetPumps, 1, ladder.length, topRung);
+  const setTarget = (text: string | null): void => {
+    if (text !== null) changeTarget(text);
+  };
 
   const panelRef = useRef<HTMLElement>(null);
   const stopRef = useRef<HTMLButtonElement>(null);
@@ -158,7 +183,7 @@ export function AutoPlayPanel({
   const chooseChange = (spec: SizingSpec, kind: BetChangeKind): void => {
     // The percent box appears with "Increase": type straight into it. It is
     // drawn at once (flushSync), so it can take focus before the next key.
-    flushSync(() => setForm({ ...form, [spec.kind]: kind }));
+    flushSync(() => setForm({ ...otherFields, [spec.kind]: kind }));
     if (kind === 'increase') percentRefs.current[spec.kind]?.focus();
   };
 
@@ -255,48 +280,90 @@ export function AutoPlayPanel({
               {firstWrong[1]}: {check.errors[firstWrong[0]]}
             </p>
           )}
+          {/* The target first: it is what changes most. The box shows the
+              multiplier the target reaches, big, and the pump count, which
+              can still be typed (the arrow keys step it too). − and + move
+              the target one step along the ladder. */}
+          <div className="target-row">
+            <label
+              className="field field-target"
+              title={reach !== null ? `Target: ${reach.full}` : 'Target: pumps per balloon'}
+            >
+              <span className="field-label">Target</span>
+              <strong className="target-x" data-top={reach?.toppedOut ?? false} aria-hidden="true">
+                {reach?.multiplier ?? '—'}
+              </strong>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                aria-label="Pumps per balloon"
+                aria-describedby={reach !== null ? 'auto-reach' : undefined}
+                value={form.targetPumps}
+                aria-invalid={check.errors.targetPumps !== null}
+                onChange={(event) => changeTarget(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+                  event.preventDefault();
+                  setTarget(event.key === 'ArrowUp' ? more : fewer);
+                }}
+              />
+              <span className="muted" aria-hidden="true">
+                pumps
+              </span>
+            </label>
+            <button
+              type="button"
+              className="btn"
+              aria-label="One pump fewer"
+              title="Target one step lower"
+              disabled={fewer === null}
+              onMouseDown={keepFocus}
+              onClick={() => setTarget(fewer)}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="btn"
+              aria-label="One pump more"
+              title="Target one step higher"
+              disabled={more === null}
+              onMouseDown={keepFocus}
+              onClick={() => setTarget(more)}
+            >
+              +
+            </button>
+          </div>
+          {/* Screen readers get the target in full. */}
+          {reach !== null && (
+            <span className="visually-hidden" id="auto-reach">
+              {reach.full}
+            </span>
+          )}
           <div className="auto-grid">
-            {FIELDS.map((field) => {
-              const pumps = field.name === 'targetPumps';
-              const box = (
-                <label
-                  key={field.name}
-                  className="field"
-                  title={pumps && reach !== null ? `${field.full}: ${reach.full}` : field.full}
-                >
-                  <span className="field-label">{field.label}</span>
-                  <input
-                    type="text"
-                    inputMode={field.money ? 'decimal' : 'numeric'}
-                    autoComplete="off"
-                    aria-label={field.full}
-                    aria-describedby={pumps && reach !== null ? 'auto-reach' : undefined}
-                    value={form[field.name]}
-                    aria-invalid={check.errors[field.name] !== null}
-                    placeholder={field.money ? 'off' : undefined}
-                    onChange={(event) => setForm({ ...form, [field.name]: event.target.value })}
-                  />
-                </label>
-              );
-              if (!pumps) return box;
-              // Under the box, not in it, so the typed count always has room.
-              // The line keeps its place while the count is being retyped.
-              return (
-                <div key={field.name} className="field-cell">
-                  {box}
-                  <span
-                    className="field-reach"
-                    id="auto-reach"
-                    data-top={reach?.toppedOut ?? false}
-                    title={reach?.full}
-                  >
-                    <span aria-hidden="true">{reach?.short}</span>
-                    {/* Screen readers get it in full. */}
-                    {reach !== null && <span className="visually-hidden">{reach.full}</span>}
-                  </span>
-                </div>
-              );
-            })}
+            {FIELDS.map((field) => (
+              <label
+                key={field.name}
+                // Rounds on its own row, the two stops side by side under it.
+                className={field.name === 'rounds' ? 'field field-wide' : 'field'}
+                title={field.full}
+              >
+                <span className="field-label">{field.label}</span>
+                <input
+                  type="text"
+                  inputMode={field.money ? 'decimal' : 'numeric'}
+                  autoComplete="off"
+                  aria-label={field.full}
+                  value={form[field.name]}
+                  aria-invalid={check.errors[field.name] !== null}
+                  placeholder={field.money ? 'off' : undefined}
+                  onChange={(event) =>
+                    setForm({ ...otherFields, [field.name]: event.target.value })
+                  }
+                />
+              </label>
+            ))}
           </div>
           {betSizing && (
             <div className="auto-sizing">
@@ -343,7 +410,7 @@ export function AutoPlayPanel({
                         disabled={!increase}
                         aria-invalid={check.errors[spec.percent] !== null}
                         onChange={(event) =>
-                          setForm({ ...form, [spec.percent]: event.target.value })
+                          setForm({ ...otherFields, [spec.percent]: event.target.value })
                         }
                       />
                       <span className="muted" aria-hidden="true">

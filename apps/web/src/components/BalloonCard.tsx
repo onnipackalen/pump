@@ -60,6 +60,8 @@ interface BalloonCardProps {
    * cashed out below its top rung may now say where it would have popped.
    */
   readonly afterRoundShown: boolean;
+  /** Auto-play's target pump count while it runs: its step is marked. */
+  readonly target?: number | null;
 }
 
 /**
@@ -307,6 +309,7 @@ export function BalloonCard({
   onPump,
   onPumpHold,
   afterRoundShown,
+  target = null,
 }: BalloonCardProps) {
   const slot = balloon.index + 1;
   // Its first pump's lift, only when this screen sees that pump hold.
@@ -337,6 +340,7 @@ export function BalloonCard({
         rung={balloon.rung}
         topRung={balloon.topRung}
         status={balloon.status}
+        target={target}
         mainChars={main.length}
       />
       <div className="balloon-box">
@@ -390,6 +394,8 @@ interface PreviewCardProps {
   readonly ladder: readonly number[];
   /** The most one balloon can pay: it sets the top this bet can reach. */
   readonly maxPayoutCents: number;
+  /** Auto-play's target pump count, on the Auto tab: its step is marked. */
+  readonly target?: number | null;
 }
 
 /**
@@ -404,6 +410,7 @@ export function PreviewCard({
   betCents,
   ladder,
   maxPayoutCents,
+  target = null,
 }: PreviewCardProps) {
   const main = betCents === null ? '—' : formatCents(betCents);
   const topRung =
@@ -416,6 +423,7 @@ export function PreviewCard({
         rung={0}
         topRung={topRung}
         status="preview"
+        target={target}
         mainChars={main.length}
       />
       <div className="balloon-box">

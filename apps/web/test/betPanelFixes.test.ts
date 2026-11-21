@@ -150,7 +150,7 @@ describe('(c) pumpReach: what the count reaches at the bets entered', () => {
       for (let n = 1; n <= d.ladder.length; n += 1) {
         const x = formatMultiplier(multiplierAt(d.ladder, n));
         expect(pumpReach(d.ladder, n, d.ladder.length, d.label)).toEqual({
-          short: `= ${x}`,
+          multiplier: x,
           full: `${n} pumps = ${x} on ${d.label}`,
           toppedOut: false,
         });
@@ -165,10 +165,10 @@ describe('(c) pumpReach: what the count reaches at the bets entered', () => {
         const reach = pumpReach(d.ladder, n, top, d.label);
         const shown = formatMultiplier(multiplierAt(d.ladder, Math.min(n, top)));
         expect(reach?.toppedOut).toBe(n > top);
-        expect(reach?.short).toBe(n > top ? `top ${top} = ${shown}` : `= ${shown}`);
+        expect(reach?.multiplier).toBe(shown);
         if (n > top) {
           expect(reach?.full).toContain(`tops out at ${top} pumps = ${shown} on ${d.label}`);
-          expect(reach?.short).not.toContain(formatMultiplier(multiplierAt(d.ladder, n)));
+          expect(reach?.multiplier).not.toBe(formatMultiplier(multiplierAt(d.ladder, n)));
         }
       }
     }
@@ -207,33 +207,29 @@ describe('(c) the auto-play panel says what the pump count reaches', () => {
     onStop: () => undefined,
     onCashOut: () => undefined,
   });
-  /** The line under the Pumps box, as seen (the hidden full text left out). */
-  const reachLine = (html: string): string => {
-    const match = /<span class="field-reach"[^>]*><span aria-hidden="true">(.*?)<\/span>/.exec(html);
+  /** The multiplier shown big in the Target box. */
+  const targetX = (html: string): string => {
+    const match = /<strong class="target-x"[^>]*>(.*?)<\/strong>/.exec(html);
     return match?.[1] ?? '';
   };
 
-  it('under the Pumps box, not in it, for the 3 pumps the form starts with', () => {
+  it('in the Target box, for the 3 pumps the form starts with', () => {
     for (const difficulty of GAME_CONFIG.difficulties) {
       const html = renderToStaticMarkup(
         createElement(AutoPlayPanel, props(difficulty, difficulty.ladder.length)),
       );
       const reach = formatMultiplier(multiplierAt(difficulty.ladder, 3));
-      expect(reachLine(html)).toBe(`= ${reach}`);
+      expect(targetX(html)).toBe(reach);
       // In full for the tooltip and screen readers.
       expect(html).toContain(`3 pumps = ${reach} on ${difficulty.label}`);
-      // The Pumps box holds its name and the count only, so the count has room.
-      const box = /<label class="field" title="Pumps per balloon[^"]*">(.*?)<\/label>/.exec(html);
-      expect(box?.[1]).toBeDefined();
-      expect(box?.[1]).not.toContain('field-reach');
     }
   });
 
-  it('says the top when the bets top out below the count', () => {
+  it('shows the top, in the warning colour, when the bets top out below the count', () => {
     const difficulty = GAME_CONFIG.difficulties[0];
     if (!difficulty) throw new Error('no difficulty');
     const html = renderToStaticMarkup(createElement(AutoPlayPanel, props(difficulty, 2)));
-    expect(reachLine(html)).toBe(`top 2 = ${formatMultiplier(multiplierAt(difficulty.ladder, 2))}`);
+    expect(targetX(html)).toBe(formatMultiplier(multiplierAt(difficulty.ladder, 2)));
     expect(html).toContain('data-top="true"');
   });
 });

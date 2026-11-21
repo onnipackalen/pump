@@ -21,6 +21,7 @@ import { useGame, type GameEvent } from './game/useGame';
 import { useHoldPump } from './game/useHoldPump';
 import { useSetUpFrom } from './game/setUp';
 import { useSessionClock } from './game/useSessionClock';
+import { FIRST_TARGET_PUMPS, targetPumpsOf } from './game/targetSteps';
 import {
   roundPayoutCents,
   roundRefundedCents,
@@ -118,6 +119,9 @@ export function App() {
     bets: ['1.00'],
   });
   const [mode, setMode] = useState<Mode>('manual');
+  // Auto-play's target pump count as typed. Kept here, not in its panel,
+  // so the stage marks it the moment it changes.
+  const [autoTarget, setAutoTarget] = useState(FIRST_TARGET_PUMPS);
   const [muted, setMuted] = useState(soundBoard.muted);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [view, setView] = useState<View>(viewFromHash);
@@ -173,6 +177,14 @@ export function App() {
   const autoTopRung = setupDifficulty
     ? shownTopRung(setupDifficulty.ladder, typedBetCents(setup, check), config.limits.maxPayoutCents)
     : 0;
+  // Auto-play's target, marked in each balloon's row of steps: while it
+  // runs, the one it plays to; on the Auto tab before that, the one being
+  // set, so each − or + shows on the stage at once.
+  const stageTarget = autoRunning
+    ? (autoPlay.status.settings?.targetPumps ?? null)
+    : autoOffered && mode === 'auto'
+      ? targetPumpsOf(autoTarget, setupDifficulty.ladder.length)
+      : null;
   // What the panel shows: Stop while auto-play runs, the round's buttons
   // during a round played by hand, and the bet otherwise.
   const panel = autoRunning ? 'auto-running' : roundActive ? 'round' : 'bet';
@@ -550,6 +562,7 @@ export function App() {
                         holdOne(balloon.index);
                       }}
                       afterRoundShown={afterRoundShown}
+                      target={stageTarget}
                     />
                   ))
                 : setup.bets.map((text, index) => (
@@ -560,6 +573,7 @@ export function App() {
                       betCents={check.errors[index] === null ? parseDollarsToCents(text) : null}
                       ladder={setupDifficulty?.ladder ?? []}
                       maxPayoutCents={config.limits.maxPayoutCents}
+                      target={stageTarget}
                     />
                   ))}
             </div>
@@ -628,6 +642,8 @@ export function App() {
                   onStart={startAutoPlay}
                   onStop={autoPlay.stop}
                   onCashOut={autoCashOut}
+                  targetPumps={autoTarget}
+                  onTargetPumpsChange={setAutoTarget}
                 />
               </div>
             )}

@@ -1042,14 +1042,40 @@ input {
   gap: 2px;
 }
 
-.bet-row {
+.bet-row,
+.target-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--tap) var(--tap);
   gap: 6px;
 }
 
-.bet-row .btn {
+.bet-row .btn,
+.target-row .btn {
   padding: 0;
+}
+
+/*
+ * Auto-play's Target box: its name, the multiplier the target reaches
+ * (big), then the pump count, which can be typed, and "pumps". The
+ * multiplier turns the warning colour when the bets top out below the
+ * count (the box's title says why).
+ */
+.field-target .target-x {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.field-target .target-x[data-top='true'] {
+  color: var(--risk);
+  cursor: help;
+}
+
+.field-target input {
+  flex: 0 0 3ch;
+  width: 3ch;
 }
 
 /* Auto-play */
@@ -1062,6 +1088,10 @@ input {
 
 .auto-grid .field {
   padding: 0 8px;
+}
+
+.auto-grid .field-wide {
+  grid-column: 1 / -1;
 }
 
 .auto-grid .field-label {
@@ -1091,37 +1121,6 @@ input {
   display: block;
   color: var(--risk);
   font-size: 12px;
-}
-
-/*
- * The Pumps box, and under it what the count reaches on the chosen
- * difficulty: "= 1.18×", or "top 7 = 100.00×" when the max payout holds
- * the bets lower. Under the box, not in it: in the box it took the room the
- * typed count needed on a narrow card. The line always keeps its height,
- * so the form doesn't jump while the count is retyped; it may wrap.
- */
-.field-cell {
-  display: grid;
-  gap: 2px;
-  align-content: start;
-  min-width: 0;
-}
-
-.field-reach {
-  min-height: 1.25em;
-  padding: 0 8px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.25;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-/* Topped out: the same colour as a bet's own "Top" in its box. */
-.field-reach[data-top='true'] {
-  color: var(--risk);
-  cursor: help;
 }
 
 /* On win and On loss: a name, Reset or Increase, and the percent. */

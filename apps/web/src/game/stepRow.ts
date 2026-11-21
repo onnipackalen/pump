@@ -43,6 +43,12 @@ export interface StepRowInput {
   readonly topRung: number;
   /** "preview" is a balloon before its round has started. */
   readonly status: BalloonStatus | 'preview';
+  /**
+   * Auto-play's target, as a pump count: the step it stops at is marked.
+   * Before the round it also moves the row (stepAnchor), so the marked step
+   * is in view while the player changes the target.
+   */
+  readonly target?: number | null;
 }
 
 /** Whether another pump can still be made on a balloon in this state. */
@@ -91,10 +97,27 @@ export function stepWords(input: StepRowInput): string | null {
 }
 
 /**
+ * The step auto-play's target stops at, for a balloon that can still be
+ * pumped: the target, or the top this bet can reach if that is lower (a
+ * balloon there cashes out by itself). Null with no target.
+ */
+export function stepTarget({ target, topRung, status }: StepRowInput): number | null {
+  if (target === undefined || target === null || target < 1 || !inPlay(status)) return null;
+  return Math.min(target, topRung);
+}
+
+/**
  * The step the row keeps in view: the one the balloon is on, or the one it
  * popped on. 0 before the first pump, when it is on no step yet.
+ *
+ * Before the round, with an auto-play target, the row moves as if the
+ * balloon were one step below the target: the marked step then sits where
+ * the next step normally does, in full view at every size, and the row
+ * slides along with each − or +.
  */
-export function stepAnchor({ rung, status, ladder }: StepRowInput): number {
-  const anchor = status === 'popped' ? rung + 1 : rung;
+export function stepAnchor(input: StepRowInput): number {
+  const { rung, status, ladder } = input;
+  const target = stepTarget(input);
+  const anchor = status === 'popped' ? rung + 1 : status === 'preview' && target !== null ? target - 1 : rung;
   return Math.min(Math.max(anchor, 0), ladder.length);
 }

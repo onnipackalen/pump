@@ -2702,3 +2702,34 @@ by script in the same moment use the old settings for the second one, as
 React has not drawn between them; a real player cannot click that fast.
 
 Not checked: real phones, Safari, the live site.
+
+## 2026-11-21: auto-play's target, easy to change
+
+The user: "make it easy to change the target multiplier", then "Make it
+flow like when you change pumps or dificulties". Asked how, they picked
+− and + buttons. Built on `auto-target-steps`, screen only:
+
+- The auto-play panel's Pumps box is now a Target row like a bet row: the
+  box shows the multiplier the target reaches (big) and the pump count
+  (still typed; ↑ and ↓ step it too), with − and + beside it. Each moves
+  one step along the ladder. + stops at the top the bets can reach; a
+  count typed past it comes back to the top on − (`game/targetSteps.ts`).
+  A topped-out target shows the top's multiplier in the warning colour.
+- The target sits first in the form (it changes most), Rounds under it,
+  the two stops side by side under that. The old line under the Pumps
+  box is gone; the box says it all now.
+- The flow: the target is kept by the game screen, not the panel, so the
+  stage follows it at once. On the Auto tab each balloon's row of steps
+  rings the target step in that balloon's colour and slides to it with
+  each − or +. While auto-play runs, the target its balloons play to stays
+  ringed (the row still follows the balloon). On a phone with two or
+  three balloons there is no row, so nothing shows there.
+- Tests: `apps/web/test/autoTarget.test.ts`; the old Pumps-line tests now
+  check the box.
+
+Checked lightly at the user's word ("you dont need to test everything so
+thorouhly"): typecheck, lint, web tests, and one look in the browser at
+1440 x 900 (3 balloons) and 390 x 844 (1 balloon).
+
+Not checked: a full auto-play run with the target ringed, real phones,
+Safari, the live site.

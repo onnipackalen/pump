@@ -516,6 +516,6 @@ describe('the auto-play panel while it runs: Cash out', () => {
   it('shows no Cash out once auto-play has stopped', () => {
     const r = round([balloon({ rung: 2, cashOutCents: 109 })]);
     const html = render(running({ running: false, stopReason: 'player' }), r);
-    expect(buttons(html)).toEqual(['Start auto-play', 'Reset', 'Increase', 'Reset', 'Increase']);
+    expect(buttons(html)).toEqual(['Start auto-play', '−', '+', 'Reset', 'Increase', 'Reset', 'Increase']);
   });
 });

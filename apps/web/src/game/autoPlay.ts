@@ -353,8 +353,8 @@ export function targetMultiplier(ladder: readonly number[], targetPumps: number)
 
 /** What the pump count reaches, as the auto-play panel says it. */
 export interface PumpReach {
-  /** Under the Pumps box: "= 1.18×", or "top 7 = 100.00×" when topped out. */
-  readonly short: string;
+  /** In the Target box: the multiplier reached, like "1.18×" (the top's when topped out). */
+  readonly multiplier: string;
   /** In full, for the tooltip and screen readers. */
   readonly full: string;
   /** The count is past the top these bets can reach. */
@@ -381,11 +381,11 @@ export function pumpReach(
   const x = formatMultiplier(reach);
   return toppedOut
     ? {
-        short: `top ${topRung} = ${x}`,
+        multiplier: x,
         full: `${targetPumps} pumps, but at these bets a balloon tops out at ${topRung} pumps = ${x} on ${difficultyLabel} (the max payout), and cashes out there`,
         toppedOut,
       }
-    : { short: `= ${x}`, full: `${targetPumps} pumps = ${x} on ${difficultyLabel}`, toppedOut };
+    : { multiplier: x, full: `${targetPumps} pumps = ${x} on ${difficultyLabel}`, toppedOut };
 }
 
 /** Whether a bet change field is set to reset or to increase. */
