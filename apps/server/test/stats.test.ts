@@ -9,7 +9,7 @@ import {
   summarize,
   thinProfit,
 } from '../src/services/stats';
-import { STARTING_BALANCE_CENTS } from '../src/settings';
+import { ABANDONED_AFTER_MS, STARTING_BALANCE_CENTS } from '../src/settings';
 import {
   cashOutByHand,
   finishRound,
@@ -98,6 +98,17 @@ describe('summarize', () => {
     const evenWithPatch = played({ betCents: 1000, patchesCents: 100, payoutCents: 1100 });
     const underStake = played({ betCents: 1000, payoutCents: 990 });
     expect(summarize([evenWithPatch, underStake], ORDER).bestRound).toBeNull();
+  });
+
+  it('counts Patches in the stake: a cash-out above the bet but below bet plus Patches is no win', () => {
+    const patchedLoss = played({ betCents: 1000, patchesCents: 300, payoutCents: 1200 });
+    expect(summarize([patchedLoss], ORDER).bestRound).toBeNull();
+  });
+
+  it('judges the whole round: one big cash-out in a round that lost overall is no win', () => {
+    // Three balloons of $10: one cashed out at 2.50x, two popped.
+    const losingRound = played({ balloonsPlayed: 3, betCents: 3000, payoutCents: 2500 });
+    expect(summarize([losingRound], ORDER).bestRound).toBeNull();
   });
 
   it('lists difficulties in the game’s order, then any the game no longer has', () => {
@@ -269,5 +280,91 @@ describe('GET /api/stats', () => {
     expect(top).toBeGreaterThan(0);
     expect(stats.bestWin?.netCents).toBe(top);
     expect(stats.bestWin?.roundId).toBe(history[gains.lastIndexOf(top)]?.id);
+    // A real win: paid back more than the bets plus Patches.
+    expect(stats.bestWin?.payoutCents ?? 0).toBeGreaterThan(stats.bestWin?.wageredCents ?? 0);
+  });
+});
+
+/**
+ * CLAUDE.md: a bet refunded by the 24-hour rule is a void bet, left out of
+ * turnover and RTP figures. Here the real rule runs (the clock moves on and the
+ * next request settles the round), and the stats must count such a bet as
+ * nothing at all: no round, no stake, no loss.
+ */
+describe.each([9400, 9700, 9900])('stats after the 24-hour rule, at RTP %i', (rtpBp) => {
+  const config = { ...GAME_CONFIG, rtpBp };
+  const EMPTY: PlayerStats = {
+    rounds: 0,
+    balloons: 0,
+    wageredCents: 0,
+    paidOutCents: 0,
+    netCents: 0,
+    profit: [],
+    bestWin: null,
+    byDifficulty: [],
+  };
+
+  it('a round left unpumped for 24 hours is no round at all', async () => {
+    const world = testWorld(config);
+    const seat = await Seat.join(world.app);
+    expect((await seat.start('hard', [1000, 500])).status).toBe(200);
+
+    world.runtime.advance(ABANDONED_AFTER_MS);
+    const stats = (await seat.get<PlayerStats>('/api/stats')).body;
+
+    expect(stats).toEqual(EMPTY);
+    // The refund really happened: the wallet is back where it started.
+    expect((await seat.session()).body.wallet.balanceCents).toBe(STARTING_BALANCE_CENTS);
+  });
+
+  it('after a pump, only the pumped balloon counts; the refunded bet adds nothing', async () => {
+    const world = testWorld(config);
+    const seat = await Seat.join(world.app);
+    const round = (await seat.start('medium', [1000, 500])).body.round;
+    // Balloon 1 pumps once. Whether it pops or holds, balloon 2 is never pumped.
+    expect((await seat.pump(round, 0)).status).toBe(200);
+
+    world.runtime.advance(ABANDONED_AFTER_MS);
+    const stats = (await seat.get<PlayerStats>('/api/stats')).body;
+    const settled = (await seat.get<HistoryResponse>('/api/history')).body.rounds[0];
+    const balance = (await seat.session()).body.wallet.balanceCents;
+
+    expect(settled?.refundedCents).toBe(500);
+    const paid = settled?.payoutCents ?? -1;
+    expect(stats).toEqual({
+      rounds: 1,
+      balloons: 1,
+      wageredCents: 1000,
+      paidOutCents: paid,
+      netCents: paid - 1000,
+      profit: [{ round: 1, netCents: paid - 1000 }],
+      // If balloon 1 held, it cashed out at 1.04x: $10.40 back on the $10
+      // really played, a real win of $0.40. Counting the refunded $5 as stake
+      // would wrongly make it a $4.60 loss. If it popped, there is no win.
+      bestWin:
+        paid > 1000
+          ? {
+              roundId: round.id,
+              difficultyId: 'medium',
+              netCents: paid - 1000,
+              wageredCents: 1000,
+              payoutCents: paid,
+              multiplierHundredths: 104,
+              finishedAt: settled?.finishedAt,
+              seedRevealed: false,
+            }
+          : null,
+      byDifficulty: [
+        {
+          difficultyId: 'medium',
+          rounds: 1,
+          wageredCents: 1000,
+          paidOutCents: paid,
+          netCents: paid - 1000,
+        },
+      ],
+    });
+    // The refunded $5 is neither a stake nor a loss: the net is the wallet's change.
+    expect(stats.netCents).toBe(balance - STARTING_BALANCE_CENTS);
   });
 });
