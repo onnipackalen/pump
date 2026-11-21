@@ -685,3 +685,366 @@ Known and not done: the math document on Claude Docs still shows the old
 ladders in its examples and tables; it will be redone once the ladders
 settle. The rule that the pop chance rises holds from an RTP of 93.59%
 with these ladders (91.91% before), so 94% starts and 93% does not.
+
+## 2026-11-20: the simulator measured the engine against itself
+
+An independent review of `npm run rtp` and `npm run sim` found that every
+line they print today is true, but that the simulator could not be trusted
+to notice a wrong engine.
+
+Turned out wrong, and how it was caught (all by the review, which planted
+bugs in the engine and ran both programs):
+
+- The simulator took each pump's "exact chance" and its expected RTP from
+  the engine. So an engine drawing pump 1 five points under the RTP
+  printed "92.581% simulated; 92.737% is the exact figure ... PASS" at a
+  configured 97%. A doubled Patch price passed too. Every yardstick now
+  comes from `cli/rules.ts`, which works the rules out from the
+  configuration and never calls the engine (34c0b3f, 8d21551).
+- One-cent mistakes in PumpEngine.ts passed both programs: payouts rounded
+  up, payouts one cent short, a Patch one cent too cheap. The total hides
+  them, and the RTP check never calls the play functions. The simulator
+  now checks every draw's chance, every outcome, every payout, every Patch
+  charge and every top rung against the rules, with no luck involved.
+- The top of each ladder was hardly played, and a bet stopped by the cap
+  never was. A second, smaller run now takes every balloon to its top
+  rung, with the largest bet included.
+- Two lines of the RTP check, "No cash-out returns more than the RTP" and
+  the same for Patches, could not fail by themselves. They now work out
+  the real return from the engine's own chances (12b19fa). A cap test
+  written with "<" was caught by nothing; it is now.
+
+How the fix was checked: the review's bugs were planted again in a scratch
+copy, seven of them. The simulator says FAIL for all seven, and the RTP
+check for the four that sit in math.ts (it does not call the play
+functions, so the other three are the simulator's to catch). Both say PASS
+for the real engine at 9400, 9700 and 9900. The tests now hand the
+simulator engines that are wrong on purpose.
+
+Left as it is: the volatility printed for Expert moves from run to run,
+because rare huge wins decide it. The line now says so.
+
+## 2026-11-20: the game screen plays against the real server
+
+Built:
+
+- The server hands out the built screen, so one address serves the game
+  and its API (`npm start`). `npm run dev` runs server and screen together
+  for working on the game.
+- `apps/web/src/api/httpClient.ts`: the screen's real client. The demo is
+  no longer part of the app. The API types moved to `packages/contract`,
+  shared by both halves.
+- The verify answer now carries each pump's draw and the payout cap the
+  round was played under (`rounds.max_payout_cents`), which the verify page
+  needs to check a round stopped by the cap.
+- `apps/server/test/screenClient.test.ts` runs the very file the browser
+  runs against the real routes. `apps/server/test/verifyRounds.test.ts`
+  plays rounds that end in every way a round can end, at 9400, 9700 and
+  9900, and checks each with `verifyRound`.
+
+Turned out wrong, and how it was caught:
+
+- Three readers compared the screen (built against the demo) with the
+  server. The worst find: with the cookie gone, the client opened a new
+  session and sent the request again as that new player, while the screen
+  still showed the old balance and round. Bet then answered "Set a client
+  seed" for ever. The client now passes the refusal on and the player is
+  told to reload (2d96a94).
+- In development React runs the first load twice, which made two players
+  on every first visit. A session load already on its way is now shared.
+- Playing in a real browser showed the settings sheet's buttons running
+  off the right edge once the history had a real row in it. One wide table
+  row widened the whole column (2c64a59). The demo history had the same
+  row, so this was there before; nobody had opened the sheet after a round
+  at that width.
+- A build left in `dist` shows the RTP it was built with. Under
+  `npm run dev` the server handed that build out on port 3000 while
+  playing rounds at the new RTP. The dev server is now API-only (d137ef6).
+
+Checked in a real browser against the real server: bet, pump, Patch +
+pump, cash-out, a refresh mid-round, a second tab acting on an
+out-of-date screen (409, no double pay), seed rotation, and the verify
+page on the finished round. No answer held a result before its pump.
+
+Left open, all in the screen, for its chat to fix: a round closed by
+the 24-hour rule shows a refunded bet as lost; "next round uses nonce N"
+does not move after a round; the screen does not start over by itself
+after a lost session; before a bet the screen shows the RTP and ladders
+from its own build, not from the server.
+
+Note for later: migration 1 was edited in place to add the cap column.
+That was safe only because no database existed anywhere. Once a live
+site has a database, schema changes must be new migration steps.
+
+## 2026-11-20: hostile review of the ladders and the Patch: designs, nothing applied
+
+A hostile review sent four points. Its numbers were checked and are right.
+Designs were worked out for the lead to say yes or no to; `config.ts` and
+the locked rules are unchanged.
+
+- Easy's first rung is 1.01x, and Easy's pop chance hardly builds (7.3% to
+  16.5%). Design "Easy B", checked with the whole engine suite and `npm run
+  rtp` at 9400, 9700 and 9900 on a scratch copy:
+
+  ```
+  102 112 123 137 154 175 200 230 266 309 361 424 500 591 701 835 1000
+  1210 1492 1894 2500 3452 5000
+  ```
+
+  23 rungs (today 32), pump 1 pops 4.9% (4.0%), later pumps 8.9% to 31.0%,
+  rungs at 2x, 5x, 10x, 25x and 50x, starts from an RTP of 92.90% (Easy
+  today: 93.59%). A balloon never cashed out climbs 7.6 rungs (9.9).
+- What limits the design: every later pump must pop more often than pump 1
+  does at the lowest RTP the game must start at. So a higher first rung
+  forces a steeper ladder; at 1.05x Easy would be Medium. And with
+  multipliers in hundredths, a gentle start can only rise in tiny steps.
+- A Patch costs (1 - pop chance) / RTP of what the step can win, on any
+  ladder. On today's Easy at a $1 bet the price is the whole gain on pumps
+  2 to 8. Proposed: do not sell a Patch that costs at least what its step
+  can win.
+- Patch spend has no limit: the largest single Patch is $25,773.20 (Hard,
+  $500 bet, pump 13). Options given to the lead: no limit; no Patch priced
+  above the largest bet ($1,000); no Patch priced above the balloon's own
+  bet; no Patch priced above ten times the bet. The RTP is the same under
+  all of them, because every Patch returns the RTP by itself.
+
+Turned out wrong while designing: two searches for an evenly rising Easy
+ladder found nothing. The cause was the constraint, not the search: five
+round rungs, whole hundredths and a strictly rising pop chance leave very
+few ladders. Caught by counting how long Easy can be for each first rung.
+## 2026-11-20: fixes from the hostile critique (round panel, Patch, wording)
+
+A team of hostile critics (veteran player, design lead, regulator, art
+director, cheat) reviewed the game. Their chat handed each fix to the chat
+holding those files; this entry covers the ones given to the "Hostile agent
+game fix" chat, built on branch `critique-fixes`.
+
+Built:
+
+- Round panel with 2-3 balloons: Total bet showed only the picked
+  balloon's stake ($1.00 shown, $3.00 riding). It now adds up every
+  balloon's bet and Patches. Cash out and Patch + Pump carry the picked
+  balloon's colour dot, the same dot the bet panel uses, so the panel says
+  which balloon they act on. Cash out all sits beside Pump all, and the big
+  button says Pump once only one balloon is left. Which buttons exist is
+  fixed for the whole round, so nothing moves under a finger when a balloon
+  ends; only labels change.
+- The keyboard Patch now takes Shift+P. A single stray P bought a Patch,
+  and on Expert at the top bet after pump 1 that costs $696.72.
+- The working Patch + Pump button had a dashed edge and stripes, which read
+  as "locked". It now has a solid edge and a filled panel; the tape icon
+  still marks it.
+- Game info says Patches are paid on top of the bet, so the bet limits do
+  not cap them, and that late Patches can cost many times the bet.
+- `npm run rtp` said cent rounding "only shows on tiny bets". Patch prices
+  round up too, and an early Patch can cost a few cents at a $1 bet, so the
+  note now says rounding costs most on small amounts: tiny bets and cheap
+  Patches at any bet.
+
+Turned out wrong, and how it was caught:
+
+- The entry "auto-play, sound, review fixes and graphics (web)" above says
+  the strain cues, the top seal and the Patch tape sticker are off. Commit 9148fb2,
+  46 minutes after that entry, turned those three back on, and the game
+  shows them. The ghost outline, the scrap after a pop and the cash-out
+  tick are still off (balloon-app.css). The art director critic caught the
+  mismatch; it was checked against BalloonCard.tsx and git blame.
+
+How it was checked: screen tests, lint and typecheck pass. The round panel
+was drawn from the real component and styles at desktop width and about
+260 px wide (a 320 px phone gives it 304 px), with one balloon, three
+balloons, and three balloons with one left. The full game was not played in a browser:
+other chats were already running the most preview servers this folder
+allows.
+## 2026-11-20: pumps on the floor, bigger pictures on phones (branch `one-screen-layout`)
+
+Two fixes to the game screen after a hostile review, both CSS, both in the
+stage and background rules only. Built on the branch `one-screen-layout`
+and moved into main after the user approved them.
+
+- The pumps stand on the floor line again. The floor's height counted the
+  two lines of numbers under a balloon but not the Pump button row that was
+  added under them later, so the pumps stood among the hills and the horizon
+  ran under the money line. The row's height is now one shared value
+  (`--action-h`) that the row and the floor both use.
+- Balloon pictures are bigger where the slot is narrow. A picture was capped
+  at its slot's width. The art keeps empty room at its sides for a balloon
+  at full size, so a picture may now be one and a half slots wide. At
+  375x812 with three balloons a picture went from 117x187 to 175x281 px, and
+  the empty sky above it from 260 px (32% of the screen) to 166 px (20%).
+  Pictures take no clicks, so a tap still picks the slot under the finger.
+
+Checked on the real server, at 19 sizes from 1920x1080 to 320x568 and
+sideways, in four states with three balloons (a live round, a finished
+round, the bet screen with every bet capped, the Auto tab). At every size
+the pump's base is 4 to 14 px below the horizon, no art passes the screen
+edge and no text is cut. Also checked: all three balloons forced to full
+size (they just touch), two popped balloons beside a live one (the limp
+hoses don't cross a neighbour's pump), and taps on the strips where a
+neighbour's empty picture corner lies over a slot (the right slot is
+picked each time).
+
+Turned out wrong, and how it was caught:
+
+- The floor line was tied to one row's height by hand. When another chat
+  added a second row, nothing made the floor follow. Caught by the hostile
+  review's screenshots. The size check from the earlier session could not
+  have caught it: it looked for scrolling and cut text, not for where the
+  pump stands. It now measures the gap between the pump's base and the
+  horizon.
+- Main was moving every few minutes, and another chat merged this branch
+  into main while it was being merged here. One of the merges kept another
+  chat's worklog entry twice: the two sides had it in different places, so
+  git saw no clash, and main carried the double entry for about three
+  minutes. Caught by reading line by line what main gained from the move,
+  which should have been one sentence. The copies were identical; one was
+  removed in a commit of its own. Before moving main, the worklog is now
+  checked for repeated headings.
+
+Found and left alone, because they are not these two fixes:
+
+- Since 6c28a85 upright phones may scroll. Measured on this branch: the bet
+  screen with three balloons scrolls at 375x667 (the page is 689 px tall)
+  and at 320x568 (610 px), and the Auto tab with three capped bets scrolls
+  on every phone up to 390x844. That goes against the no-scroll rule this
+  layout was built on. It needs the user's call, so it was not changed.
+- An upright tablet (768x1024) still gets the side-by-side layout, so half
+  its stage is empty sky. Moving the upright breakpoint up would fix it, but
+  that rule now also carries the scrolling above.
+- The 20% of sky left on a phone can only be used by taller art (a longer
+  hose, say). That belongs to the graphics.
+
+## 2026-11-20: Easy stays as it is
+
+The lead looked at "Easy B" next to today's Easy and chose to keep today's
+ladder (32 rungs, first rung 1.01x). Easy B stays on record in the entry
+"hostile review of the ladders and the Patch" and was not applied. Still
+open, and the lead's call: whether to limit Patch prices, and whether to
+stop selling a Patch that costs at least what its step can win.
+
+## 2026-11-20: Patch prices stay without a limit
+
+The lead chose no limit on Patch prices (first clicked the $1,000 cap, then
+corrected it to no limit). The Patch rule in CLAUDE.md is unchanged, and so
+is the engine. The idea of not selling a Patch that costs at least what its
+step can win was offered twice and not taken up, so it is not being done.
+What the review found stays true and is shown in the open: the largest
+single Patch is $25,773.20 (Hard, $500 bet, pump 13), and the price is on
+the button before the player buys.
+
+## 2026-11-20: hostile critique of the gameplay and graphics, and two merges
+
+From the "hostile agents critique" chat.
+
+What was done:
+- Five critic agents reviewed the live game and its code: a veteran
+  player, the studio's design lead, a gambling regulator, an exploit
+  hunter and an art director. Each had to point to a file, a screenshot
+  or a number it worked out. Scores: feel 4/10, design 5/10, player
+  protection 4/10, graphics 4/10, the server on its own 9/10.
+- Every claim passed on was checked against the code first. At the
+  user's word the fixes went to the chats that hold the files: "Agents
+  finishing" (balloon looks, strain, hold and cash-out, bet panel,
+  auto-play hint, verify hash), "Hostile agent game fix" (round panel,
+  Shift+P, Patch button, Game info text, RTP-check note), "Maths game
+  design" (Easy ladder and Patch limit, design only), "Game background
+  design" (floor and phone stage) and "Game graphics list" (pump art).
+- Merged critique-fixes (f236442) and one-screen-layout (7a2d764) on the
+  user's "Merge both". In a clean copy of the merged main, 1072 tests,
+  lint, typecheck and build passed, and a 3-balloon round against the
+  real server showed the real total bet, Cash out all paying $3.03 for
+  three 1.01x balloons, and the pumps standing on the floor.
+
+Turned out wrong, and how it was caught:
+- The two worst findings (the game ran only in the browser; the server's
+  verify answer failed the verify page) were already fixed by the time
+  the critics reported (320634a, e05258a): another chat changed the same
+  code during the review. Caught by re-running the exploit critic's own
+  probe on current main, where it passed.
+- I first told "Takehome originals pump" that the uncommitted
+  balloon.css, risk.ts and useGame.ts edits were its own. They belonged
+  to "Agents finishing". Caught when "Hostile agent game fix" asked every
+  chat what it held; a correction went out before anyone started.
+- The critique leaned on the rule "No 'would have popped' reveal". It is
+  not in the brief or CLAUDE.md, only in graphics/README.md (untracked,
+  written by the graphics chat), and it contradicts the reveal being
+  built on branch cashout-reveal. The Patch-save item that rested on it
+  is on hold until the user decides.
+- A UK rule (at least 5 s between rounds) was cited. The user ruled UK
+  rules out of scope, so it is not being built.
+
+## 2026-11-20: upright phones fit on one screen again, no scrolling
+
+The user's call: "Make it fit". Commit 6c28a85 had let upright phones
+scroll the page when the bet panel did not fit. That went against the
+no-scroll rule the screen was built on. One CSS change, in the upright
+phone rule of `styles.css`:
+
+- The page is one fixed, clipped screen again on upright phones, as at
+  every other size.
+- When no balloon has a Pump button (before a round, after it, and while
+  auto-play runs) the button row under the balloons is closed and the
+  pictures get its height. It was an empty strip exactly when the bet
+  panel is tallest. During a round the row never comes and goes: it is
+  there as long as one balloon is in play.
+- The stage keeps at least its two lines of numbers and a small picture.
+  Only if even that does not fit does the panel scroll inside itself.
+
+Checked on the real server with the size check, which also tries to scroll
+the page by code. 22 sizes, from 1920x1080 down to 320x568, plus 628x832
+and phones sideways. Seven states with three balloons: a live round, a
+finished round, the bet screen with every bet capped, the Auto tab,
+auto-play running, auto-play done. At 21 sizes nothing scrolls, nothing is
+off screen, no text is cut and the pumps stand on the floor. The one left
+is the known 568x320 (a very small phone sideways), where the panel still
+scrolls inside itself.
+
+What it costs: before a round the balloon pictures are small when the
+panel is tall. With three balloons at 375x667 they are 158 px tall on the
+bet screen and 62 px on the Auto tab; at 320x568, 146 px and 62 px. In a
+round they are as big as before (281 px and 237 px).
+
+Why the earlier fit broke, so it does not happen again: the first version
+of this layout was measured to fit, then a Pump button row was added under
+each balloon. That made the stage 54 px taller at its smallest, with
+nothing checking small phones afterwards. Any change that adds height to
+the stage or the panel needs the size check run on small upright phones.
+
+Left open: an upright tablet (768x1024) still gets the side-by-side
+layout, so half its stage is empty sky.
+
+## 2026-11-20: merging main into `cashout-reveal`
+
+Main had connected the screen to the real server while this branch added
+the after-round reveal. Main's contract, web contract and verify fields won;
+the branch kept only its reveal additions.
+
+Turned out wrong, and how it was caught:
+
+- Both sides stored the payout cap per round: main in the first migration
+  (`rounds.max_payout_cents NOT NULL`), the branch again in its migration 2.
+  Git merged both without a conflict, so the merged schema added the column
+  twice. Caught by reading `migrations.ts` after the merge. Migration 2 now
+  holds only the reveals.
+- The branch used "no stored cap" to spot rounds that ended before reveals
+  were stored. Under main every round has a cap, so that test no longer
+  meant anything. Replaced by `rounds.reveals_recorded`: 0 for rounds
+  already in the database when migration 2 runs (set by the column default,
+  no UPDATE), 1 for every round started after (a trigger refuses anything
+  else, and another keeps it fixed). The verify answer works out a missing
+  reveal from the public seed only for rounds marked 0, and reconcile
+  forgives a missing reveal only for those.
+- On upright phones main closes the row under the balloons when no balloon
+  has a Pump button. That is exactly when the reveal line is shown, so the
+  line would have been hidden. Caught by reading main's new phone rule next
+  to the branch's `.slot-after`. A finished round with a reveal line now
+  keeps the row open (`.stage-after-round`). Checked at 375x812 and 320x568
+  with three balloons: the lines fit at the 9 px floor on two lines, nothing
+  scrolls. The cost: on the bet screen after such a round the pictures are
+  46 to 54 px smaller than main had them.
+
+Checked: typecheck, lint, all tests, the hammer against a server started by
+hand, and an upgrade: a database made by main's own code (hammer rounds plus
+a round left in play) opened by the merged server. The open round finished
+with its reveals stored, all 55 old rounds pass `verifyRound`, and reconcile
+is clean.

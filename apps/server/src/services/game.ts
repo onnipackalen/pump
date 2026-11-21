@@ -208,12 +208,13 @@ export function gameService(
    * The reveal of a balloon in a round that ended before reveals were
    * stored, worked out now, for the verify page.
    *
-   * Those rounds are the ones with no stored cap (they started before the
-   * cap was kept with each round). Some ended with no reveal written. Their
-   * seed is public by now (the verify page asks only then), so this is the
-   * same sum anyone can do from the seeds, made the same way finish makes
-   * it: it shows nothing new and stores nothing. Without it the verify page
-   * would say an honest old round is missing its reveal.
+   * Those rounds are the ones not marked as storing their reveals
+   * (revealsRecorded false: they started before reveals were stored). Some
+   * ended with no reveal written. Their seed is public by now (the verify
+   * page asks only then), so this is the same sum anyone can do from the
+   * seeds, made the same way finish makes it: it shows nothing new and
+   * stores nothing. Without it the verify page would say an honest old
+   * round is missing its reveal.
    *
    * Every other round got its reveals as it ended, and the database will
    * not close a round without them. So for those this gives null, and a
@@ -225,7 +226,7 @@ export function gameService(
     balloonIndex: number,
   ): CashOutReveal | null {
     const balloon = stored.round.balloons[balloonIndex];
-    if (stored.maxPayoutCents !== null || balloon === undefined || !canReveal(balloon)) {
+    if (stored.revealsRecorded || balloon === undefined || !canReveal(balloon)) {
       return null;
     }
     const drawAt = revealDrawerFor({
@@ -326,7 +327,6 @@ export function gameService(
         serverSeedId: seed.id,
         clientSeed: player.clientSeed,
         nonce: seeds.takeNonce(seed.id),
-        // The cap startRound just used for each balloon's top rung.
         maxPayoutCents: runtime.config.limits.maxPayoutCents,
         round: started.round,
         at,
@@ -477,31 +477,30 @@ export function gameService(
         difficultyId: stored.round.difficultyId,
         rtpBp: stored.round.rtpBp,
         ladder: stored.round.ladder,
-        // A round started before the cap was stored with each round has
-        // none; the server's own cap stands in. If they ever differed, the
-        // verify page's top-rung check would say so in the open.
-        maxPayoutCents: stored.maxPayoutCents ?? runtime.config.limits.maxPayoutCents,
+        maxPayoutCents: stored.maxPayoutCents,
         serverSeed,
         serverSeedHash: stored.serverSeedHash,
         clientSeed: stored.clientSeed,
         nonce: stored.nonce,
         finishedAt: stored.finishedAt,
-        balloons: stored.round.balloons.map((balloon, balloonIndex) => {
-          const own = actions.filter((entry) => entry.balloonIndex === balloonIndex);
-          return {
-            betCents: balloon.betCents,
-            topRung: balloon.topRung,
-            actions: own.map((entry) => entry.action),
-            status: balloon.status,
-            rung: balloon.rung,
-            drawIndex: balloon.drawIndex,
-            patchesCents: balloon.patchesCents,
-            payoutCents: balloon.payoutCents,
-            draws: own.flatMap((entry) => (entry.draw === null ? [] : [entry.draw])),
-            afterRound:
-              stored.reveals[balloonIndex] ?? lateReveal(stored, serverSeed, balloonIndex),
-          };
-        }),
+        balloons: stored.round.balloons.map((balloon, balloonIndex) => ({
+          betCents: balloon.betCents,
+          topRung: balloon.topRung,
+          actions: actions
+            .filter((entry) => entry.balloonIndex === balloonIndex)
+            .map((entry) => entry.action),
+          // The draw that decided each pump, as recorded when it happened.
+          // Never a reveal draw: those are in afterRound.
+          draws: actions
+            .filter((entry) => entry.balloonIndex === balloonIndex)
+            .flatMap((entry) => (entry.draw ? [entry.draw] : [])),
+          status: balloon.status,
+          rung: balloon.rung,
+          drawIndex: balloon.drawIndex,
+          patchesCents: balloon.patchesCents,
+          payoutCents: balloon.payoutCents,
+          afterRound: stored.reveals[balloonIndex] ?? lateReveal(stored, serverSeed, balloonIndex),
+        })),
       };
     },
 

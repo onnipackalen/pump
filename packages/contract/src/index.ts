@@ -301,14 +301,14 @@ export interface VerifiableBalloon {
    * has no actions.
    */
   readonly actions: readonly BalloonAction[];
+  /** The draw of every pump on this balloon, in order, as recorded. */
+  readonly draws: readonly DrawRecordView[];
   /** How it ended, as recorded and paid. The verify page checks these. */
   readonly status: BalloonStatus;
   readonly rung: number;
   readonly drawIndex: number;
   readonly patchesCents: number;
   readonly payoutCents: number;
-  /** The draw of every pump on this balloon, in order, as recorded. No reveal draws. */
-  readonly draws: readonly DrawRecordView[];
   /** Its reveal: set for a balloon cashed out below its top rung, null otherwise. */
   readonly afterRound: VerifiableAfterRound | null;
 }

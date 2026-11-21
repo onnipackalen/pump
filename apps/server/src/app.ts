@@ -1,4 +1,5 @@
 import cookie from '@fastify/cookie';
+import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { ApiError } from './errors';
@@ -16,6 +17,12 @@ export interface AppOptions {
   readonly logger?: boolean;
   /** Force the player cookie's Secure flag. Unset: Secure whenever the request came over HTTPS. */
   readonly secureCookies?: boolean;
+  /**
+   * The folder holding the built game screen (apps/web/dist). When set, the
+   * server hands out the screen too, so the game and its API share one
+   * address and the player cookie needs no special setup.
+   */
+  readonly webRoot?: string;
 }
 
 function statusOf(error: unknown): number | null {
@@ -43,11 +50,15 @@ export function buildApp(options: AppOptions): FastifyInstance {
     secureCookies: options.secureCookies,
   };
 
-  // Answers hold balances and seeds: never let a browser or proxy cache them.
-  app.addHook('onRequest', (_request, reply, done) => {
-    reply.header('cache-control', 'no-store');
+  // API answers hold balances and seeds: never let a browser or proxy cache
+  // them. (The screen's own files are named by their content and may be cached.)
+  app.addHook('onRequest', (request, reply, done) => {
+    if (request.url.startsWith('/api/')) reply.header('cache-control', 'no-store');
     done();
   });
+
+  const { webRoot } = options;
+  if (webRoot !== undefined) void app.register(fastifyStatic, { root: webRoot });
 
   // Every failure leaves as { error: { code, message } }.
   app.setErrorHandler((error, request, reply) => {
@@ -73,9 +84,16 @@ export function buildApp(options: AppOptions): FastifyInstance {
     return reply.status(500).send(failure.toResponse());
   });
 
-  app.setNotFoundHandler((_request, reply) =>
-    reply.status(404).send(new ApiError('not_found', 'There is nothing here.').toResponse()),
-  );
+  app.setNotFoundHandler((request, reply) => {
+    // The screen is one page: any address that is not part of the API and
+    // not a file gets that page. Everything else is a plain "not found".
+    const wantsPage = request.method === 'GET' && !request.url.startsWith('/api/');
+    if (webRoot !== undefined && wantsPage) return reply.sendFile('index.html');
+    return reply
+      .status(404)
+      .header('cache-control', 'no-store')
+      .send(new ApiError('not_found', 'There is nothing here.').toResponse());
+  });
 
   app.get('/api/health', (_request, reply) => reply.send({ status: 'ok' }));
   sessionRoutes(app, context);

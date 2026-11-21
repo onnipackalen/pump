@@ -5,10 +5,9 @@ wallet around it, and a React frontend.
 
 Work in progress. Built so far: the engine (game rules and math), the exact RTP
 check and the simulator, the provably fair draw code, the server (wallet, game
-routes and the hammer test), the game screen and the verify page, which checks
-every pump and every reveal. The screen and the verify page still play against
-an in-browser demo. Not done yet: connecting them to the server, and the live
-site.
+routes and the hammer test), and the game screen with its verify page, which
+play against the real server. The verify page checks every pump and every
+reveal. Not done yet: the live site.
 
 ## Run it locally
 
@@ -16,9 +15,19 @@ You need Node 26 (see `.nvmrc`).
 
 ```bash
 npm install
-npm run dev:server   # API on http://localhost:3000
-npm run dev:web      # frontend on http://localhost:5173, forwards /api to the server
+npm start            # builds the screen, then serves the whole game on http://localhost:3000
 ```
+
+To work on the game, with both halves reloading as you edit:
+
+```bash
+npm run dev          # the game on http://localhost:5173; its /api requests go on to the server on :3000
+```
+
+`npm start` is the one to use after changing the RTP or a ladder: the screen
+carries its own copy of those numbers for what it shows before a bet, and
+`npm start` rebuilds it every time. Under `npm run dev` the server hands out
+the API only, so an older build can never be mistaken for the game.
 
 The server keeps everything in one SQLite file, `apps/server/data/pump.db`,
 created on first start. Set `DATABASE_PATH` to put it somewhere else. It uses
@@ -30,6 +39,8 @@ All of these run from the repo root.
 
 | Script              | What it does                                              |
 | ------------------- | --------------------------------------------------------- |
+| `npm start`         | Builds the screen and serves the whole game on port 3000  |
+| `npm run dev`       | Server and screen together, reloading as you edit         |
 | `npm test`          | Runs every test with Vitest                               |
 | `npm run lint`      | ESLint; `any` is an error                                 |
 | `npm run typecheck` | Strict TypeScript over every package                      |
@@ -116,7 +127,7 @@ always look like `{ "error": { "code", "message" } }`:
 | Code | Status | Meaning |
 | --- | --- | --- |
 | `invalid_request` | 400 | The request is malformed or breaks a rule. |
-| `no_session` | 401 | No player cookie. Load `GET /api/session` first. |
+| `no_session` | 401 | No player cookie. Only `GET /api/session` starts a player; the screen tells the player to reload. |
 | `insufficient_funds` | 402 | The balance does not cover the bets or the Patch. Nothing was charged. |
 | `not_found` | 404 | No such round for this player. |
 | `conflict` | 409 | The balloon is not in the state the request expected. The body carries the round as it is now. |

@@ -72,6 +72,9 @@ describe.each(DIFFICULTIES)('proof for $id', ({ ladder }) => {
       expect(equal(row.cashOutReturn, rtpOf(rtpBp))).toBe(true);
       // reach = RTP / multiplier
       expect(equal(row.reach, div(rtpOf(rtpBp), fr(row.multiplierHundredths, 100)))).toBe(true);
+      // The engine's chance is the rules' chance, and a Patch returns the RTP too.
+      expect(row.chanceRight).toBe(true);
+      expect(row.patchExact).toBe(row.rung === 1 ? null : true);
     }
     expect(rows[0]?.patchShareOfBet).toBeNull();
   });
@@ -83,6 +86,9 @@ describe.each(DIFFICULTIES)('proof for $id', ({ ladder }) => {
     expect(scan.pricesRoundUp).toBe(true);
     expect(scan.wholeDollarsExact).toBe(true);
     expect(scan.underCap).toBe(true);
+    expect(scan.topRungsRight).toBe(true);
+    expect(scan.cashOutsWithinRtp).toBe(true);
+    expect(scan.patchesWithinRtp).toBe(true);
     expect(compare(scan.worstCashOut.value, rtpOf(rtpBp))).toBeLessThanOrEqual(0);
     expect(scan.worstPatch).not.toBeNull();
     if (scan.worstPatch !== null) {

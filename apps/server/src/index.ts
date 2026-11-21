@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildApp } from './app';
 import { openDatabase } from './db/database';
 import { migrate } from './db/migrations';
@@ -5,16 +8,42 @@ import { systemRuntime } from './runtime';
 import { buildServices } from './services';
 import { ABANDONED_SWEEP_EVERY_MS } from './settings';
 
-const port = Number(process.env.PORT ?? 3000);
+/** A path inside this package, wherever the server was started from. */
+const inPackage = (relative: string): string =>
+  fileURLToPath(new URL(`../${relative}`, import.meta.url));
+
+function portFromEnv(): number {
+  const text = process.env.PORT ?? '3000';
+  const port = Number(text);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`PORT must be a whole number from 1 to 65535, not "${text}"`);
+  }
+  return port;
+}
+
+const port = portFromEnv();
 const host = process.env.HOST ?? '0.0.0.0';
 // The SQLite file. On a host, point this at a disk that survives restarts.
-const databasePath = process.env.DATABASE_PATH ?? 'data/pump.db';
+const databasePath = process.env.DATABASE_PATH ?? inPackage('data/pump.db');
+// The built game screen. If it has been built (npm run build), the server
+// hands it out too, so one address serves the game and its API.
+const builtScreen = process.env.WEB_ROOT ?? inPackage('../web/dist');
+// The built screen carries its own copy of the RTP and the ladders, for what it
+// shows before a bet. While the game is being worked on (npm run dev) that
+// copy can be older than the server, so there the server is started with
+// --api-only and the screen comes from its own, always fresh, address.
+const apiOnly = process.argv.includes('--api-only');
+const webRoot =
+  !apiOnly && existsSync(join(builtScreen, 'index.html')) ? builtScreen : undefined;
 
 const db = openDatabase(databasePath);
 migrate(db);
 
 const runtime = systemRuntime(db);
-const app = buildApp({ runtime, logger: true });
+const app = buildApp({ runtime, logger: true, ...(webRoot === undefined ? {} : { webRoot }) });
+if (webRoot !== undefined) app.log.info(`serving the game screen from ${webRoot}`);
+else if (apiOnly) app.log.info('serving the API only (the game screen has its own address: npm run dev)');
+else app.log.info('serving the API only (the game screen has not been built: npm start)');
 
 // The 24-hour rule for players who never come back: now and then, settle
 // every round that has been left idle that long.

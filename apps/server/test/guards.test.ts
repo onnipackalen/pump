@@ -9,6 +9,7 @@ import { cashOutByHand, count, insertActiveRound, testRuntime } from './helpers'
 // or a careless script would. The database itself must refuse each one.
 
 const AT = '2026-01-01T00:00:00.000Z';
+const CAP = String(GAME_CONFIG.limits.maxPayoutCents);
 let db: Db;
 
 /** A player with a grant of 1,000 cents and one active seed, written correctly. */
@@ -223,9 +224,9 @@ describe('rounds', () => {
   it('refuses a round on a nonce the seed did not just hand out', () => {
     const insert = (nonce: number): void => {
       db.exec(
-        `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder,
+        `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
                              server_seed_id, client_seed, nonce, started_at, last_action_at)
-         SELECT 'round-x', 'p1', 'active', 'easy', ${String(GAME_CONFIG.rtpBp)}, '[101]',
+         SELECT 'round-x', 'p1', 'active', 'easy', ${String(GAME_CONFIG.rtpBp)}, '[101]', ${CAP},
                 id, 'seed', ${String(nonce)}, '${AT}', '${AT}'
          FROM server_seeds WHERE player_id = 'p1'`,
       );
@@ -244,36 +245,55 @@ describe('rounds', () => {
     db.exec("UPDATE server_seeds SET next_nonce = 1 WHERE player_id = 'p2'");
     expect(() =>
       db.exec(
-        `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder,
+        `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
                              server_seed_id, client_seed, nonce, started_at, last_action_at)
-         SELECT 'round-x', 'p1', 'active', 'easy', ${String(GAME_CONFIG.rtpBp)}, '[101]',
+         SELECT 'round-x', 'p1', 'active', 'easy', ${String(GAME_CONFIG.rtpBp)}, '[101]', ${CAP},
                 id, 'seed', 0, '${AT}', '${AT}'
          FROM server_seeds WHERE player_id = 'p2'`,
       ),
     ).toThrow('its own player');
   });
 
+  /** Writes round-x on p1's seed with the given cap and reveal mark (an omitted mark takes its default). */
+  function insertRoundX(cap: string, revealsRecorded?: string): void {
+    const markColumn = revealsRecorded === undefined ? '' : ', reveals_recorded';
+    const markValue = revealsRecorded === undefined ? '' : `, ${revealsRecorded}`;
+    db.exec(
+      `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
+                           server_seed_id, client_seed, nonce, started_at, last_action_at${markColumn})
+       SELECT 'round-x', 'p1', 'active', 'easy', ${String(GAME_CONFIG.rtpBp)}, '[101]', ${cap},
+              id, 'seed', 0, '${AT}', '${AT}'${markValue}
+       FROM server_seeds WHERE player_id = 'p1'`,
+    );
+  }
+
   it('must store the payout cap it is played under, and keeps it', () => {
     db.exec("UPDATE server_seeds SET next_nonce = 1 WHERE player_id = 'p1'");
-    const insert = (cap: string): void => {
-      db.exec(
-        `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder,
-                             server_seed_id, client_seed, nonce, started_at, last_action_at,
-                             max_payout_cents)
-         SELECT 'round-x', 'p1', 'active', 'easy', ${String(GAME_CONFIG.rtpBp)}, '[101]',
-                id, 'seed', 0, '${AT}', '${AT}', ${cap}
-         FROM server_seeds WHERE player_id = 'p1'`,
-      );
-    };
     expect(() => {
-      insert('NULL');
-    }).toThrow('stores the payout cap');
+      insertRoundX('NULL', '1');
+    }).toThrow('NOT NULL constraint failed');
     expect(() => {
-      insert('0');
+      insertRoundX('0', '1');
     }).toThrow('CHECK constraint failed');
-    insert('1000');
-    expect(() => db.exec('UPDATE rounds SET max_payout_cents = 2000')).toThrow('keeps the payout cap');
-    expect(() => db.exec('UPDATE rounds SET max_payout_cents = NULL')).toThrow('keeps the payout cap');
+    insertRoundX('1000', '1');
+    expect(() => db.exec('UPDATE rounds SET max_payout_cents = 2000')).toThrow('ladder and cap it started with');
+  });
+
+  it('is marked from the start as storing its reveals, and keeps that mark', () => {
+    db.exec("UPDATE server_seeds SET next_nonce = 1 WHERE player_id = 'p1'");
+    // Left out, the mark is 0: only rounds from before reveals existed have that.
+    expect(() => {
+      insertRoundX(CAP);
+    }).toThrow('marked as storing its reveals');
+    expect(() => {
+      insertRoundX(CAP, '0');
+    }).toThrow('marked as storing its reveals');
+    expect(() => {
+      insertRoundX(CAP, '2');
+    }).toThrow('CHECK constraint failed');
+    expect(count(db, 'rounds')).toBe(0);
+    insertRoundX(CAP, '1');
+    expect(() => db.exec('UPDATE rounds SET reveals_recorded = 0')).toThrow('keeps its mark');
   });
 
   it('cannot finish while a balloon is in play, and never changes once finished', () => {

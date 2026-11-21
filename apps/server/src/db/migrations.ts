@@ -107,8 +107,9 @@ const MIGRATIONS: readonly Migration[] = [
       BEGIN SELECT RAISE(ABORT, 'server seeds are never deleted'); END;
 
       ------------------------------------------------------------------
-      -- Rounds. Each keeps its own copy of the RTP and ladder it was
-      -- played with, so it still verifies after the configuration changes.
+      -- Rounds. Each keeps its own copy of the RTP, ladder and payout cap
+      -- it was played with, so it still verifies after the configuration
+      -- changes.
       ------------------------------------------------------------------
       CREATE TABLE rounds (
         id             TEXT PRIMARY KEY,
@@ -117,6 +118,9 @@ const MIGRATIONS: readonly Migration[] = [
         difficulty_id  TEXT NOT NULL,
         rtp_bp         INTEGER NOT NULL,
         ladder         TEXT NOT NULL,
+        -- The payout cap per balloon when the round started. Each balloon's
+        -- top rung was worked out from it, so checking a round needs it.
+        max_payout_cents INTEGER NOT NULL CHECK (max_payout_cents > 0),
         server_seed_id INTEGER NOT NULL REFERENCES server_seeds(id),
         client_seed    TEXT NOT NULL,
         nonce          INTEGER NOT NULL CHECK (nonce >= 0),
@@ -167,10 +171,11 @@ const MIGRATIONS: readonly Migration[] = [
       CREATE TRIGGER rounds_fixed BEFORE UPDATE ON rounds
       WHEN NEW.id <> OLD.id OR NEW.player_id <> OLD.player_id
         OR NEW.difficulty_id <> OLD.difficulty_id OR NEW.rtp_bp <> OLD.rtp_bp
-        OR NEW.ladder <> OLD.ladder OR NEW.server_seed_id <> OLD.server_seed_id
+        OR NEW.ladder <> OLD.ladder OR NEW.max_payout_cents <> OLD.max_payout_cents
+        OR NEW.server_seed_id <> OLD.server_seed_id
         OR NEW.client_seed <> OLD.client_seed OR NEW.nonce <> OLD.nonce
         OR NEW.started_at <> OLD.started_at
-      BEGIN SELECT RAISE(ABORT, 'a round keeps the seeds, RTP and ladder it started with'); END;
+      BEGIN SELECT RAISE(ABORT, 'a round keeps the seeds, RTP, ladder and cap it started with'); END;
 
       CREATE TRIGGER rounds_no_delete BEFORE DELETE ON rounds
       BEGIN SELECT RAISE(ABORT, 'rounds are never deleted'); END;
@@ -453,23 +458,30 @@ const MIGRATIONS: readonly Migration[] = [
   },
   {
     id: 2,
-    name: 'reveals at round end, and the payout cap per round',
+    name: 'reveals at round end',
     sql: `
       ------------------------------------------------------------------
-      -- The payout cap a round is played under, kept with the round like
-      -- its RTP and ladder, so the round still checks if the cap changes.
-      -- Rounds started before this step have none (NULL).
+      -- Which rounds are sure to have their reveals stored. From this step
+      -- on, the database closes no round without the reveal of each
+      -- balloon cashed out below its top rung (rounds_finish_with_their_
+      -- reveals, below), and every round started from now on is marked 1.
+      -- A round already here is marked 0: it may have ended before this
+      -- step, with no reveal stored. Those rows take the default 0 as the
+      -- column is added, with no UPDATE, so no finished round is changed.
+      -- The mark is about reveals alone; the payout cap is kept with each
+      -- round since the first step.
       ------------------------------------------------------------------
-      ALTER TABLE rounds ADD COLUMN max_payout_cents INTEGER CHECK (max_payout_cents >= 1);
+      ALTER TABLE rounds ADD COLUMN reveals_recorded INTEGER NOT NULL DEFAULT 0
+        CHECK (reveals_recorded IN (0, 1));
 
       -- AFTER, not BEFORE, so the older guards on a new round speak first.
-      CREATE TRIGGER rounds_start_with_their_cap AFTER INSERT ON rounds
-      WHEN NEW.max_payout_cents IS NULL
-      BEGIN SELECT RAISE(ABORT, 'a new round stores the payout cap it is played under'); END;
+      CREATE TRIGGER rounds_start_recording_reveals AFTER INSERT ON rounds
+      WHEN NEW.reveals_recorded <> 1
+      BEGIN SELECT RAISE(ABORT, 'a new round is marked as storing its reveals'); END;
 
-      CREATE TRIGGER rounds_keep_their_cap BEFORE UPDATE OF max_payout_cents ON rounds
-      WHEN NEW.max_payout_cents IS NOT OLD.max_payout_cents
-      BEGIN SELECT RAISE(ABORT, 'a round keeps the payout cap it started with'); END;
+      CREATE TRIGGER rounds_keep_reveals_recorded BEFORE UPDATE OF reveals_recorded ON rounds
+      WHEN NEW.reveals_recorded IS NOT OLD.reveals_recorded
+      BEGIN SELECT RAISE(ABORT, 'a round keeps its mark of whether it stores its reveals'); END;
 
       ------------------------------------------------------------------
       -- Reveals: where a balloon cashed out below its top rung would have

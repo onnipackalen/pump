@@ -4,13 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch src/index.ts --api-only",
     "start": "tsx src/index.ts",
     "typecheck": "tsc -p .",
     "hammer": "tsx scripts/hammer.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.5",
+    "@fastify/static": "^10.1.12",
     "@pump/contract": "*",
     "@pump/engine": "*",
     "fastify": "^5.12.8",

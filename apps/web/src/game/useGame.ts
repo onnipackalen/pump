@@ -12,6 +12,7 @@ import type {
   WalletView,
 } from '../api/contract';
 import { makeClientSeed } from './clientSeed';
+import { pressMs } from './risk';
 import { isOlder } from './roundOrder';
 import { roundWinTier } from './winTier';
 
@@ -40,6 +41,13 @@ export interface GameState {
   readonly pending: readonly boolean[];
   /** Per balloon index: its last pump was bought with a Patch. */
   readonly patched: readonly boolean[];
+  /**
+   * Per balloon index: the balloon as it was when its pump was pressed, kept
+   * until that pump's own answer is shown; null at any other time. Another
+   * balloon's answer carries the whole round, so it can hold this balloon's
+   * result before its press is over (see shownRound).
+   */
+  readonly pressed: readonly (BalloonView | null)[];
   /**
    * Per balloon index: what its last pump did, kept until the next press.
    * The beat goes back to idle once its motion is over; this stays, so the
@@ -121,11 +129,12 @@ export interface Game {
 
 const HISTORY_SIZE = 10;
 
-/**
- * A pump keeps its "press" pose at least this long, even if the server
- * answers sooner, so every pump has the same beat whatever the outcome.
+/*
+ * A pump keeps its "press" pose at least pressMs(its published pop chance),
+ * even if the server answers sooner: the time the air pocket takes to run
+ * up the hose. It depends only on the chance shown before the pump, so every
+ * pump at the same risk has the same beat whatever the outcome.
  */
-const MIN_PRESS_MS = 300;
 
 /**
  * Every answer's beat goes back to "idle" once its motion is over, so the
@@ -181,6 +190,56 @@ export function busyAfter(outcome: PumpOutcome): boolean {
   return outcome === 'saved';
 }
 
+/**
+ * The round as the screen draws it. `round` is the newest the server has
+ * sent. A balloon whose pump is still in its press is drawn as it was when
+ * the pump was pressed (`pressed`), until its own answer sets its beat.
+ *
+ * Why: every answer carries the whole round. With Pump all, or a cash-out on
+ * another balloon, an answer for balloon B can arrive holding balloon A's
+ * result while A's press is still running (a riskier pump has a longer
+ * press). Without this, A's result (its label, size, strain and pocket)
+ * would show before A's own answer beat.
+ *
+ * While any balloon is held back, the round still counts as active: it was
+ * active when that pump was pressed.
+ */
+export function shownRound(
+  round: RoundView | null,
+  pressed: readonly (BalloonView | null)[],
+): RoundView | null {
+  if (!round) return null;
+  let held = false;
+  const balloons = round.balloons.map((now) => {
+    const was = pressed[now.index];
+    if (!was || (was.drawIndex === now.drawIndex && was.status === now.status)) return now;
+    held = true;
+    return was;
+  });
+  return held ? { ...round, status: 'active', balloons } : round;
+}
+
+/**
+ * The wallet as the screen draws it: without the payout of a pump that
+ * reached the top but whose own answer is not shown yet (see shownRound).
+ * Otherwise the balance would give that result away early. Whole cents.
+ */
+export function shownWallet(
+  wallet: WalletView | null,
+  round: RoundView | null,
+  pressed: readonly (BalloonView | null)[],
+): WalletView | null {
+  if (!wallet || !round) return wallet;
+  let heldBackCents = 0;
+  for (const now of round.balloons) {
+    const was = pressed[now.index];
+    if (was) heldBackCents += now.payoutCents - was.payoutCents;
+  }
+  return heldBackCents === 0
+    ? wallet
+    : { ...wallet, balanceCents: wallet.balanceCents - heldBackCents };
+}
+
 const initialState: GameState = {
   phase: 'loading',
   wallet: null,
@@ -191,6 +250,7 @@ const initialState: GameState = {
   beats: [],
   pending: [],
   patched: [],
+  pressed: [],
   outcomes: [],
   held: [],
   winShownFor: null,
@@ -324,6 +384,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           beats: round ? round.balloons.map(() => 'idle') : [],
           pending: round ? round.balloons.map(() => false) : [],
           patched: round ? round.balloons.map(() => false) : [],
+          pressed: round ? round.balloons.map(() => null) : [],
           outcomes: round ? round.balloons.map(() => null) : [],
           held: round ? round.balloons.map(() => false) : [],
         }));
@@ -373,6 +434,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           round,
           beats: sameRound ? s.beats : (round?.balloons.map(() => 'idle' as const) ?? []),
           patched: sameRound ? s.patched : (round?.balloons.map(() => false) ?? []),
+          pressed: sameRound ? s.pressed : (round?.balloons.map(() => null) ?? []),
           outcomes: sameRound ? s.outcomes : (round?.balloons.map(() => null) ?? []),
           held: sameRound ? s.held : (round?.balloons.map(() => false) ?? []),
           pending: round?.balloons.map((b) => inFlight.current.has(String(b.index))) ?? [],
@@ -397,6 +459,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
             ...next,
             beats: replaceAt(next.beats, balloonIndex, 'idle'),
             pending: replaceAt(next.pending, balloonIndex, false),
+            pressed: replaceAt(next.pressed, balloonIndex, null),
           };
         }
         if (error instanceof ApiFailure) {
@@ -435,6 +498,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           beats: result.round.balloons.map(() => 'idle'),
           pending: result.round.balloons.map(() => false),
           patched: result.round.balloons.map(() => false),
+          pressed: result.round.balloons.map(() => null),
           outcomes: result.round.balloons.map(() => null),
           held: result.round.balloons.map(() => false),
         }));
@@ -466,6 +530,8 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         beats: replaceAt(s.beats, balloonIndex, 'press'),
         pending: replaceAt(s.pending, balloonIndex, true),
         patched: replaceAt(s.patched, balloonIndex, patch),
+        // Drawn from this view until its own answer is shown (see shownRound).
+        pressed: replaceAt(s.pressed, balloonIndex, balloon),
         outcomes: replaceAt(s.outcomes, balloonIndex, null),
       }));
       emit({ kind: 'press', balloon });
@@ -474,7 +540,9 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           send((key) =>
             client.pump(round.id, { balloonIndex, expectedDrawIndex: balloon.drawIndex, patch }, key),
           ),
-          sleep(MIN_PRESS_MS),
+          // The same view the art is drawn from during the press (`pressed`),
+          // so the game's wait and the art's press length are one number.
+          sleep(pressMs(balloon.next?.popChance)),
         ]);
         const after = result.round.balloons[balloonIndex];
         const drawIndex = after?.drawIndex ?? balloon.drawIndex + 1;
@@ -482,6 +550,8 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         setState((s) => ({
           ...s,
           beats: replaceAt(s.beats, balloonIndex, result.outcome),
+          // Its own answer: from here it is drawn from the round again.
+          pressed: replaceAt(s.pressed, balloonIndex, null),
           outcomes: replaceAt(s.outcomes, balloonIndex, result.outcome),
           held: replaceAt(
             s.held,
@@ -645,8 +715,18 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     setState((s) => ({ ...s, notice: null }));
   }, []);
 
+  // What the screen gets: a balloon in its press stays as it was pressed
+  // (see shownRound). Everything inside this hook works on the real state.
+  const shown = useMemo<GameState>(() => {
+    const shownRoundNow = shownRound(state.round, state.pressed);
+    const shownWalletNow = shownWallet(state.wallet, state.round, state.pressed);
+    return shownRoundNow === state.round && shownWalletNow === state.wallet
+      ? state
+      : { ...state, round: shownRoundNow, wallet: shownWalletNow };
+  }, [state]);
+
   return {
-    state,
+    state: shown,
     actions,
     startRound,
     pump,

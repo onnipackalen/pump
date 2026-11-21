@@ -41,6 +41,9 @@
   --gap: 10px; /* space between controls */
   --bar: 52px; /* top bar height */
   --label-h: 60px; /* the two lines of numbers under a balloon */
+  /* The Pump button row under those numbers. The floor in background.css is
+     measured from this too, so the pumps always stand on the horizon line. */
+  --action-h: calc(var(--tap) + 10px);
   --main-max: 30px; /* largest size of the multiplier under a balloon */
   --sub-max: 14px; /* largest size of the line under it */
 
@@ -146,14 +149,39 @@ body {
   background: var(--panel);
 }
 
-/* Upright phones: the stage on top, the panel under the thumb. */
+/*
+ * Upright phones: the stage on top, the panel under the thumb. Still one
+ * screen that never scrolls, like every other size.
+ *
+ * The panel takes the height it needs and the stage gets the rest, so the
+ * balloons shrink to make room. Two things keep that from going wrong on a
+ * small phone with three bets:
+ *
+ * - When no balloon has a Pump button (before a round, after it, and while
+ *   auto-play runs) the button row under the balloons is closed, and the
+ *   pictures get its height. It was an empty strip exactly when the bet
+ *   panel is at its tallest. During a round the row never comes and goes:
+ *   it is there as long as one balloon is in play. A finished round with a
+ *   reveal line ("Next pump would have popped") keeps it open
+ *   (.stage-after-round), because the line is shown in that row.
+ * - The stage never gets smaller than its two lines of numbers and a small
+ *   picture. Only if even that does not fit (no real phone in the size
+ *   check) does the panel scroll inside itself, as a last resort.
+ */
 @media (max-width: 760px) and (orientation: portrait) {
   .layout {
     flex-direction: column;
     padding: 0 8px 8px;
   }
   .stage {
-    min-height: 104px;
+    min-height: calc(var(--label-h) + 56px);
+  }
+  .stage:not(:has(.slot-pump)):not(.stage-after-round) {
+    --action-h: 0px;
+  }
+  .stage:not(:has(.slot-pump)):not(.stage-after-round) .slot-action {
+    padding: 0;
+    overflow: hidden;
   }
   .controls {
     order: 0;
@@ -271,9 +299,19 @@ body {
 }
 
 /*
- * The picture is as tall as the room allows, and never wider than its
- * slot. The balloon art is 200 wide by 320 tall, so 160cqw is its height
- * at full slot width.
+ * The picture is as tall as the room allows, up to one and a half slots
+ * wide. The balloon art is 200 wide by 320 tall, so 240cqw is its height
+ * at that width.
+ *
+ * Why wider than the slot: the art keeps empty room at its sides for a
+ * balloon at full size, and everything drawn stays inside the middle two
+ * thirds of it almost all the time. Letting that empty room lie over the
+ * neighbouring slots makes three balloons on a narrow phone half as big
+ * again, with nothing drawn on top of anything else. Only a balloon near
+ * its top rung reaches a little past its own slot.
+ *
+ * The picture takes no clicks, so a tap always lands on the slot under the
+ * finger, never on a neighbour's empty corner.
  */
 .balloon-box {
   container-type: size;
@@ -287,7 +325,8 @@ body {
 .balloon-box svg {
   flex: none;
   width: auto;
-  height: min(100cqh, 160cqw);
+  height: min(100cqh, 240cqw);
+  pointer-events: none;
 }
 
 /*
@@ -300,7 +339,7 @@ body {
   flex: none;
   display: flex;
   justify-content: center;
-  height: calc(var(--tap) + 10px);
+  height: var(--action-h);
   padding: 0 4px 10px;
 }
 
@@ -543,30 +582,87 @@ summary:focus-visible,
 }
 
 /*
- * The three round buttons differ by shape, not only colour, so none can be
- * taken for another: Pump is solid, Cash out is a plain outline, and
- * Patch + Pump looks like the patch the balloon wears: a stitched (dashed)
- * edge, faint tape stripes and a tape icon.
+ * The three round buttons differ by fill, not only colour, so none can be
+ * taken for another: Pump is solid pearl, Cash out is a plain outline with
+ * nothing inside, and Patch + Pump is a filled panel with the tape icon.
+ * No dashed edge or stripes: those read as "locked", and this button works.
  */
 .btn-patch {
-  border: 1.5px dashed #8a8f9a;
-  background:
-    repeating-linear-gradient(
-      135deg,
-      rgba(244, 242, 238, 0.06) 0 5px,
-      rgba(244, 242, 238, 0) 5px 10px
-    ),
-    var(--panel-raised);
+  position: relative;
+  /* So the amounts can size themselves to the button (cqw below). */
+  container-type: inline-size;
+  border: 1.5px solid #8a8f9a;
+  background: var(--panel-raised);
+}
+
+/*
+ * Three lines: the name, the price, and what the pump adds if it holds
+ * ("for +$0.09"), so the two amounts can be weighed. A little tighter than
+ * the other buttons, so three lines take no more room than their two. Each
+ * amount takes the largest size that fits by its length, as the balloon
+ * labels do (150cqw / characters leaves a little air), so a $1,000 bet's
+ * five-figure amounts never spill out.
+ */
+.btn-patch.btn-two {
+  line-height: 1.05;
+}
+
+.btn-patch .patch-price {
+  display: block;
+  white-space: nowrap;
+  font-size: min(15px, 150cqw / max(var(--chars, 6), 1));
+}
+
+.btn-patch .patch-gain {
+  display: block;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: min(10.5px, 165cqw / max(var(--chars, 6), 1));
+  font-weight: 600;
+}
+
+/* Short screens have lower buttons: a smaller tape icon and no top and
+   bottom padding keep the three lines inside them. */
+@media (max-height: 720px) {
+  .btn-patch.btn-two {
+    padding-block: 0;
+  }
+
+  .btn-patch .patch-icon {
+    width: 13px;
+    height: 13px;
+  }
+}
+
+/*
+ * Stitches down both ends, just inside the solid edge, like the ends of a
+ * strip of tape. They set its shape apart from Cash out's plain outline
+ * (the user found the two too easy to mix up), and the edge stays solid,
+ * because a dashed outer edge with stripes read as a locked button. Only
+ * the ends, so the three lines of text keep the full height.
+ */
+.btn-patch::before {
+  content: '';
+  position: absolute;
+  inset: 5px 3px;
+  border-inline: 1.5px dashed rgba(244, 242, 238, 0.55);
+  pointer-events: none;
 }
 
 .btn-patch:hover:not(:disabled) {
   border-color: var(--pearl);
 }
 
-.patch-name {
+/* A button's name with an icon or a balloon's colour dot in front. */
+.btn-name {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+.btn-name .dot {
+  width: 8px;
+  height: 8px;
 }
 
 .patch-icon {
@@ -812,10 +908,16 @@ input {
  * Pump with one balloon and Pump all with two or three.
  */
 
+/* The round panel's width decides how tight the numbers sit (see below). */
+.round {
+  container-type: inline-size;
+}
+
 .readouts {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 8px;
+  gap: 2px 8px;
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
@@ -835,17 +937,50 @@ input {
   white-space: nowrap;
 }
 
-.readouts [data-risk='1'] {
-  color: var(--risk-1);
+/* The pop chance: required by the brief, kept quiet at the user's wish.
+   Small, grey, normal weight, no warning colours. */
+.readouts .readout-quiet dd {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
 }
-.readouts [data-risk='2'] {
-  color: var(--risk-2);
+
+/*
+ * A narrow phone with big numbers ("100.00×", "$1,000.00") ran the row past
+ * the right edge and cut off the pop chance. Under 330 px the numbers sit
+ * tighter, which fits every case on a 320 px phone; if something still
+ * doesn't fit, the row wraps rather than cutting anything off. (After the
+ * rules above, so it wins.)
+ */
+@container (max-width: 330px) {
+  .readouts {
+    column-gap: 4px;
+  }
+  .readouts dt {
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+  .readouts dd {
+    font-size: 15px;
+  }
+  .readouts .readout-quiet dd {
+    font-size: 12px;
+  }
 }
-.readouts [data-risk='3'] {
-  color: var(--risk-3);
-}
-.readouts [data-risk='4'] {
-  color: var(--risk-4);
+
+/* The 320 px phone's panel (about 278 px inside) with the widest numbers it
+   can show ("5,000.00×" next to "$3,000.00"): one step tighter, so it
+   still fits on one line and the page keeps its one-screen fit. */
+@container (max-width: 290px) {
+  .readouts dt {
+    font-size: 9px;
+  }
+  .readouts dd {
+    font-size: 14px;
+  }
+  .readouts .readout-quiet dd {
+    font-size: 11px;
+  }
 }
 
 .round-actions {
@@ -856,6 +991,18 @@ input {
 
 .round-actions .btn-primary {
   grid-column: 1 / -1;
+}
+
+/* With 2-3 balloons: Cash out all beside a still-large Pump all. */
+.round-all {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 6px;
+}
+
+.round-all .btn-primary {
+  grid-column: auto;
 }
 
 /* --------------------------------------------------------------- Settings */
@@ -906,6 +1053,9 @@ input {
 .settings-body {
   flex: 1 1 0;
   display: grid;
+  /* One column that never grows wider than the sheet: a wide history row
+     scrolls inside its own card instead of pushing every button off the edge. */
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 10px;
   min-height: 0;

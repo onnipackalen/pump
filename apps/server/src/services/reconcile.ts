@@ -101,9 +101,9 @@ export function walletProblems(db: Db): string[] {
  * 10. reveals match the balloons exactly: a finished round has one for each
  *     balloon cashed out below its top rung and none for any other balloon,
  *     and a round in progress has none. Each reveal fits its balloon (see
- *     revealProblem). Rounds started before reveals existed (no stored cap)
- *     may have finished without them, so for those a missing reveal is not
- *     a problem.
+ *     revealProblem). Rounds started before reveals existed (not marked
+ *     reveals_recorded) may have finished without them, so for those a
+ *     missing reveal is not a problem.
  */
 export function roundProblems(db: Db): string[] {
   const problems: string[] = [];
@@ -222,7 +222,7 @@ export function roundProblems(db: Db): string[] {
        JOIN rounds r ON r.id = b.round_id
        LEFT JOIN balloon_reveals v
          ON v.round_id = b.round_id AND v.balloon_index = b.balloon_index
-       WHERE r.status = 'finished' AND r.max_payout_cents IS NOT NULL
+       WHERE r.status = 'finished' AND r.reveals_recorded = 1
          AND b.status = 'cashed' AND b.rung < b.top_rung AND v.round_id IS NULL`,
     )
     .all();

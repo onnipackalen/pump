@@ -572,15 +572,14 @@ describe('a reveal across RTPs', () => {
 });
 
 describe.each(RTPS)('a database from before reveals existed, at RTP %i', (rtpBp) => {
-  it('is brought up to date, its honest old rounds still check out, and new rounds store the cap', () => {
+  it('is brought up to date, its honest old rounds still check out, and new rounds store reveals', () => {
     const config = configAt(rtpBp);
     const runtime = testRuntime(config);
     const db = openDatabase(':memory:');
     migrate(db, 1);
     // An older server's round, played with real draws: a $10 Tiny balloon
     // pumped once (it survived), then cashed out on rung 1 of 3 and paid
-    // 1.01x. It finished with no cap stored and no reveal, and its seed was
-    // then revealed.
+    // 1.01x. It finished with no reveal, and its seed was then revealed.
     const serverSeed = 'a'.repeat(64);
     const ladder = ladderOf(config, 'tiny');
     const base = { serverSeed, nonce: 0, rtpBp, ladder };
@@ -598,10 +597,10 @@ describe.each(RTPS)('a database from before reveals existed, at RTP %i', (rtpBp)
       INSERT INTO server_seeds (player_id, seed, seed_hash, created_at)
         VALUES ('p1', '${serverSeed}', '${hashServerSeed(serverSeed)}', '${at}');
       UPDATE server_seeds SET next_nonce = 1;
-      INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, server_seed_id,
-                          client_seed, nonce, started_at, last_action_at)
-        VALUES ('old', 'p1', 'active', 'tiny', ${String(rtpBp)}, '${JSON.stringify(ladder)}', 1,
-                '${clientSeed}', 0, '${at}', '${at}');
+      INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
+                          server_seed_id, client_seed, nonce, started_at, last_action_at)
+        VALUES ('old', 'p1', 'active', 'tiny', ${String(rtpBp)}, '${JSON.stringify(ladder)}',
+                ${String(config.limits.maxPayoutCents)}, 1, '${clientSeed}', 0, '${at}', '${at}');
       INSERT INTO balloons (round_id, balloon_index, bet_cents, status, rung, draw_index, top_rung)
         VALUES ('old', 0, 1000, 'active', 0, 0, 3);
       INSERT INTO ledger (player_id, kind, amount_cents, balance_after_cents, round_id, balloon_index, created_at)
@@ -646,17 +645,85 @@ describe.each(RTPS)('a database from before reveals existed, at RTP %i', (rtpBp)
     expect(count(db, 'balloon_reveals')).toBe(0);
     expect(reconcile(db).problems).toEqual([]);
 
-    // A round started now stores the cap it is played under.
+    // The old round keeps its mark: it may have ended with no reveal stored.
+    expect(roundsRepository(db).find('old')?.revealsRecorded).toBe(false);
+    // A round started now is marked as storing its reveals, and stores the
+    // cap it is played under.
     db.exec(`INSERT INTO server_seeds (player_id, seed, seed_hash, created_at)
              VALUES ('p1', '${'b'.repeat(64)}', 'hash-b', '${at}')`);
     db.exec("UPDATE players SET client_seed = 'seed'");
     const started = immediate(db, () => game.start('p1', { difficultyId: 'tiny', betsCents: [1000] }));
-    expect(roundsRepository(db).find(started.round.id)?.maxPayoutCents).toBe(
-      GAME_CONFIG.limits.maxPayoutCents,
-    );
+    expect(roundsRepository(db).find(started.round.id)).toMatchObject({
+      maxPayoutCents: GAME_CONFIG.limits.maxPayoutCents,
+      revealsRecorded: true,
+    });
   });
 
-  it('does not fill in a reveal missing from a round that stored its cap', async () => {
+  it('stores the reveals of a round the older server left in progress, as it ends', () => {
+    const config = configAt(rtpBp);
+    const runtime = testRuntime(config);
+    const db = openDatabase(':memory:');
+    migrate(db, 1);
+    // An older server's round still in play: a $10 Tiny balloon pumped once
+    // (it survived), on rung 1 of 3.
+    const serverSeed = 'c'.repeat(64);
+    const ladder = ladderOf(config, 'tiny');
+    const base = { serverSeed, nonce: 0, rtpBp, ladder };
+    const clientSeed = clientSeedWhere((seed) => survives(1)({ ...base, clientSeed: seed }));
+    const chance = surviveChance(rtpBp, ladder, 1);
+    const { roll } = drawRoll(
+      { serverSeed, clientSeed, nonce: 0, balloonIndex: 0, drawIndex: 0 },
+      chance.den,
+    );
+    const at = '2026-01-01T00:00:00.000Z';
+    db.exec(`
+      INSERT INTO players (id, token_hash, client_seed, created_at)
+        VALUES ('p1', 'h1', '${clientSeed}', '${at}');
+      INSERT INTO ledger (player_id, kind, amount_cents, balance_after_cents, created_at)
+        VALUES ('p1', 'grant', 1000000, 1000000, '${at}');
+      INSERT INTO server_seeds (player_id, seed, seed_hash, created_at)
+        VALUES ('p1', '${serverSeed}', '${hashServerSeed(serverSeed)}', '${at}');
+      UPDATE server_seeds SET next_nonce = 1;
+      INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
+                          server_seed_id, client_seed, nonce, started_at, last_action_at)
+        VALUES ('old', 'p1', 'active', 'tiny', ${String(rtpBp)}, '${JSON.stringify(ladder)}',
+                ${String(config.limits.maxPayoutCents)}, 1, '${clientSeed}', 0, '${at}', '${at}');
+      INSERT INTO balloons (round_id, balloon_index, bet_cents, status, rung, draw_index, top_rung)
+        VALUES ('old', 0, 1000, 'active', 0, 0, 3);
+      INSERT INTO ledger (player_id, kind, amount_cents, balance_after_cents, round_id, balloon_index, created_at)
+        VALUES ('p1', 'bet', -1000, 999000, 'old', 0, '${at}');
+      INSERT INTO balloon_actions (round_id, balloon_index, seq, kind, patch, draw_index, den, num, roll, outcome, created_at)
+        VALUES ('old', 0, 0, 'pump', 0, 0, ${String(chance.den)}, ${String(chance.num)},
+                ${String(roll)}, 'survived', '${at}');
+      UPDATE balloons SET rung = 1, draw_index = 1;
+    `);
+
+    migrate(db);
+    expect(reconcile(db).problems).toEqual([]);
+    const game = buildServices({ ...runtime, db }).game;
+
+    // Cashed out under the new server: the round ends with its reveal stored,
+    // though it keeps its mark from before.
+    const cashed = immediate(db, () =>
+      game.cashOut('p1', 'old', { balloonIndex: 0, expectedDrawIndex: 1 }),
+    ).round;
+
+    expect(cashed.status).toBe('finished');
+    expect(cashed.balloons[0]?.afterRound).toEqual(
+      foreseen({ ...base, clientSeed }, 0, { rung: 1, drawIndex: 1, topRung: 3 }),
+    );
+    expect(count(db, 'balloon_reveals')).toBe(1);
+    expect(roundsRepository(db).find('old')?.revealsRecorded).toBe(false);
+    expect(reconcile(db).problems).toEqual([]);
+    db.exec(`UPDATE server_seeds SET revealed_at = '${at}'`);
+    const verifiable = game.verifiable('p1', 'old');
+    expect(verifiable.balloons[0]?.afterRound?.reachedRung).toBe(
+      cashed.balloons[0]?.afterRound?.reachedRung,
+    );
+    expect(verifyRound(verifiable).problems).toEqual([]);
+  });
+
+  it('does not fill in a reveal missing from a round marked as storing its reveals', async () => {
     const { world, seat, round } = await deal(survives(1), configAt(rtpBp));
     const pumped = ok(await seat.pump(round, 0)).round;
     expect(ok(await seat.cashOut(pumped, 0)).round.status).toBe('finished');

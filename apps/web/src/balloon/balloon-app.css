@@ -1,7 +1,6 @@
 /*
- * App-side choices on top of the balloon art. (balloon.css began as a copy
- * of graphics/balloon/balloon.css; its motion has since been tuned in the
- * game, see the note at its top.)
+ * App-side choices on top of the balloon art. (balloon.css is the art
+ * itself and its original; this file holds what the app changes about it.)
  *
  * The user asked that only signs commonly used in the gambling industry
  * ship. An industry check against live casino games and UK and Ontario rules

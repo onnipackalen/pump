@@ -14,6 +14,7 @@ import { SoundToggle } from './components/SoundToggle';
 import { VerifyPage } from './components/VerifyPage';
 import type { AutoPlaySettings } from './game/autoPlay';
 import { checkBets, type BetSetup } from './game/betSetup';
+import { afterRoundLine } from './game/afterRound';
 import { controlTarget, SWITCH_PAUSE_MS } from './game/controls';
 import { useAutoPlay } from './game/useAutoPlay';
 import { useGame, type GameEvent } from './game/useGame';
@@ -128,6 +129,12 @@ export function App() {
   useEffect(() => {
     if (afterRoundShown) shownReveals.remember(round);
   }, [afterRoundShown, round]);
+  // A finished round with a reveal line keeps the row under the balloons
+  // open on upright phones, where an empty row is closed (styles.css): the
+  // line goes in that row, and the pictures do not jump when it appears.
+  const afterRoundRow =
+    round?.status === 'finished' &&
+    round.balloons.some((balloon) => afterRoundLine(balloon) !== null);
   // Net position since this visit began (UK RTS 2E). No deposits happen
   // here, so it is the change in balance.
   const sessionNet =
@@ -159,6 +166,20 @@ export function App() {
    */
   const pumpAll = (): void => {
     for (const index of live) game.pump(index, false);
+  };
+
+  /**
+   * Cash out all: ends any hold first, so a held Pump all cannot pump again,
+   * then cashes out each balloon in play that has a cash-out value.
+   */
+  const cashOutAll = (): void => {
+    hold.stop();
+    if (!round) return;
+    for (const balloon of round.balloons) {
+      if (balloon.status === 'active' && balloon.cashOutCents !== null) {
+        game.cashOut(balloon.index);
+      }
+    }
   };
 
   const holdOne = (index: number): void => {
@@ -220,7 +241,7 @@ export function App() {
   // Keyboard play. The keyboard's own repeats are ignored: one press is one
   // action, except that holding Space or A keeps pumping (the hold sends
   // each pump after the last answer, like holding a Pump button). The key
-  // coming up ends the hold. Space, P and C wait out the pause after the
+  // coming up ends the hold. Space, Shift+P and C wait out the pause after the
   // controls move to another balloon.
   // While auto-play runs, only Esc (stop) and M (sound) do anything.
   // While settings is open, no key plays the game: Esc closes the sheet.
@@ -257,6 +278,9 @@ export function App() {
           break;
         case 'p':
         case 'P':
+          // A Patch spends money, late on many times the bet, so a stray P
+          // must not buy one: it takes Shift+P.
+          if (!event.shiftKey) break;
           if (!event.repeat && target !== null && !switchPause) game.pump(target, true);
           break;
         case 'c':
@@ -383,7 +407,10 @@ export function App() {
         />
       ) : (
       <main className="layout">
-        <section className="stage" aria-label="Balloons">
+        <section
+          className={afterRoundRow ? 'stage stage-after-round' : 'stage'}
+          aria-label="Balloons"
+        >
           <div className="stage-top">
             {state.notice && (
               <div className={`notice notice-${state.notice.tone}`} role="status">
@@ -465,6 +492,8 @@ export function App() {
                 onCashOut={() => {
                   if (target !== null) game.cashOut(target);
                 }}
+                balloons={round.balloons}
+                onCashOutAll={cashOutAll}
                 liveCount={live.length}
                 onPumpAll={pumpAll}
                 onPumpAllHold={holdAll}

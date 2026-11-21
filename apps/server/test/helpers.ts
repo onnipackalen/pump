@@ -116,19 +116,19 @@ export function insertActiveRound(
     int(seed, 'id'),
   );
   db.prepare(
-    `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder,
+    `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
                          server_seed_id, client_seed, nonce, started_at, last_action_at,
-                         max_payout_cents)
-     VALUES (?, ?, 'active', 'easy', ?, '[101,111]', ?, 'seed', ?, ?, ?, ?)`,
+                         reveals_recorded)
+     VALUES (?, ?, 'active', 'easy', ?, '[101,111]', ?, ?, 'seed', ?, ?, ?, 1)`,
   ).run(
     roundId,
     playerId,
     GAME_CONFIG.rtpBp,
+    GAME_CONFIG.limits.maxPayoutCents,
     int(seed, 'id'),
     int(seed, 'next_nonce'),
     at,
     at,
-    GAME_CONFIG.limits.maxPayoutCents,
   );
   betsCents.forEach((betCents, balloonIndex) => {
     db.prepare(

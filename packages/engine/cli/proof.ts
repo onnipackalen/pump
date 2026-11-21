@@ -3,18 +3,22 @@
  * and print nothing. Everything is whole numbers and exact fractions.
  *
  * It does not trust the engine: it calls the engine's own functions and
- * checks what they return against arithmetic done here.
+ * checks what they return against the rules worked out apart from the engine
+ * (cli/rules.ts) and against arithmetic done here.
  *
  * What is proved, for one ladder at one RTP:
  *
- * 1. Every cash-out point returns exactly the RTP before rounding. The chance
- *    to reach rung k is the product of the engine's pump chances; times the
- *    multiplier it must equal the RTP, as fractions, with nothing left over.
+ * 1. Every pump's chance is the one the rules give, and every cash-out point
+ *    returns exactly the RTP before rounding. The chance to reach rung k is
+ *    the product of the engine's pump chances; times the multiplier it must
+ *    equal the RTP, as fractions, with nothing left over. The same for every
+ *    Patch: what it is worth on average, over its exact price, is the RTP.
  * 2. For every legal bet on every rung it can reach, the payout is bet x
- *    multiplier rounded down, so no cash-out returns more than the RTP.
+ *    multiplier rounded down, and its real return (the engine's chance of
+ *    getting there x the payout / the bet) is never above the RTP.
  * 3. For every legal bet and every Patch it can buy, the price is the exact
- *    price rounded up, so no Patch returns more than the RTP, and the price
- *    one cent lower would.
+ *    price rounded up, and its real return (the engine's pop chance x the
+ *    value saved / the price) is never above the RTP.
  * 4. No way of playing beats the RTP: the best possible strategy, found by
  *    working backwards from the top rung, never returns more.
  */
@@ -28,7 +32,14 @@ import {
   type Fraction,
   type Limits,
 } from '../src/index';
-import { add, compare, div, fr, max, mul, ONE, sub, ZERO, type Fr } from './fraction';
+import { add, compare, div, equal, fr, max, mul, ONE, sub, ZERO, type Fr } from './fraction';
+import {
+  rulePatchPriceCents,
+  rulePatchShare,
+  rulePayoutCents,
+  ruleSurvive,
+  ruleTopRung,
+} from './rules';
 
 /** One rung of a ladder, with everything the proof says about it. */
 export interface RungProof {
@@ -42,8 +53,19 @@ export interface RungProof {
   readonly cashOutReturn: Fr;
   /** True when cashOutReturn equals the RTP exactly. */
   readonly exact: boolean;
+  /**
+   * True when the engine's survival chance for this pump is the one the rules
+   * give, and its pop chance is exactly the rest.
+   */
+  readonly chanceRight: boolean;
   /** Exact Patch price for the pump onto this rung, as a share of the bet. Null for rung 1. */
   readonly patchShareOfBet: Fr | null;
+  /**
+   * True when a Patch for this pump returns exactly the RTP before rounding:
+   * the engine's pop chance x the multiplier it saves / the exact price.
+   * Null for rung 1, where no Patch is sold.
+   */
+  readonly patchExact: boolean | null;
 }
 
 /** The RTP as an exact fraction: 9700 basis points is 97/100. */
@@ -57,14 +79,19 @@ export function proveRungs(rtpBp: number, ladder: readonly number[]): readonly R
   for (let rung = 1; rung <= ladder.length; rung += 1) {
     const survive = surviveChance(rtpBp, ladder, rung);
     const pop = popChance(rtpBp, ladder, rung);
-    reach = mul(reach, fr(survive.num, survive.den));
+    const surviveFr = fr(survive.num, survive.den);
+    const popFr = fr(pop.num, pop.den);
+    reach = mul(reach, surviveFr);
     const h = multiplierAt(ladder, rung);
     const cashOutReturn = mul(reach, fr(h, 100));
-    // Exact Patch price / bet = pop chance x m_(k-1) / RTP.
-    const patchShareOfBet =
-      rung === 1
+    const byTheRules = ruleSurvive(rtpBp, ladder, rung);
+    // The exact price comes from the rules. What the Patch is worth uses the
+    // engine's own pop chance: pop chance x m_(k-1), per cent of bet.
+    const patchShareOfBet = rung === 1 ? null : rulePatchShare(rtpBp, ladder, rung);
+    const patchExact =
+      patchShareOfBet === null
         ? null
-        : div(mul(fr(pop.num, pop.den), fr(multiplierAt(ladder, rung - 1), 100)), rtp);
+        : equal(div(mul(popFr, fr(multiplierAt(ladder, rung - 1), 100)), patchShareOfBet), rtp);
     rows.push({
       rung,
       multiplierHundredths: h,
@@ -72,7 +99,9 @@ export function proveRungs(rtpBp: number, ladder: readonly number[]): readonly R
       reach,
       cashOutReturn,
       exact: compare(cashOutReturn, rtp) === 0,
+      chanceRight: equal(surviveFr, byTheRules) && equal(popFr, sub(ONE, byTheRules)),
       patchShareOfBet,
+      patchExact,
     });
   }
   return rows;
@@ -100,6 +129,19 @@ export interface BetScan {
   readonly wholeDollarsExact: boolean;
   /** No payout is above the payout cap. */
   readonly underCap: boolean;
+  /** For every bet, the engine's top rung is the highest one under the cap. */
+  readonly topRungsRight: boolean;
+  /**
+   * No cash-out returns more than the RTP: the engine's chance of reaching the
+   * rung x the engine's payout / the bet, for every bet and rung.
+   */
+  readonly cashOutsWithinRtp: boolean;
+  /**
+   * No Patch returns more than the RTP: the engine's pop chance x the value
+   * the Patch saves / the engine's price, for every bet and pump.
+   */
+  readonly patchesWithinRtp: boolean;
+  /** The lowest cash-out return. Its bet is 0 if no payout loses anything to rounding. */
   readonly worstCashOut: Worst;
   /** Null if no bet in the set could buy a Patch. */
   readonly worstPatch: Worst | null;
@@ -125,6 +167,22 @@ export function scanBets(
     priceTop[k] = current * (next - current) * 100n;
     priceBottom[k] = next * rtp;
   }
+  // The engine's own chances, per rung: the chance to reach rung k (the
+  // product of its pump chances) and the chance that pump k pops.
+  const reachTop: bigint[] = [];
+  const reachBottom: bigint[] = [];
+  const popTop: bigint[] = [];
+  const popBottom: bigint[] = [];
+  let reach = ONE;
+  for (let k = 1; k <= ladder.length; k += 1) {
+    const survive = surviveChance(rtpBp, ladder, k);
+    reach = mul(reach, fr(survive.num, survive.den));
+    reachTop[k] = reach.n;
+    reachBottom[k] = reach.d;
+    const pop = popChance(rtpBp, ladder, k);
+    popTop[k] = BigInt(pop.num);
+    popBottom[k] = BigInt(pop.den);
+  }
 
   let betCount = 0;
   let cashOuts = 0;
@@ -133,6 +191,9 @@ export function scanBets(
   let pricesRoundUp = true;
   let wholeDollarsExact = true;
   let underCap = true;
+  let topRungsRight = true;
+  let cashOutsWithinRtp = true;
+  let patchesWithinRtp = true;
   // Worst cash-out: the largest lost / worth, as whole numbers (lost < 100).
   let lostWorst = 0;
   let worthWorst = 1;
@@ -144,7 +205,10 @@ export function scanBets(
 
   for (const bet of bets) {
     betCount += 1;
-    const top = topRungForBet(ladder, bet, limits.maxPayoutCents);
+    // The rungs to check are the ones the rules allow, not the ones the engine says.
+    const top = ruleTopRung(ladder, bet, limits.maxPayoutCents);
+    if (topRungForBet(ladder, bet, limits.maxPayoutCents) !== top) topRungsRight = false;
+    const betBig = BigInt(bet);
     for (let rung = 1; rung <= top; rung += 1) {
       cashOuts += 1;
       const worth = bet * multiplierAt(ladder, rung); // in hundredths of a cent
@@ -153,6 +217,9 @@ export function scanBets(
       if (lost < 0 || lost >= 100) payoutsRoundDown = false;
       if (bet % 100 === 0 && lost !== 0) wholeDollarsExact = false;
       if (payout > limits.maxPayoutCents) underCap = false;
+      // reach x payout / bet <= rtpBp / 10000, without dividing
+      const paidBack = (reachTop[rung] ?? 1n) * BigInt(payout) * 10_000n;
+      if (paidBack > rtp * betBig * (reachBottom[rung] ?? 1n)) cashOutsWithinRtp = false;
       // lost / worth > lostWorst / worthWorst, without dividing
       if (lost * worthWorst > lostWorst * worth) {
         lostWorst = lost;
@@ -167,6 +234,10 @@ export function scanBets(
       const price = BigInt(patchPriceCents(rtpBp, ladder, bet, rung));
       // price - 1 < exact <= price
       if (!(price * bottom >= exactTop && (price - 1n) * bottom < exactTop)) pricesRoundUp = false;
+      // pop chance x (bet x m_(k-1)) / price <= rtpBp / 10000, without dividing.
+      // bet x h_(k-1) is the value saved in hundredths of a cent, hence the 100.
+      const saved = (popTop[rung] ?? 1n) * betBig * BigInt(multiplierAt(ladder, rung - 1));
+      if (saved * 10_000n > rtp * price * (popBottom[rung] ?? 1n) * 100n) patchesWithinRtp = false;
       const over = price * bottom - exactTop;
       const charged = price * bottom;
       if (over * chargedWorst > overWorst * charged) {
@@ -186,6 +257,10 @@ export function scanBets(
     pricesRoundUp,
     wholeDollarsExact,
     underCap,
+    topRungsRight,
+    cashOutsWithinRtp,
+    patchesWithinRtp,
+    // What rounding alone costs, given exact chances (part 1 proves those):
     // return = RTP x paid / worth = RTP x (1 - lost / worth)
     worstCashOut: { value: mul(rtpFr, sub(ONE, fr(lostWorst, worthWorst))), ...cashWorst },
     // return = RTP x exact price / charged price = RTP x (1 - over / charged)
@@ -264,7 +339,10 @@ export interface Expectation {
  *     back(k) = q back(k+1) / (1 - c p)
  *     paid(k) = (c P + q paid(k+1)) / (1 - c p)
  *
- * The simulator plays exactly this, so its result can be judged against it.
+ * The simulator plays exactly this through the engine, and its result is
+ * judged against this number. So every chance, payout and price here comes
+ * from the rules alone (cli/rules.ts), never from the engine: an engine that
+ * pays too little must not be able to move its own yardstick.
  */
 export function strategyExpectation(
   rtpBp: number,
@@ -273,18 +351,16 @@ export function strategyExpectation(
   target: number,
   patchChance: Fr,
 ): Expectation {
-  let back = fr(cashOutCents(betCents, ladder, target));
+  let back = fr(rulePayoutCents(betCents, ladder, target));
   let paid = ZERO;
   for (let rung = target - 1; rung >= 1; rung -= 1) {
-    const survive = surviveChance(rtpBp, ladder, rung + 1);
-    const q = fr(survive.num, survive.den);
+    const q = ruleSurvive(rtpBp, ladder, rung + 1);
     const p = sub(ONE, q);
-    const price = fr(patchPriceCents(rtpBp, ladder, betCents, rung + 1));
+    const price = fr(rulePatchPriceCents(rtpBp, ladder, betCents, rung + 1));
     const retry = sub(ONE, mul(patchChance, p));
     back = div(mul(q, back), retry);
     paid = div(add(mul(patchChance, price), mul(q, paid)), retry);
   }
-  const first = surviveChance(rtpBp, ladder, 1);
-  const q1 = fr(first.num, first.den);
+  const q1 = ruleSurvive(rtpBp, ladder, 1);
   return { paid: add(fr(betCents), mul(q1, paid)), returned: mul(q1, back) };
 }

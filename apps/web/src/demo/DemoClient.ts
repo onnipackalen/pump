@@ -377,9 +377,11 @@ export class DemoClient implements GameClient {
       id: demo.id,
       difficultyId: demo.round.difficultyId,
       balloonCount: balloons.length,
-      betCents: sum((b) => b.betCents),
+      // As on the server: a refunded bet was never played, so it is not a stake.
+      betCents: sum((b) => (b.status === 'refunded' ? 0 : b.betCents)),
       patchesCents: sum((b) => b.patchesCents),
       payoutCents: sum((b) => b.payoutCents),
+      refundedCents: sum((b) => (b.status === 'refunded' ? b.betCents : 0)),
       serverSeedHash: demo.serverSeedHash,
       nonce: demo.nonce,
       finishedAt: demo.finishedAt ?? demo.startedAt,
