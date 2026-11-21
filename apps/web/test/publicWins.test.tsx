@@ -25,6 +25,7 @@ import {
   type WinsWatch,
 } from '../src/wins/polling';
 import { PublicWins, PublicWinsPanel, WINS_TABS, type WinsList } from '../src/wins/PublicWins';
+import { SHEET_SLACK_PX, winsMayJoin } from '../src/wins/sheetFirst';
 
 const key = (): string => crypto.randomUUID();
 
@@ -264,6 +265,15 @@ describe('Public wins panel', () => {
     expect(html).toBe('');
   });
 
+  it('waits off the page while an upright sheet is down, and only then', () => {
+    const at = (waiting: boolean): string =>
+      renderToStaticMarkup(
+        <PublicWinsPanel wins={lists} config={GAME_CONFIG} list="recent" onList={() => undefined} waiting={waiting} />,
+      );
+    expect(at(true)).toMatch(/^<section[^>]* data-waiting=""/);
+    expect(at(false)).not.toContain('data-waiting');
+  });
+
   it('is kept but hidden while another page shows', () => {
     const html = renderToStaticMarkup(
       <PublicWinsPanel wins={lists} config={GAME_CONFIG} list="recent" onList={() => undefined} hidden />,
@@ -353,6 +363,32 @@ describe('When the wins are asked for', () => {
     const gaps = sentAt.slice(1).map((at, i) => at - (sentAt[i] ?? 0));
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(MIN_GAP_MS);
     expect(sentAt.length).toBe(13);
+  });
+});
+
+// --------------------------------------------------------- Sheet, then wins
+
+describe('Upright phones: the wins join the page only with the sheet up', () => {
+  // 390x844: the sheet's bottom is 979 from the page's top, so sheet up is 135.
+  const screenHeight = 844;
+  const at = (scrollTop: number): boolean =>
+    winsMayJoin({ scrollTop, sheetBottom: 979 - scrollTop, screenHeight });
+
+  it('waits while the page rests at the top (sheet down)', () => {
+    expect(at(0)).toBe(false);
+    expect(at(SHEET_SLACK_PX)).toBe(false);
+  });
+
+  it('joins once it rests with the sheet up, and stays at the table', () => {
+    expect(at(135)).toBe(true);
+    expect(at(543)).toBe(true);
+    // A phone's browser bars can leave sheet up a little off; it still counts.
+    expect(winsMayJoin({ scrollTop: 120, sheetBottom: 900, screenHeight })).toBe(true);
+  });
+
+  it('joins at the top too when the whole sheet already fits (a tall tablet)', () => {
+    expect(winsMayJoin({ scrollTop: 0, sheetBottom: 1366, screenHeight: 1366 })).toBe(true);
+    expect(winsMayJoin({ scrollTop: 0, sheetBottom: 1366 + SHEET_SLACK_PX + 1, screenHeight: 1366 })).toBe(false);
   });
 });
 

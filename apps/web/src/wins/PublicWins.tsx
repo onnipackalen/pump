@@ -3,6 +3,7 @@ import { useId, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import type { GameClient } from '../api/client';
 import type { PublicWin, PublicWinsResponse } from '../api/contract';
 import { formatCents, formatMultiplier, formatSignedCents } from '../money';
+import { useWinsWaitForSheet } from './sheetFirst';
 import { usePublicWins } from './usePublicWins';
 import './public-wins.css';
 
@@ -40,6 +41,7 @@ interface PublicWinsProps {
 export function PublicWins({ client, config, latestRoundId, shown }: PublicWinsProps) {
   const { wins, sectionRef } = usePublicWins(client, latestRoundId);
   const [list, setList] = useState<WinsList>('recent');
+  const waiting = useWinsWaitForSheet();
   if (wins === null) return null;
   return (
     <PublicWinsPanel
@@ -48,6 +50,7 @@ export function PublicWins({ client, config, latestRoundId, shown }: PublicWinsP
       list={list}
       onList={setList}
       hidden={!shown}
+      waiting={waiting}
       sectionRef={sectionRef}
     />
   );
@@ -59,6 +62,8 @@ interface PanelProps {
   readonly list: WinsList;
   readonly onList: (list: WinsList) => void;
   readonly hidden?: boolean;
+  /** Upright phones: the sheet is down, so the wins wait off the page (sheetFirst.ts). */
+  readonly waiting?: boolean;
   readonly sectionRef?: Ref<HTMLElement>;
 }
 
@@ -69,7 +74,15 @@ interface PanelProps {
  * End) move between the tabs. No live region: the lists change every few
  * seconds, and reading each change out would never stop.
  */
-export function PublicWinsPanel({ wins, config, list, onList, hidden, sectionRef }: PanelProps) {
+export function PublicWinsPanel({
+  wins,
+  config,
+  list,
+  onList,
+  hidden,
+  waiting,
+  sectionRef,
+}: PanelProps) {
   const id = useId();
   const headingId = `${id}-heading`;
   const panelId = `${id}-panel`;
@@ -98,7 +111,13 @@ export function PublicWinsPanel({ wins, config, list, onList, hidden, sectionRef
   };
 
   return (
-    <section ref={sectionRef} className="public-wins" aria-labelledby={headingId} hidden={hidden}>
+    <section
+      ref={sectionRef}
+      className="public-wins"
+      aria-labelledby={headingId}
+      hidden={hidden}
+      data-waiting={waiting ? '' : undefined}
+    >
       <div className="pw-head">
         <h2 id={headingId} className="pw-title">
           Wins

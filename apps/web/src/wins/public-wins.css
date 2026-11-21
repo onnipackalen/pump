@@ -12,7 +12,9 @@
  *   panel, as wide as the sheet. The sheet keeps its two resting places
  *   (down at the top of the page, up with its bottom at the screen's
  *   bottom); one more swipe up goes on to the table's end, a third place.
- *   The stage stays stuck under the top bar and does not move.
+ *   While the sheet is down the table waits off the page, so a quick flick
+ *   cannot fly past sheet up to it (wins/sheetFirst.ts). The stage stays
+ *   stuck under the top bar and does not move.
  * - During a round or auto-play on an upright screen or a touch screen it
  *   is hidden: a round is one screen that never scrolls, and a finger
  *   dragging on a held Pump button must not scroll the page away. It is
@@ -117,3 +119,11 @@
     display: none;
   }
 }
+  /* Sheet down: off the page until it is up (wins/sheetFirst.ts). */
+  .public-wins[data-waiting] {
+    display: none;
+  }
+  /* Coming back down from the table, a flick stops at sheet up first. */
+  .app:has(> .public-wins) .controls {
+    scroll-snap-stop: always;
+  }
