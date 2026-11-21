@@ -77,6 +77,26 @@ describe('LiveStats panel', () => {
     expect(html).toContain('No rounds yet.');
   });
 
+  it('draws an unmoved line with no amounts beside it and no dot', () => {
+    // No rounds yet (the panel as it first opens, and after Reset): no
+    // "$0.00" twice over the chart.
+    const empty = renderToStaticMarkup(<LiveStats live={control(NO_LIVE_STATS)} />);
+    expect(empty).not.toContain('profit-axis');
+    expect(empty).not.toContain('profit-dot');
+    // Only break-even rounds: still flat, but the dot marks the latest round.
+    const even = renderToStaticMarkup(
+      <LiveStats live={control(addRound(NO_LIVE_STATS, cashed('a', 10, 10)))} />,
+    );
+    expect(even).not.toContain('profit-axis');
+    expect(even).toContain('profit-dot');
+    // Once the line moves, its highest and lowest are named.
+    const moved = renderToStaticMarkup(
+      <LiveStats live={control(addRound(NO_LIVE_STATS, popped('a', 100)))} />,
+    );
+    expect(moved).toContain('profit-axis-high');
+    expect(moved).toContain('-$1.00');
+  });
+
   it('has no live region, so auto-play does not chatter', () => {
     const html = renderToStaticMarkup(<LiveStats live={control(NO_LIVE_STATS)} />);
     expect(html).not.toContain('aria-live');

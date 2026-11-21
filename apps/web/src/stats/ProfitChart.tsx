@@ -54,6 +54,12 @@ export function ProfitChart({ profit, compact = false }: ProfitChartProps) {
     setPicked(Math.max(0, Math.min(lastIndex, to)));
   };
 
+  // The small chart on a line that has not moved (no rounds yet, or only
+  // rounds that broke even): no "$0.00" twice beside it, and no dot until a
+  // round is on it. The stats page never draws a line with no rounds.
+  const flat = compact && line.highCents === line.lowCents;
+  const dot = !compact || last.round > 0;
+
   const description =
     last.round === 0
       ? 'No rounds yet.'
@@ -106,15 +112,23 @@ export function ProfitChart({ profit, compact = false }: ProfitChartProps) {
           <polyline className="profit-line" points={path} />
         </svg>
         {/* The dot is HTML so it stays round however the chart is stretched. */}
-        <span
-          className="profit-dot"
-          style={{
-            left: `${String((shown.x / CHART_WIDTH) * 100)}%`,
-            top: `${String((shown.y / CHART_HEIGHT) * 100)}%`,
-          }}
-        />
-        <span className="profit-axis profit-axis-high">{formatSignedCents(line.highCents)}</span>
-        <span className="profit-axis profit-axis-low">{formatSignedCents(line.lowCents)}</span>
+        {dot && (
+          <span
+            className="profit-dot"
+            style={{
+              left: `${String((shown.x / CHART_WIDTH) * 100)}%`,
+              top: `${String((shown.y / CHART_HEIGHT) * 100)}%`,
+            }}
+          />
+        )}
+        {!flat && (
+          <>
+            <span className="profit-axis profit-axis-high">
+              {formatSignedCents(line.highCents)}
+            </span>
+            <span className="profit-axis profit-axis-low">{formatSignedCents(line.lowCents)}</span>
+          </>
+        )}
       </div>
       {!compact && (
         <div className="profit-x muted">
