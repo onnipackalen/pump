@@ -36,6 +36,15 @@ export const PUBLIC_WINS_FRESH_MS = 5_000;
  */
 export const PUBLIC_WINS_REST_FACTOR = 20;
 
+/**
+ * The longest a read is ever taken to have lasted. The read is timed with
+ * the same clock everything else uses, and that clock can jump: a laptop
+ * wakes up, a host resumes, the time is corrected. Without this limit an
+ * hour's jump during a read would count as an hour's read and freeze the
+ * lists for twenty hours. With it the longest rest is twenty minutes.
+ */
+export const PUBLIC_WINS_SLOWEST_READ_MS = 60_000;
+
 const SWITCHED_OFF: PublicWinsResponse = { enabled: false, recent: [], biggest: [], luckiest: [] };
 
 /**
@@ -123,7 +132,8 @@ export function publicWinsService(runtime: Runtime, rounds: RoundsRepository) {
       const answer = answerFrom(rows);
       // Counted from the END of the read, and longer after a slow read.
       const read = runtime.now().getTime();
-      const rest = Math.max(PUBLIC_WINS_FRESH_MS, PUBLIC_WINS_REST_FACTOR * (read - asked));
+      const took = Math.min(Math.max(read - asked, 0), PUBLIC_WINS_SLOWEST_READ_MS);
+      const rest = Math.max(PUBLIC_WINS_FRESH_MS, PUBLIC_WINS_REST_FACTOR * took);
       kept = { from: asked, until: read + rest, rows, answer };
       return answer;
     },

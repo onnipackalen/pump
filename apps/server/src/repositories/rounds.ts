@@ -480,10 +480,10 @@ export function roundsRepository(db: Db) {
       // The database picked each list's rows in the right order; the order of
       // rows across a UNION is not promised, so each list is put in order
       // again here, by the same rule: its own measure, then newest first.
+      // Plain character order, as the database's own ORDER BY uses.
+      const later = (x: string, y: string): number => (x === y ? 0 : x > y ? -1 : 1);
       const newestFirst = (x: Listed, y: Listed): number =>
-        x.finishedAt === y.finishedAt
-          ? y.roundId.localeCompare(x.roundId)
-          : y.finishedAt.localeCompare(x.finishedAt);
+        later(x.finishedAt, y.finishedAt) || later(x.roundId, y.roundId);
       const gain = (row: Listed): number => row.payoutCents - row.betCents - row.patchesCents;
       const measure: Record<PublicWinOrder, (row: Listed) => number> = {
         recent: () => 0,

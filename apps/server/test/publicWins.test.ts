@@ -10,6 +10,7 @@ import {
   PUBLIC_WINS_FRESH_MS,
   PUBLIC_WINS_PER_LIST,
   PUBLIC_WINS_REST_FACTOR,
+  PUBLIC_WINS_SLOWEST_READ_MS,
   playerTag,
   publicWinsService,
 } from '../src/services/publicWins';
@@ -538,6 +539,7 @@ describe('the promises the public wins lists make in numbers', () => {
     expect(PUBLIC_WINS_PER_LIST).toBe(10);
     expect(PUBLIC_WINS_FRESH_MS).toBe(5_000);
     expect(PUBLIC_WINS_REST_FACTOR).toBe(20);
+    expect(PUBLIC_WINS_SLOWEST_READ_MS).toBe(60_000);
   });
 
   it('the tag is six characters of SHA-256 over the day and the player id', () => {
@@ -582,6 +584,50 @@ describe('the promises the public wins lists make in numbers', () => {
     runtime.advance(1);
     service.list();
     expect(reads).toBe(2);
+  });
+});
+
+describe('the clock jumping during a read of the public wins', () => {
+  /** A service whose every read moves the clock by `jumpMs`, and a count of its reads. */
+  const withJump = (jumpMs: number) => {
+    const runtime = testRuntime(GAME_CONFIG);
+    const reads = { count: 0 };
+    const service = publicWinsService(runtime, {
+      ...roundsRepository(runtime.db),
+      publicWins: () => {
+        reads.count += 1;
+        runtime.advance(jumpMs);
+        return { recent: [], biggest: [], luckiest: [] };
+      },
+    });
+    return { runtime, reads, service };
+  };
+
+  it('forward by an hour: the lists rest twenty minutes, not twenty hours', () => {
+    const { runtime, reads, service } = withJump(60 * MINUTE);
+
+    service.list();
+    // One minute is the longest a read counts for, so twenty minutes of rest.
+    runtime.advance(20 * MINUTE - 1);
+    service.list();
+    expect(reads.count).toBe(1);
+    runtime.advance(1);
+    service.list();
+    expect(reads.count).toBe(2);
+  });
+
+  it('backward: the lists are simply read again, and do not get stuck', () => {
+    const { reads, service } = withJump(-60 * MINUTE);
+
+    service.list();
+    service.list();
+    expect(reads.count).toBe(2);
+    // And once the clock runs forward normally again, the usual five seconds hold.
+    const steady = withJump(0);
+    steady.service.list();
+    steady.runtime.advance(4_999);
+    steady.service.list();
+    expect(steady.reads.count).toBe(1);
   });
 });
 
