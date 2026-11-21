@@ -307,9 +307,19 @@ body {
 }
 
 /*
- * The picture is as tall as the room allows, and never wider than its
- * slot. The balloon art is 200 wide by 320 tall, so 160cqw is its height
- * at full slot width.
+ * The picture is as tall as the room allows, up to one and a half slots
+ * wide. The balloon art is 200 wide by 320 tall, so 240cqw is its height
+ * at that width.
+ *
+ * Why wider than the slot: the art keeps empty room at its sides for a
+ * balloon at full size, and everything drawn stays inside the middle two
+ * thirds of it almost all the time. Letting that empty room lie over the
+ * neighbouring slots makes three balloons on a narrow phone half as big
+ * again, with nothing drawn on top of anything else. Only a balloon near
+ * its top rung reaches a little past its own slot.
+ *
+ * The picture takes no clicks, so a tap always lands on the slot under the
+ * finger, never on a neighbour's empty corner.
  */
 .balloon-box {
   container-type: size;
@@ -323,7 +333,8 @@ body {
 .balloon-box svg {
   flex: none;
   width: auto;
-  height: min(100cqh, 160cqw);
+  height: min(100cqh, 240cqw);
+  pointer-events: none;
 }
 
 /*
