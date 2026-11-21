@@ -1,0 +1,351 @@
+/*
+ * The row of multiplier steps that goes with each balloon (StepRow.tsx):
+ * the steps it has passed, the one it is on, and the ones coming next,
+ * scrolling along as it climbs.
+ *
+ * The user's rule for it: a feature only goes where there is clearly room,
+ * and nothing lies over a balloon or over the sky above it, which is where
+ * the balloon grows. So the same row is placed three ways:
+ *
+ * - A computer (a wide screen with height to spare): along the top of each
+ *   balloon's slot, in a line of its own above the picture.
+ * - An upright screen, in a slot wide enough (one balloon on a phone): left
+ *   and right of the amount under the balloon, in the band those two lines
+ *   already have. The amount is the current step, so the row adds no height
+ *   and covers nothing.
+ * - An upright slot too narrow for that (two or three balloons on a phone):
+ *   no row. Each balloon in play says its next step in one small line
+ *   under its amount instead (.slot-next).
+ * - A phone on its side: nothing. There is no room.
+ *
+ * Without any of these the row is not drawn at all (display: none).
+ */
+
+.slot {
+  /* So the rules below can ask how wide a balloon's slot is, by name. */
+  container-name: slot;
+}
+
+.stage {
+  --step-w: 62px;
+  --step-h: 26px;
+  --step-gap: 6px;
+  /* How far the row fades out at an edge it runs past. */
+  --step-fade: 24px;
+}
+
+.steps {
+  /* The current step takes its balloon's colour (the same three as .dot). */
+  --step-colour: #ece6da;
+  --step-ink: #10141f;
+  /* From one step's left edge to the next one's. Worked out here, not on
+     the stage, so it follows a step width set on the row itself. */
+  --step-pitch: calc(var(--step-w) + var(--step-gap));
+  display: none;
+  container-type: inline-size;
+  overflow: hidden;
+  overflow: clip;
+}
+
+.steps[data-slot='2'] {
+  --step-colour: #55a6f0;
+}
+
+.steps[data-slot='3'] {
+  --step-colour: #7b4fd6;
+  --step-ink: #ffffff;
+}
+
+.steps-track {
+  flex: none;
+  display: flex;
+  gap: var(--step-gap);
+  width: max-content;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  transition: transform 280ms cubic-bezier(0.22, 0.7, 0.2, 1);
+}
+
+.step {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--step-w);
+  height: var(--step-h);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(21, 29, 51, 0.78);
+  color: var(--text);
+  /* As large as fits: a long step like "1,000.00×" gets smaller digits. */
+  font-size: min(13px, (var(--step-w) - 8px) / (var(--chars, 5) * 0.6));
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.step[data-step='passed'] {
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+.step[data-step='current'] {
+  border-color: var(--step-colour);
+  background: var(--step-colour);
+  color: var(--step-ink);
+}
+
+/* The step the next pump goes for. */
+.step[data-step='next'] {
+  border-color: rgba(244, 242, 238, 0.5);
+}
+
+/* Above the top this bet can reach: there, but plainly out of play. */
+.step[data-step='locked'] {
+  border-style: dashed;
+  background: none;
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+/* Grey is for a pop only (graphics/README.md). */
+.step[data-step='popped'] {
+  border-color: var(--pop);
+  background: none;
+  color: var(--pop);
+  text-decoration: line-through;
+}
+
+/*
+ * A computer: one row along the top of each balloon's slot, above the
+ * picture, in a line of its own, so it never lies over the balloon.
+ *
+ * The row keeps one passed step in view, then the current one, then what is
+ * coming. A ladder short enough to fit sits in the middle and does not
+ * move; a longer one starts at the left and slides along, and stops when
+ * its last step is in view.
+ *
+ * The current step and the one the next pump goes for are always in full
+ * view, clear of the faded edges. Three balloons in a smaller window leave
+ * a row too narrow for "one passed, current, next", so a narrow row gives
+ * up the passed step, a narrower one also has smaller steps, and under
+ * that there is no row at all (the panel still names the next step).
+ */
+@media (orientation: landscape) and (min-height: 560px) {
+  .steps {
+    /* How many passed steps stay in view before the current one. */
+    --step-keep: 1;
+    /* How far the left edge fades: nothing until steps have gone by. */
+    --step-fade-left: 0px;
+    flex: none;
+    display: flex;
+    height: var(--step-h);
+    /* Air at the sides, so one balloon's row does not run into the next. */
+    margin: 0 10px 8px;
+    -webkit-mask-image: linear-gradient(
+      90deg,
+      transparent,
+      #000 var(--step-fade-left),
+      #000 calc(100% - var(--step-fade)),
+      transparent
+    );
+    mask-image: linear-gradient(
+      90deg,
+      transparent,
+      #000 var(--step-fade-left),
+      #000 calc(100% - var(--step-fade)),
+      transparent
+    );
+  }
+  /* Slid along: it fades at the left too, where steps have gone by. */
+  .steps[data-lead='more'] {
+    --step-fade-left: var(--step-fade);
+  }
+  /*
+   * The row is its slot less 20px of margin. With one passed step kept it
+   * needs 3 steps, 2 gaps and both fades: 246px, so a slot of 266px.
+   * Without the passed step, 178px: a slot of 198px. With the smaller steps
+   * and fades, 138px: a slot of 158px.
+   */
+  @container slot (max-width: 265.98px) {
+    .steps {
+      --step-keep: 0;
+    }
+    .steps[data-lead='1'] {
+      --step-fade-left: var(--step-fade);
+    }
+  }
+  @container slot (max-width: 197.98px) {
+    .steps {
+      --step-w: 54px;
+      --step-fade: 12px;
+    }
+  }
+  @container slot (max-width: 157.98px) {
+    .steps {
+      display: none;
+    }
+  }
+  .steps-track {
+    /* In the middle when it fits; from the left edge when it does not. */
+    margin-inline: auto;
+    transform: translateX(
+      calc(
+        -1 *
+          clamp(
+            0px,
+            (var(--lead) - var(--step-keep)) * var(--step-pitch) - var(--step-fade),
+            var(--steps) * var(--step-pitch) - var(--step-gap) + var(--step-fade) - 100cqw
+          )
+      )
+    );
+  }
+  .step-start {
+    display: none;
+  }
+  /* The round's net and any message float under the rows, not on them. */
+  .stage .stage-top {
+    top: calc(8px + var(--step-h) + 12px);
+  }
+}
+
+/*
+ * An upright screen: the row runs left and right of the two lines under the
+ * balloon, in their band, where a slot is wide enough to have room beside
+ * them (one balloon on a phone; one or two on a tablet).
+ *
+ * The big multiplier under the balloon is the current step, so its place in
+ * the row is left empty (the anchor, as wide as those two lines) and the
+ * row is kept with that place in the middle. Passed steps go off to the
+ * left, the coming ones wait on the right, and each pump slides them one
+ * place along. The row is cut away around the middle, so a step slides in
+ * under the amount and out the other side instead of across it.
+ *
+ * It shows only for a balloon that can still be pumped: once it has popped
+ * or cashed out, the band is the result's alone.
+ */
+@media (orientation: portrait) {
+  @container slot (min-width: 300px) {
+    .steps {
+      --step-w: 56px;
+      --step-h: 24px;
+      /* The width of the two lines: the wider of them, plus some air. */
+      --step-hole: calc(
+        max(
+            var(--main-chars) * var(--main-max) * 0.62,
+            var(--sub-chars) * var(--sub-max) * 0.58
+          ) + 18px
+      );
+      position: absolute;
+      right: 0;
+      bottom: var(--action-h);
+      left: 0;
+      display: flex;
+      align-items: flex-start;
+      height: var(--label-h);
+      /* Level with the big multiplier: the top of that line (the two lines
+         sit in the middle of the band, above its 6px foot), then half of
+         what the line is taller than a step. */
+      padding-top: calc(
+        (var(--label-h) - 6px - var(--main-max) * 1.1 - var(--sub-max) * 1.3) / 2 +
+          (var(--main-max) * 1.1 - var(--step-h)) / 2
+      );
+      /* A tap goes to the balloon's slot under it. */
+      pointer-events: none;
+      -webkit-mask-image: linear-gradient(
+        90deg,
+        transparent,
+        #000 var(--step-fade),
+        #000 calc(50% - var(--step-hole) / 2 - 12px),
+        transparent calc(50% - var(--step-hole) / 2),
+        transparent calc(50% + var(--step-hole) / 2),
+        #000 calc(50% + var(--step-hole) / 2 + 12px),
+        #000 calc(100% - var(--step-fade)),
+        transparent
+      );
+      mask-image: linear-gradient(
+        90deg,
+        transparent,
+        #000 var(--step-fade),
+        #000 calc(50% - var(--step-hole) / 2 - 12px),
+        transparent calc(50% - var(--step-hole) / 2),
+        transparent calc(50% + var(--step-hole) / 2),
+        #000 calc(50% + var(--step-hole) / 2 + 12px),
+        #000 calc(100% - var(--step-fade)),
+        transparent
+      );
+    }
+    .slot:not([data-status='active'], [data-status='preview']) > .steps {
+      visibility: hidden;
+    }
+  }
+}
+
+/*
+ * The same band, for what is inside the row. These ask the row itself how
+ * wide it is (it is a container too, and as wide as its slot), which is why
+ * they are a separate block from the one above.
+ */
+@media (orientation: portrait) {
+  @container (min-width: 300px) {
+    .steps-track {
+      transform: translateX(
+        calc(50cqw - var(--lead) * var(--step-pitch) - var(--step-hole) / 2)
+      );
+    }
+    .step[data-anchor='true'] {
+      width: var(--step-hole);
+      visibility: hidden;
+    }
+  }
+}
+
+/*
+ * An upright slot with no room for the row (two or three balloons on a
+ * phone): each balloon still in play says the step its next pump goes for,
+ * small, under its amount: inside its own Pump button, or alone in that
+ * row when it has no button (the last balloon in play, or auto-play).
+ */
+.slot-next {
+  display: none;
+}
+
+@media (orientation: portrait) {
+  @container slot (max-width: 299.98px) {
+    .slot-next {
+      display: block;
+      color: var(--muted);
+      font-size: max(9px, min(11px, 116cqw / max(var(--next-chars, 10), 1)));
+      font-weight: 600;
+      line-height: 1.15;
+      white-space: nowrap;
+    }
+    .slot-pump .slot-next {
+      color: inherit;
+      opacity: 0.72;
+    }
+    /* Two lines in a button one tap high: no room for the usual padding. */
+    .slot-pump:has(.slot-next) {
+      padding-block: 0;
+      line-height: 1.15;
+    }
+    p.slot-next {
+      align-self: center;
+      margin: 0;
+    }
+  }
+}
+
+/* Animations off: the row is simply in its new place (motion.ts). */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='full']) .steps-track {
+    transition: none;
+  }
+}
+
+:root[data-motion='reduce'] .steps-track {
+  transition: none;
+}

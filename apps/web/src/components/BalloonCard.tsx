@@ -1,11 +1,12 @@
 import type { CSSProperties } from 'react';
 import type { BalloonView, PumpOutcome } from '../api/contract';
 import { Balloon, balloonSize, type BalloonBeat } from '../balloon/Balloon';
-import { afterRoundLine, twoLineChars } from '../game/afterRound';
+import { afterRoundWords, twoLineChars, type AfterRoundWords } from '../game/afterRound';
 import type { Beat } from '../game/useGame';
 import { balloonTension } from '../game/risk';
 import { balloonSetUp, firstPump, useFirstLift, type SetUpFrom } from '../game/setUp';
 import { HoldButton } from './HoldButton';
+import { StepRow } from './StepRow';
 import type { WinTier } from '../game/winTier';
 import { formatCents, formatMultiplier } from '../money';
 
@@ -193,29 +194,56 @@ function SlotLabel({
  * its top rung uses the empty row to say, small and grey, where it would
  * have popped (`after`). The two never meet: the button is only for a
  * balloon in play, the line only for one that cashed out.
+ *
+ * Where a slot has no room for the row of steps, a balloon in play also
+ * says here the step its next pump goes for (`next`): inside its button,
+ * or alone when it has none.
  */
 function SlotAction({
   slot,
   show,
   after = null,
+  next = null,
   onPump,
   onPumpHold,
 }: {
   readonly slot: number;
   readonly show: boolean;
-  readonly after?: string | null;
+  readonly after?: AfterRoundWords | null;
+  /**
+   * The multiplier this balloon's next pump goes for, like "1.28×", while
+   * it is in play. Shown only in a slot with no room for the row of steps
+   * (two or three balloons on an upright phone, see steps.css).
+   */
+  readonly next?: string | null;
   readonly onPump: () => void;
   readonly onPumpHold: () => void;
 }) {
+  const nextLine = next === null ? null : `next ${next}`;
+  const nextStyle =
+    nextLine === null ? undefined : ({ '--next-chars': nextLine.length } as CSSProperties);
   return (
     <div className="slot-action">
+      {!show && nextLine !== null && (
+        <p className="slot-next" style={nextStyle}>
+          {nextLine}
+        </p>
+      )}
       {!show && after !== null && (
+        // Both wordings are written; the CSS shows the short one only in a
+        // slot too narrow for the full one. The full one is the title.
         <p
           className="slot-after"
-          style={{ '--after-chars': twoLineChars(after) } as CSSProperties}
-          title={after}
+          style={
+            {
+              '--after-full-chars': twoLineChars(after.full),
+              '--after-short-chars': twoLineChars(after.short),
+            } as CSSProperties
+          }
+          title={after.full}
         >
-          {after}
+          <span className="after-full">{after.full}</span>
+          <span className="after-short">{after.short}</span>
         </p>
       )}
       {show && (
@@ -230,6 +258,11 @@ function SlotAction({
           title={`Pump balloon ${slot}. Hold to keep pumping.`}
         >
           Pump
+          {nextLine !== null && (
+            <span className="slot-next" style={nextStyle}>
+              {nextLine}
+            </span>
+          )}
         </HoldButton>
       )}
     </div>
@@ -272,7 +305,9 @@ export function BalloonCard({
   // The art plays the win once; the label keeps its win colour.
   const artWin = winShown ? undefined : win;
   // Where it would have popped: only once the round is over and still.
-  const after = afterRoundShown ? afterRoundLine(balloon) : null;
+  const after = afterRoundShown ? afterRoundWords(balloon) : null;
+  const main = mainText(balloon);
+  const sub = subText(balloon, beat, patched, outcome);
 
   return (
     <article
@@ -284,6 +319,15 @@ export function BalloonCard({
       aria-label={`Balloon ${slot}`}
       aria-current={selected ? 'true' : undefined}
     >
+      <StepRow
+        slot={slot}
+        ladder={ladder}
+        rung={balloon.rung}
+        topRung={balloon.topRung}
+        status={balloon.status}
+        mainChars={main.length}
+        subChars={sub.length}
+      />
       <div className="balloon-box">
         <Balloon
           slot={slot}
@@ -306,16 +350,17 @@ export function BalloonCard({
           }
         />
       </div>
-      <SlotLabel
-        main={mainText(balloon)}
-        sub={subText(balloon, beat, patched, outcome)}
-        won={win !== undefined}
-        live={!quiet}
-      />
+      <SlotLabel main={main} sub={sub} won={win !== undefined} live={!quiet} />
       <SlotAction
         slot={slot}
         show={canPump}
         after={after}
+        // The server's own number for the next pump; none once it is over.
+        next={
+          balloon.status === 'active' && balloon.next
+            ? formatMultiplier(balloon.next.multiplierHundredths)
+            : null
+        }
         onPump={onPump}
         onPumpHold={onPumpHold}
       />
@@ -327,18 +372,32 @@ interface PreviewCardProps {
   readonly slot: number;
   /** The bet typed for this balloon, or null while it is not a valid amount. */
   readonly betCents: number | null;
+  /** The chosen difficulty's ladder: the steps this balloon would climb. */
+  readonly ladder: readonly number[];
+  /** The highest rung that bet can reach (the whole ladder while there is no valid bet). */
+  readonly topRung: number;
 }
 
 /** A balloon before the round starts, with the bet that will ride on it. */
-export function PreviewCard({ slot, betCents }: PreviewCardProps) {
+export function PreviewCard({ slot, betCents, ladder, topRung }: PreviewCardProps) {
+  const main = betCents === null ? '—' : formatCents(betCents);
   return (
     <article className="slot" data-status="preview" aria-label={`Balloon ${slot}`}>
+      <StepRow
+        slot={slot}
+        ladder={ladder}
+        rung={0}
+        topRung={topRung}
+        status="preview"
+        mainChars={main.length}
+        subChars={0}
+      />
       <div className="balloon-box">
         {/* Before any bet: the pump with its hose on the floor, no balloon.
              The balloon goes on when the bet is placed. */}
         <Balloon slot={slot} scale={0.45} idle />
       </div>
-      <SlotLabel main={betCents === null ? '—' : formatCents(betCents)} sub="" />
+      <SlotLabel main={main} sub="" />
       <SlotAction slot={slot} show={false} onPump={() => undefined} onPumpHold={() => undefined} />
     </article>
   );
