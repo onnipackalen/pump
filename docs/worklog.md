@@ -723,3 +723,48 @@ simulator engines that are wrong on purpose.
 
 Left as it is: the volatility printed for Expert moves from run to run,
 because rare huge wins decide it. The line now says so.
+
+## 2026-11-20: fixes from the hostile critique (round panel, Patch, wording)
+
+A team of hostile critics (veteran player, design lead, regulator, art
+director, cheat) reviewed the game. Their chat handed each fix to the chat
+holding those files; this entry covers the ones given to the "Hostile agent
+game fix" chat, built on branch `critique-fixes`.
+
+Built:
+
+- Round panel with 2-3 balloons: Total bet showed only the picked
+  balloon's stake ($1.00 shown, $3.00 riding). It now adds up every
+  balloon's bet and Patches. Cash out and Patch + Pump carry the picked
+  balloon's colour dot, the same dot the bet panel uses, so the panel says
+  which balloon they act on. Cash out all sits beside Pump all, and the big
+  button says Pump once only one balloon is left. Which buttons exist is
+  fixed for the whole round, so nothing moves under a finger when a balloon
+  ends; only labels change.
+- The keyboard Patch now takes Shift+P. A single stray P bought a Patch,
+  and on Expert at the top bet after pump 1 that costs $696.72.
+- The working Patch + Pump button had a dashed edge and stripes, which read
+  as "locked". It now has a solid edge and a filled panel; the tape icon
+  still marks it.
+- Game info says Patches are paid on top of the bet, so the bet limits do
+  not cap them, and that late Patches can cost many times the bet.
+- `npm run rtp` said cent rounding "only shows on tiny bets". Patch prices
+  round up too, and an early Patch can cost a few cents at a $1 bet, so the
+  note now says rounding costs most on small amounts: tiny bets and cheap
+  Patches at any bet.
+
+Turned out wrong, and how it was caught:
+
+- The entry "auto-play, sound, review fixes and graphics (web)" above says
+  the strain cues, the top seal and the Patch tape sticker are off. Commit 9148fb2,
+  46 minutes after that entry, turned those three back on, and the game
+  shows them. The ghost outline, the scrap after a pop and the cash-out
+  tick are still off (balloon-app.css). The art director critic caught the
+  mismatch; it was checked against BalloonCard.tsx and git blame.
+
+How it was checked: screen tests, lint and typecheck pass. The round panel
+was drawn from the real component and styles at desktop width and about
+260 px wide (a 320 px phone gives it 304 px), with one balloon, three
+balloons, and three balloons with one left. The full game was not played in a browser:
+other chats were already running the most preview servers this folder
+allows.
