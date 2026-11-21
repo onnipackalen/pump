@@ -163,11 +163,15 @@ body {
  * balloons shrink to make room. Two things keep that from going wrong on a
  * small phone with three bets:
  *
- * - When no balloon has a Pump button (before a round, after it, and while
- *   auto-play runs) the button row under the balloons is closed, and the
- *   pictures get its height. It was an empty strip exactly when the bet
- *   panel is at its tallest. During a round the row never comes and goes:
- *   it is there as long as one balloon is in play.
+ * - The button row under the balloons is closed, and the pictures get its
+ *   height, whenever no balloon can have a Pump button of its own: before a
+ *   round and after it (no balloon in play), in a round of one balloon
+ *   (the panel's big button is its Pump), and while auto-play runs (rounds
+ *   and the gaps between them alike). It was an empty strip exactly when
+ *   the bet panel is at its tallest.
+ *   In a round of two or three played by hand the row stays for the whole
+ *   round, also when it is empty because only one balloon is left. So
+ *   nothing on the stage moves while a balloon is in play.
  * - The stage never gets smaller than its two lines of numbers and a small
  *   picture. Only if even that does not fit (no real phone in the size
  *   check) does the panel scroll inside itself, as a last resort.
@@ -180,10 +184,14 @@ body {
   .stage {
     min-height: calc(var(--label-h) + 56px);
   }
-  .stage:not(:has(.slot-pump)) {
+  .stage:not(:has(.slot[data-status='active'])),
+  .stage:has(.slot:only-child):not(:has(.slot-pump)),
+  .layout:has(.auto-progress[data-running='true']) .stage {
     --action-h: 0px;
   }
-  .stage:not(:has(.slot-pump)) .slot-action {
+  .stage:not(:has(.slot[data-status='active'])) .slot-action,
+  .stage:has(.slot:only-child):not(:has(.slot-pump)) .slot-action,
+  .layout:has(.auto-progress[data-running='true']) .stage .slot-action {
     padding: 0;
     overflow: hidden;
   }
