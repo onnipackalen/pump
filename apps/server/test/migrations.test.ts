@@ -19,6 +19,23 @@ describe('applying the database steps', () => {
     expect(count(db, 'schema_migrations')).toBe(steps);
   });
 
+  it('keeps the number and the name of every step that has shipped', () => {
+    // A database remembers each step by number and name, and the server
+    // refuses a file whose recorded step has another name. So renaming or
+    // renumbering a step here would make the live database refuse to start.
+    // A new step adds a line; an existing line never changes.
+    const db = openDatabase(':memory:');
+    migrate(db);
+
+    const steps = db.prepare('SELECT id, name FROM schema_migrations ORDER BY id').all();
+
+    expect(steps.slice(0, 3)).toEqual([
+      { id: 1, name: 'players, seeds, rounds, balloons, actions, ledger, idempotency' },
+      { id: 2, name: 'reveals at round end' },
+      { id: 3, name: 'a player can keep their wins private' },
+    ]);
+  });
+
   it('gives players of an older database the choice to keep wins private, switched off', () => {
     const db = openDatabase(':memory:');
     // As the server before this choice existed left it: steps 1 and 2, with

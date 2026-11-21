@@ -4,8 +4,10 @@ import { GAME_CONFIG, type GameConfig } from '@pump/engine';
 import { describe, expect, it } from 'vitest';
 import { text } from '../src/db/rows';
 import { featuresFromEnv } from '../src/features';
+import { playersRepository } from '../src/repositories/players';
 import { roundsRepository } from '../src/repositories/rounds';
 import { reconcile } from '../src/services/reconcile';
+import { settingsService } from '../src/services/settings';
 import {
   PUBLIC_WINS_FRESH_MS,
   PUBLIC_WINS_PER_LIST,
@@ -490,14 +492,21 @@ describe('the choice to keep wins private', () => {
 
   it('belongs to a player: without their cookie it can be neither read nor changed', async () => {
     const world = testWorld();
+    // There IS a player. A request without their cookie must not fall back
+    // on them, neither with no cookie nor with a well-formed stranger's one.
+    await firstVisit(world.app);
+    const stranger = { pump_player: 'x'.repeat(43) };
 
-    const read = await world.app.inject({ method: 'GET', url: '/api/settings' });
-    const changed = await put(world, {}, { winsPrivate: true }, 'key-1');
+    for (const cookies of [{}, stranger]) {
+      const read = await world.app.inject({ method: 'GET', url: '/api/settings', cookies });
+      const changed = await put(world, cookies, { winsPrivate: true }, `key-${String(Object.keys(cookies).length)}`);
+      expect(read.statusCode).toBe(401);
+      expect(changed.statusCode).toBe(401);
+      expect(changed.json()).toMatchObject({ error: { code: 'no_session' } });
+    }
 
-    expect(read.statusCode).toBe(401);
-    expect(changed.statusCode).toBe(401);
-    expect(changed.json()).toMatchObject({ error: { code: 'no_session' } });
-    expect(count(world.db, 'players')).toBe(0);
+    expect(count(world.db, 'players')).toBe(1);
+    expect(world.db.prepare('SELECT SUM(wins_private) AS total FROM players').get()).toEqual({ total: 0 });
   });
 
   it('is a change like any other: it needs a key, a well-formed body, and is applied once', async () => {
@@ -519,6 +528,31 @@ describe('the choice to keep wins private', () => {
     expect(reused.statusCode).toBe(422);
     expect(reused.json()).toMatchObject({ error: { code: 'key_reused' } });
     expect(text(world.db.prepare('SELECT CAST(wins_private AS TEXT) AS v FROM players').get() ?? {}, 'v')).toBe('1');
+  });
+
+  it('never makes the server read the rounds again, however often it is switched', () => {
+    const runtime = testRuntime(GAME_CONFIG);
+    const repository = roundsRepository(runtime.db);
+    let reads = 0;
+    const lists = publicWinsService(runtime, {
+      ...repository,
+      publicWins: (limit: number) => {
+        reads += 1;
+        return repository.publicWins(limit);
+      },
+    });
+    const players = playersRepository(runtime.db);
+    players.insert({ id: 'p1', tokenHash: 'hash-1', at: '2026-01-01T00:00:00.000Z' });
+    const settings = settingsService(players, lists);
+
+    lists.list();
+    for (let n = 0; n < 200; n += 1) {
+      settings.set('p1', { winsPrivate: n % 2 === 0 });
+      lists.list();
+    }
+
+    // All inside the five seconds: one read, the first.
+    expect(reads).toBe(1);
   });
 
   it('moves no money and leaves the wallet reconciled', async () => {
@@ -632,27 +666,45 @@ describe('the clock jumping during a read of the public wins', () => {
 });
 
 describe('the switch for public wins', () => {
-  it('is on when nothing is set, when it is empty, or when it is set to "on"', () => {
-    expect(featuresFromEnv({})).toEqual({ features: { publicWins: true }, warnings: [] });
-    expect(featuresFromEnv({ PUBLIC_WINS: 'on' }).features.publicWins).toBe(true);
-    expect(featuresFromEnv({ PUBLIC_WINS: '' }).features.publicWins).toBe(true);
-    expect(featuresFromEnv({ PUBLIC_WINS: '  ' }).features.publicWins).toBe(true);
+  const AWAY = false;
+  const ON_HOST = true;
+
+  it('away from a host, is on when nothing is set, when it is empty, or when it is set to "on"', () => {
+    expect(featuresFromEnv({}, AWAY)).toEqual({ features: { publicWins: true }, warnings: [] });
+    expect(featuresFromEnv({ PUBLIC_WINS: 'on' }, AWAY).features.publicWins).toBe(true);
+    expect(featuresFromEnv({ PUBLIC_WINS: '' }, AWAY).features.publicWins).toBe(true);
+    expect(featuresFromEnv({ PUBLIC_WINS: '  ' }, AWAY).features.publicWins).toBe(true);
   });
 
-  it('is off when set to "off", whatever the case or spaces', () => {
-    expect(featuresFromEnv({ PUBLIC_WINS: 'off' })).toEqual({
-      features: { publicWins: false },
+  it('on a host, is off unless it is set to "on": a forgotten or misnamed entry shows nothing', () => {
+    expect(featuresFromEnv({}, ON_HOST)).toEqual({ features: { publicWins: false }, warnings: [] });
+    expect(featuresFromEnv({ PUBLIC_WINS: '' }, ON_HOST).features.publicWins).toBe(false);
+    expect(featuresFromEnv({ PUBLIC_WIN: 'on', public_wins: 'on' }, ON_HOST).features.publicWins).toBe(false);
+    expect(featuresFromEnv({ PUBLIC_WINS: 'on' }, ON_HOST)).toEqual({
+      features: { publicWins: true },
       warnings: [],
     });
-    expect(featuresFromEnv({ PUBLIC_WINS: ' OFF ' }).features.publicWins).toBe(false);
+    expect(featuresFromEnv({ PUBLIC_WINS: ' ON ' }, ON_HOST).features.publicWins).toBe(true);
+  });
+
+  it('is off when set to "off", whatever the case or spaces, on a host or away from one', () => {
+    for (const where of [AWAY, ON_HOST]) {
+      expect(featuresFromEnv({ PUBLIC_WINS: 'off' }, where)).toEqual({
+        features: { publicWins: false },
+        warnings: [],
+      });
+      expect(featuresFromEnv({ PUBLIC_WINS: ' OFF ' }, where).features.publicWins).toBe(false);
+    }
   });
 
   it('is off, with a warning, for a word it does not know: a typo never switches it on', () => {
-    for (const word of ['of', 'false', 'true', '0', '"off"']) {
-      const read = featuresFromEnv({ PUBLIC_WINS: word });
-      expect(read.features.publicWins).toBe(false);
-      expect(read.warnings).toHaveLength(1);
-      expect(read.warnings[0]).toContain(`PUBLIC_WINS is "${word}"`);
+    for (const where of [AWAY, ON_HOST]) {
+      for (const word of ['of', 'false', 'true', '0', '"off"', '"on"']) {
+        const read = featuresFromEnv({ PUBLIC_WINS: word }, where);
+        expect(read.features.publicWins).toBe(false);
+        expect(read.warnings).toHaveLength(1);
+        expect(read.warnings[0]).toContain(`PUBLIC_WINS is "${word}"`);
+      }
     }
   });
 });
