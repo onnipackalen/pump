@@ -1296,3 +1296,44 @@ on the hose). Live in the game before the merge: 3 Expert balloons at
 375x667, no page scroll, same picture sizes, and a cash-out lifting off
 with the new knot. Layout files (styles.css, App.tsx, components) are
 identical to main.
+
+## 2026-11-20: the game is live on Render
+
+The site is at https://pump-wysj.onrender.com. Render built it from commit
+8562809 in 44 seconds, on Node 26.13.1, from `render.yaml` with nothing
+typed in by hand except the Blueprint's name. It was set up from the
+repository's public address, so Render was given no access to GitHub.
+
+Checked on the live site:
+
+- From outside: the health check answers, the game page loads, the player
+  cookie is HttpOnly and Secure, a request without a session gets 401, and
+  plain http is sent on to https.
+- Render's Disk page shows 1 GB mounted at `/var/data`, and the first start
+  logged "the database file is /var/data/pump.db: made a NEW, EMPTY file".
+- The deploy test: a bet was placed and the balloon pumped once, the round
+  left open. Then the service was deployed again from Render's page. After
+  it, the same balance and the same open round came back, the log said
+  "opened the existing file, 3 players", and the round was cashed out.
+
+Turned out different from what was written, and how it was seen:
+
+- The README said a push goes live by itself once the checks pass. With
+  the public-address setup it does not: another chat's push (297760c) got
+  its green check and Render started nothing. The README and `render.yaml`
+  now say a new version goes live with Manual Deploy.
+- "A Blueprint file was found, but there was an issue" on Render's page
+  meant only that no payment card was on file yet. It cleared after the
+  card was added.
+- In Render's Manual Deploy menu, a click made while the menu was still
+  sliding open landed on "Deploy a specific commit", which would have
+  switched automatic deploys off. It was cancelled before anything was
+  chosen. The README now warns about that entry.
+
+Cost: $7.25 a month (Render's own figure on the review page), counted by
+the second. The owner's limit is $10 in total, so the service has to be
+deleted by about 20 December 2026.
+
+Left as it is: Render calls the health check every five seconds and the
+server logs each call, so the log is mostly health checks. Search the log
+for `the database file is` to find the start line.
