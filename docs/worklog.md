@@ -1012,3 +1012,46 @@ the stage or the panel needs the size check run on small upright phones.
 
 Left open: an upright tablet (768x1024) still gets the side-by-side
 layout, so half its stage is empty sky.
+
+## 2026-11-20: upright tablets get the stacked layout
+
+The user's call: "Yes, fix tablets". One CSS change in `styles.css`.
+
+- Every screen that is taller than it is wide now has the stage on top at
+  full width and the panel underneath. Before, only screens up to 760 px
+  wide did; an upright tablet got the side panel, which left the stage a
+  narrow strip with half of it empty sky. On a tablet the panel keeps a
+  phone's width (560 px) in the middle, so its buttons don't stretch.
+- The two outer balloon pictures get side room that grows with the screen.
+
+At 768x1024 with three balloons a picture went from 203x325 px to 287x459
+on the bet screen and 359x574 in a round.
+
+Checked on the real server with the size check: 36 sizes (the earlier ones
+plus 761x1000, 810x1080, 820x1180, 834x1194, 900x1200, 1024x1366 and four
+large upright windows), five states with three balloons (a live round, a
+finished round, the bet screen with every bet capped, the Auto tab,
+auto-play running). 35 sizes: nothing scrolls, nothing is off screen, no
+text is cut, the pumps stand on the floor. The one left is still 568x320.
+
+Turned out wrong, and how it was caught:
+
+- With the stage at a tablet's full width, the right-hand pump's shadow was
+  cut by about 6 px at the screen's edge. A picture may be one and a half
+  slots wide, so what is drawn reaches past its slot by an amount that
+  grows with the picture, while the room at the screen's edge was a fixed
+  8 px. On phones it had fitted by 1 to 2 px, by luck. Caught by the size
+  check's rule that no art may pass the screen edge. The check now uses
+  where the drawing really ends (14% and 87% across the picture), and the
+  side room is 2.8% of the stage's width.
+- That side room first shrank the pictures on a wide desktop by 8%, where
+  the balloons already have wide empty margins. Caught by comparing picture
+  sizes before and after in the same check (762 px became 704 px at
+  1920x1080). The margins now count as that room.
+- The first cut-off, "upright and at most 1100 px wide", left a window of
+  1101x1400 with the old half-empty layout. Caught by testing one pixel
+  past the limit. The rule is now just "upright".
+
+Not changed: a very large upright screen (1440x2560) shows the balloons at
+their largest size (762 px) with sky above them. The balloons stop growing
+at 960 px of stage width on every screen.
