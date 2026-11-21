@@ -1680,3 +1680,39 @@ it is in the motion-off list now.
 
 `balloonLook.test.ts` asked for the old grey scrap; it now checks the
 torn neck's colours on every balloon and that the number is not dimmed.
+
+## 2026-11-20: public wins, the server half (branch public-wins)
+
+Built, from the owner's competitor notes ("you can see other people's wins,
+and lucky wins. Want to show other people's biggest wins too", and "make it
+easy to turn off"):
+
+- `GET /api/wins`: three lists of at most ten wins across all players: the
+  latest, the largest gains and the highest multipliers. A win is a finished
+  round that paid out more than its played bets plus Patches; refunded bets
+  are left out, as on the stats page. It needs no cookie and makes no player.
+- Nothing in the answer identifies a player or a round. A player is a
+  six-character tag, a one-way hash of the player's id. No round id is sent,
+  so nobody can ask for another player's round.
+- The off switch: `PUBLIC_WINS=off` when the server starts. The answer is
+  then `enabled: false` with empty lists and nothing is read. A word that is
+  neither `on` nor `off` switches it off too, with a warning in the log.
+- One answer is reused for five seconds, because the address is open to
+  anyone and each fresh answer reads every finished round.
+- No database step and no change to any money path: it only reads.
+
+Checked: 15 tests at 9400, 9700 and 9900. They play real rounds whose
+outcomes are chosen in advance from the real draw code: a win, a pop, a
+cash-out that only returns the bet (not a win), a round ended by the 24-hour
+rule with one bet handed back (a win on the bet that was played), and a round
+still in progress with a balloon already cashed out for a gain (not shown).
+They search the raw answer for every player id, round id, seed, seed hash,
+client seed, token hash and cookie in the database.
+
+Not built here: the screen half. The shape is `PublicWinsResponse` in
+`packages/contract`.
+
+Known and left: the three lists are read with a full pass over finished
+rounds. That is fine for a demo and is why the answer is reused for five
+seconds. With real traffic it wants an index or a small table kept up to
+date when a round finishes.

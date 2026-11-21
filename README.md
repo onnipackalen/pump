@@ -203,12 +203,23 @@ All JSON. The exact shapes are TypeScript types in `packages/contract`.
 | `GET /api/health` | Answers `{ "status": "ok" }`. Render calls it to see that the server is up, so `render.yaml` names it. |
 | `GET /api/session` | Wallet, seeds and the round in progress, so a page refresh restores it. A first visit creates the player with $10,000 and sets the cookie. It is the only request that creates a player, so the screen loads it first. |
 | `GET /api/history?limit=10` | The player's latest finished rounds. |
+| `GET /api/stats` | The player's own results over every finished round: profit over time, best win, rounds by difficulty. |
+| `GET /api/wins` | Other players' latest, largest and luckiest wins, ten of each. Needs no cookie, and sends nothing that identifies a player or a round. Empty when the server is started with `PUBLIC_WINS=off`. |
 | `POST /api/rounds` | Starts a round: `{ difficultyId, betsCents }`, one bet per balloon. Charges the bets. |
 | `POST /api/rounds/:id/pump` | One pump: `{ balloonIndex, expectedDrawIndex, patch }`. With `patch: true` the Patch is bought and the pump made in one step. The answer says `survived`, `saved`, `popped` or `top`. If it ends the round, each balloon cashed out below its top gets `afterRound`: where it would have popped. |
 | `POST /api/rounds/:id/cash-out` | Cashes out one balloon: `{ balloonIndex, expectedDrawIndex }`. If it ends the round, each balloon cashed out below its top gets `afterRound`, as with a pump. |
 | `GET /api/rounds/:id/verify` | A finished round with its revealed server seed, the RTP, ladder and payout cap it was played with, and each balloon's actions, draws and reveal, to recompute it. 409 until the seed has been rotated. |
 | `PUT /api/fairness/client-seed` | Sets the client seed. Never resets the nonce. |
 | `POST /api/fairness/rotate` | Retires the server seed, reveals it, and starts a new one. Refused during a round. |
+
+Showing other players' wins is not allowed in every market, so it has an off
+switch. Start the server with `PUBLIC_WINS=off` and `GET /api/wins` answers
+`"enabled": false` with empty lists, and the server reads nothing for it. A
+value that is neither `on` nor `off` also switches it off, with a warning in
+the log: a typo never switches it on. On Render that is one more entry under
+`envVars` in `render.yaml`. A win there is a finished round that paid out more
+than its bets and Patches; a player is shown only as a six-character tag made
+by a one-way hash.
 
 Every request that changes something needs an `Idempotency-Key` header. Errors
 always look like `{ "error": { "code", "message" } }`:
