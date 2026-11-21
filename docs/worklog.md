@@ -2379,3 +2379,47 @@ What went wrong, and how it was caught:
   the check printed the media query; the driver now turns touch off.
 - The browser pane reset its size mid-measurement when its width changed,
   so every live check ran in an own headless Chrome instead.
+
+## 2026-11-21: public wins, fixes after the review (branch public-wins-screen)
+
+Fixed what the review of the public wins screen found:
+- Phones: a quick flick up from sheet down flew past the bet panel to the
+  end of the wins table. The whole app is a snap area and its end is the
+  wins' end, so scroll-snap-stop could not stop it. Now the wins wait off
+  the page while the sheet is down and join it once the page rests with
+  the sheet up (`wins/sheetFirst.ts`, pure rule tested). Every flick and
+  slow drag from sheet down rests at sheet up, a second one goes on to the
+  wins; most flicks back down stop at sheet up (scroll-snap-stop on the
+  sheet), hard ones go to the top.
+- Computer: the page shows no scrollbar while the wins are on it, so
+  where scrollbars take room the game no longer gets 15px narrower when
+  the wins arrive. The top bar is sticky there, with the page's sky fixed
+  behind it, so the balance and settings stay in reach.
+- A wide table now scrolls inside its card (the card's grid column could
+  grow past the card); long difficulty names are cut.
+- The panel itself shows nothing for an off answer, with a test (the only
+  guard was in an effect no test ran).
+- The multiplier column is "Best ×": a round's best balloon, so Bet times
+  it is not the payout with two or three balloons.
+- Settings row: its rule is a pure reducer with tests (never shows a value
+  the server did not send); no switch role before the value is known;
+  busy only while a request is on its way; the failure line lines up.
+- Polling uses performance.now(), so a clock jump does not stall it.
+
+Left as built, for the user: with a mouse the page can still scroll down
+to the wins during a round (the top comment of styles.css now says so).
+
+Checked live in my own headless Chrome at pwfix.localhost:3220: touch
+flicks at 390x844 and 375x667 (135/543 and 113/517), forced 15px
+scrollbars at 1440x900 and 1024x768 (page width and game rects the same
+as with the wins off), the top bar's pixels at the top of the page (at
+most 1 of 255 off, the same noise a scrollable page has without the
+sticky bar), a 320x568 table, a forced 500 on the settings read and save.
+
+What went wrong, and how it was caught:
+- Staging one CSS file by hunks with no context put the sheet-down rule
+  after the file's last block in the first commit. Caught by reading the
+  diff left after that commit; the next commit moves it back. Later
+  commits were staged from whole files.
+- Moving the "page start" snap from the app to the sticky top bar was
+  tried and dropped: Chrome then let the page rest anywhere.
