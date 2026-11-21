@@ -1145,3 +1145,50 @@ step in the README cover it.
 
 Not done by anyone yet: the deploy itself. Nothing here has run on
 Render; the dry run was on a Mac. The first deploy is the real test.
+
+## 2026-11-20: the air pocket is the hose swelling, and it no longer flashes
+
+The user could not see the air pocket in play and asked for one. It was
+there (since bc07ff7), but as a pale dot 5 to 18 pixels across that was
+on screen for about 0.35 s. Recorded frame by frame in a real round on a
+local server: it ran on every pump, just too small and pale to notice.
+A test page with the real balloon (speed down to 1/10, a freeze slider,
+every answer, late answers, phone size) let the user try versions:
+
+- A bigger, white, glowing dot was easy to see but sat on top of the
+  hose. The user asked for the pipe itself to spread open instead.
+- A lemon-shaped bulge in the hose's colour, moved by the old keyframes,
+  stuck out of the curve at the bend: the user spotted it. A stiff shape
+  can only follow a curved hose by luck.
+- What shipped: the bulge is drawn on the hose's own line. Six dashes of
+  that line, long and thin to short and fat, all centred on one point,
+  make a round bulge that tapers into the hose; a paler, blurred middle
+  and the hose's shine go over it. The keyframes now move one number,
+  how far along the hose the bulge is (`--pb-air-s`, a registered
+  property so it can animate), and the opacity. Nothing can leave the
+  hose. The old timing was kept by measuring the old keyframe points
+  along the hose line.
+- The wait no longer flashes. In another chat the user asked to keep the
+  pocket but stop the flashing dot; the wait loop (`pb-air-wait`) is
+  gone and the rush just holds its last frame.
+- The swell by tension went from 1 / 1.07 / 1.14 / 1.22 (too small to
+  see) to 1 / 1.25 / 1.5 / 1.8 of the extra width, with the user's yes
+  and the base size the user picked ("Now"). It still comes only from the
+  published pop chance. "Biggest" (2.2x) was too big, the user said.
+
+Kept on purpose: a new swell still waits until the pocket has gone in
+(now a delayed `stroke-width` transition instead of a delayed `scale`),
+so the pocket never changes size on the frame the answer shows, where a
+pop and a survive could have looked different. Checked in a real round:
+the answer frame changes data-strain, the pocket goes in at its old
+width, and the new width lands about 200 ms later, hidden.
+
+Tests in `apps/web/test/pressTiming.test.ts` were rewritten for the new
+drawing: the swell is never read in a keyframe, a change of width waits
+for the entry, there is no wait loop, the keyframes move only along the
+hose and only forwards, and the entry starts where the rush ends.
+
+Found on the way: in Chrome, a paused animation of an inherited
+registered property that is seeked (`currentTime`) does not always
+redraw the children until their style is read. Running animations are
+fine; only freeze-frame tools are affected.
