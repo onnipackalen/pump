@@ -118,6 +118,24 @@ When the site is no longer needed: on the Blueprint's Settings page set Auto
 Sync to No, then delete the `pump` service. That destroys every wallet for
 good. Afterwards look at the Billing page to see that the charges stopped.
 
+## Feature switches
+
+Some features are not allowed in every market, so each one can be turned off
+without touching the game's math. All of them are listed here.
+
+| Switch | Where | What it turns off |
+|---|---|---|
+| `VITE_MARKET` | Set when the web app is built, e.g. `VITE_MARKET=gb npm run build`. The rules per market are in `apps/web/src/market.ts`. | `autoPlay`: the Auto tab. `autoBetSizing`: auto-play's "On win" / "On loss" bet changes (the bets then stay as the player entered them). |
+
+Known markets: no value means `default` (everything on); `gb` (or `uk`) has
+auto-play off. A value the file does not know switches every listed feature
+off and says so in the browser console, so a typo never turns a banned feature
+on. Adding a market, for example one for Ontario, is one line in `market.ts`.
+
+The player's own settings (sound, Animations off) are in the game's settings
+menu. Animations off removes movement but keeps the same timing, so a result
+never shows sooner.
+
 ## Scripts
 
 All of these run from the repo root.
