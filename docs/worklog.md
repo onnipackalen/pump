@@ -2057,3 +2057,39 @@ What turned out wrong, and how it was caught:
 Checked in headless Chrome on a static render (react-dom/server and the
 real CSS files) at 390 x 844 and 1440 x 900, animations on and off. Not
 yet checked on the live server.
+
+## 2026-11-21: the difficulty on the pump, after review
+
+A review of the entry above found four things wrong. All fixed here.
+
+- After the first round, picking another difficulty did not change the
+  pumps. The stage keeps a finished round's balloons beside the bet panel
+  until the next bet, and their pumps showed that round's level. So "it
+  changes with the difficulty switch" held only before the first bet of a
+  visit. Caught by building the real app with the demo client and playing
+  a round in headless Chrome; the tests had only rendered the cards on
+  their own. Now, once a round is over, its pumps show the difficulty
+  picked for the next round (game/level.ts, stageLevelId); while it runs,
+  its own. One catch to know: the finished round's step row still shows
+  the ladder it was played on, so for a moment the rings and that row can
+  name different levels.
+- On short screens (buttons 30 px tall) the dot under "Easy" and "Expert"
+  touched the "y" and the "p". It was placed a fixed gap from the button's
+  bottom. Now the name and the dot are stacked and centred together:
+  about 3.5 px apart at 320 to 1440 px wide, buttons no taller. Caught by
+  measuring the letters against the dot at 360 x 640; the first check had
+  used only 390 x 844 and 1440 x 900.
+- Expert's gold #f6d156 looked too like the sand and orange steps the page
+  keeps for the pop chance (OKLab distance 6 to 8). The colour test only
+  compared exact hex codes, so it could not catch that. It now measures
+  how different colours look, against every colour with a meaning (pop
+  chance included, at least 9 apart) and between the levels (at least 12).
+  Expert is a soft lemon now, #dee053.
+- The code said the four colours differ in lightness. Medium and Expert do
+  not, and with red-green colour blindness Easy and Expert look alike, and
+  so do Medium and Hard. The ring count (1 to 4) is what tells every
+  player the level; the comment now says so.
+
+Still for the user to judge: Easy's lime is the closest of the four to the
+win mint (OKLab 10.4). On an Easy cash-out its one thin ring sits under
+the mint "Paid" line. If it reads as a win, Easy needs a new colour.
