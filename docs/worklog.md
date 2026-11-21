@@ -2799,3 +2799,12 @@ new slots fade in from 0, two copies sink and clear on 3 to 1, and with
 Animations off nothing moves. At 390 x 844 a picture halfway through 1 to
 3 shows pump 1 shrinking left with its line, pumps 2 and 3 rising in.
 Not seen running at full speed on a screen, nor on a real phone or Safari.
+
+## 2026-11-21: c416258 deployed to the live site
+
+The stage glide (a new balloon count or difficulty glides into place before
+a round), three screen-only commits since 21fffd3. Typecheck and build here,
+GitHub's check green, Manual Deploy > Deploy latest commit; live 50 seconds
+later, serving the new build's files, and the log says `opened the existing
+file, 7 players`. The difficulty rings stay instant: the user chose "Keep
+them instant".
