@@ -140,7 +140,14 @@ export function Balloon({
           <rect x="0" y="0" width="200" height="320" fill="url(#pb-deep-fade)" />
         </mask>
         {/* Latex: the broad, soft light of the window on the upper left. */}
-        <radialGradient id="pb-soft-light" cx="0.5" cy="0.5" r="0.5">
+        <radialGradient
+          id="pb-soft-light"
+          gradientUnits="userSpaceOnUse"
+          cx="72"
+          cy="72"
+          r="46"
+          gradientTransform="translate(72 72) rotate(-24) scale(0.74 1) translate(-72 -72)"
+        >
           <stop offset="0" className="pb-soft-light-a" />
           <stop offset="1" className="pb-soft-light-b" />
         </radialGradient>
@@ -233,16 +240,10 @@ export function Balloon({
                 <path className="pb-gather-line" d="M87 198Q94 203 98.6 206.5M113 198Q106 203 101.4 206.5M93 192Q97 200 99.4 206.5M107 192Q103 200 100.6 206.5" />
                 <path className="pb-gather-light" d="M87.6 196.8Q94.6 201.8 99 205.4M93.9 191.4Q97.9 199.4 99.9 205.4" />
               </g>
-              {/* soft light: the broad glow of the window on the upper left. */}
-              <ellipse
-                className="pb-soft-light"
-                fill="url(#pb-soft-light)"
-                cx="72"
-                cy="72"
-                rx="34"
-                ry="46"
-                transform="rotate(-24 72 72)"
-              />
+              {/* soft light: the broad glow of the window on the upper left.
+                   Drawn on the body's own outline (the gradient makes the
+                   glow), so it can never reach past the balloon's edge. */}
+              <path className="pb-soft-light" fill="url(#pb-soft-light)" d={BODY_PATH} />
               <path className="pb-rim" d="M163 118C160 156 132 190 108 201C128 186 153 158 163 118Z" />
               <path className="pb-shine" d="M47 96C45 66 61 42 85 33C70 47 60 68 58 93C57.5 101 47.5 102 47 96Z" />
               <ellipse className="pb-glint" cx="99" cy="33" rx="7" ry="4" />
