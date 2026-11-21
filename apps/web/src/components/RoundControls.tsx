@@ -34,7 +34,8 @@ interface RoundControlsProps {
   readonly balloons: readonly BalloonView[];
   /**
    * The round has more than one balloon, so the big button here pumps every
-   * balloon still in play, and Cash out all sits beside it.
+   * balloon still in play, and Cash out all comes after Cash out and
+   * Patch + Pump.
    */
   readonly multi: boolean;
   /**
