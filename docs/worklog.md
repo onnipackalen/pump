@@ -1975,3 +1975,94 @@ Not built, not checked:
   approved plan, not built.
 - Chromium only. The rows use container queries, `:has()` and a mask; none
   has been tried in Safari or on a real iPhone.
+
+## 2026-11-21: the step row after an independent review
+
+The coordinator had the step row read by a second checker, apart from
+the chat that built it. Its verdict: the numbers are right (checked
+against the engine at 9400, 9700 and 9900 on all four ladders, with bets
+at every cap edge: locked steps are exactly where bet x multiplier is over
+the cap, current and next match the server, nothing shows early). It
+found four smaller things, each confirmed by a second tester. All four
+were real, and all four are fixed here on `one-screen-layout`.
+
+What was wrong, and what was done:
+
+1. No test covered how the cards hand a balloon to its row. The reviewer
+   broke the payout-cap wiring on purpose and all 296 web tests still
+   passed: the tests only knew the pure rules in `stepRow.ts`. New
+   `test/stepRowCards.test.ts` reads the markup the cards write: a card
+   locks exactly the steps above its balloon's own top (every ladder, the
+   cap-edge bets, three RTPs); a preview card locks what `topRungForBet`
+   says; "next" is the server's own number, inside the Pump button or
+   alone, and never on a balloon that is over, even one that still
+   carries a next pump; a result that is being held back shows nothing.
+   To make the preview's cap testable at all, `PreviewCard` now works out
+   its own top from the bet and the cap (it was worked out in `App.tsx`,
+   which no test can draw). Checked the way the reviewer did: five
+   wrong versions of the card (the ladder's length as the top, the cap
+   ignored in the preview, "next" on finished balloons, a wrong "next",
+   no next step in the button's label) each fail the new tests. A test
+   named for "every status" that only tried a refund was renamed and
+   widened to every ladder. The three widths at which a row along the top
+   changes are now tested against the step width, gap and fade in
+   `steps.css`, so one cannot be changed without the other.
+2. On an upright phone the row jumped when a Patch stopped a pop. The
+   hole around the amount was as wide as the longer of the two lines, and
+   "Patch stopped a pop" is longer than any amount, so the hole grew and
+   shrank with words that have nothing to do with the steps. The hole now
+   follows the big multiplier only, and is never narrower than a
+   five-character one, so "—" turning into "1.01×" does not move it
+   either. A step is now no taller than the big line (it was 24 px on a
+   21 px line on the smallest phones), so it cannot reach the small line
+   under it.
+3. On an upright phone the row did not slide on the first pump, and on
+   later pumps the next step blinked out instead of sliding under the
+   amount. The place in view was a wide, hidden item, and the item before
+   the first step was only there before the first pump, so the first pump
+   swapped two items in place. Now every place is one step wide, the
+   place before the first step is always there, and the rest of the hole
+   is a margin on the step after the current one. On a pump the row moves
+   one place and that margin moves on to the following step, with the
+   same time and curve, so every step simply moves one place and the next
+   one goes in under the amount. Measured at 390x844 by stopping the
+   slide at five points, for the first and for the second pump: the next
+   step goes from 62 px right of the middle to 55 px left of it (inside
+   the hole, hidden), the one after it from 124 to 62, the step before
+   comes out to 117 px left.
+4. A screen reader got all 32 steps of the ladder for every balloon, with
+   "out of reach" and "popped" only as labels on list items, which most
+   readers skip. The row is now hidden from screen readers. Each card has
+   one short hidden line instead ("Next 1.18×. Top at this bet 50.00×.",
+   or "First step ..." before the round), outside the live region, so
+   auto-play stays quiet. The Pump button's label names its next step,
+   since a label replaces the button's own text.
+
+Judged by the reviewer to be as meant, and left alone: the row stays on a
+computer after a pop or cash-out, and the stage shows the last round
+until the next bet.
+
+Checked: 34 sizes, thirteen states, on the real server. 33 pass, 568x320
+on its side as always; the row checks all pass, with new ones for the
+hole (as wide as the multiplier, centred on it, the place in view inside
+it) and for the small line (no step reaches it). The picture sizes are
+unchanged. 1500 tests, lint and typecheck pass.
+
+What went wrong on the way, and how it was caught:
+
+- The size check failed at 40 size-and-state pairs on its first run. It
+  was the check again, the same way as before: the row now has a second
+  slide (the margin), and the check only switched off the first, so it
+  measured mid-slide. With both off it finds nothing. The smallest phone
+  was then looked at by eye.
+- One full test run failed one engine test that this work does not touch
+  (`math.test.ts`, cashOutCents "for every bet swept"), with the machine
+  at load average 26. It passes alone (1.1 s; the limit is 5 s) and in
+  the next full run. The failure's own message was not kept, so "it ran
+  out of time" is a guess. This is probably what the 13 failures in the
+  entry before were.
+- The browser pane was closed in the middle of a run, which ended that
+  run; it was started again.
+
+Not checked: Safari and a real iPhone, as before. The slide was measured
+in Chromium by stepping its animations, not watched on a phone.

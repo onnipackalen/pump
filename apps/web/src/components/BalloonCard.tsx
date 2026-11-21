@@ -9,6 +9,7 @@ import { HoldButton } from './HoldButton';
 import { StepRow } from './StepRow';
 import type { WinTier } from '../game/winTier';
 import { formatCents, formatMultiplier } from '../money';
+import { topRungForBet } from '../game/rules';
 
 interface BalloonCardProps {
   readonly balloon: BalloonView;
@@ -225,7 +226,9 @@ function SlotAction({
   return (
     <div className="slot-action">
       {!show && nextLine !== null && (
-        <p className="slot-next" style={nextStyle}>
+        // Hidden from screen readers: the card's own short line (StepRow)
+        // already says the next step.
+        <p className="slot-next" style={nextStyle} aria-hidden="true">
           {nextLine}
         </p>
       )}
@@ -254,7 +257,9 @@ function SlotAction({
           // it. A press that comes too soon is ignored by the game.
           onHoldStart={onPumpHold}
           onPress={onPump}
-          aria-label={`Pump balloon ${slot}`}
+          // The label replaces the button's text for a screen reader, so
+          // it carries the next step too.
+          aria-label={next === null ? `Pump balloon ${slot}` : `Pump balloon ${slot}, next ${next}`}
           title={`Pump balloon ${slot}. Hold to keep pumping.`}
         >
           Pump
@@ -324,7 +329,6 @@ export function BalloonCard({
         topRung={balloon.topRung}
         status={balloon.status}
         mainChars={main.length}
-        subChars={sub.length}
       />
       <div className="balloon-box">
         <Balloon
@@ -371,13 +375,19 @@ interface PreviewCardProps {
   readonly betCents: number | null;
   /** The chosen difficulty's ladder: the steps this balloon would climb. */
   readonly ladder: readonly number[];
-  /** The highest rung that bet can reach (the whole ladder while there is no valid bet). */
-  readonly topRung: number;
+  /** The most one balloon can pay: it sets the top this bet can reach. */
+  readonly maxPayoutCents: number;
 }
 
-/** A balloon before the round starts, with the bet that will ride on it. */
-export function PreviewCard({ slot, betCents, ladder, topRung }: PreviewCardProps) {
+/**
+ * A balloon before the round starts, with the bet that will ride on it. The
+ * steps above that bet's top are shown as out of reach before the round
+ * starts (the payout cap); with no valid bet yet, the whole ladder shows.
+ */
+export function PreviewCard({ slot, betCents, ladder, maxPayoutCents }: PreviewCardProps) {
   const main = betCents === null ? '—' : formatCents(betCents);
+  const topRung =
+    betCents === null ? ladder.length : topRungForBet(ladder, betCents, maxPayoutCents);
   return (
     <article className="slot" data-status="preview" aria-label={`Balloon ${slot}`}>
       <StepRow
@@ -387,7 +397,6 @@ export function PreviewCard({ slot, betCents, ladder, topRung }: PreviewCardProp
         topRung={topRung}
         status="preview"
         mainChars={main.length}
-        subChars={0}
       />
       <div className="balloon-box">
         <Balloon slot={slot} scale={0.45} />

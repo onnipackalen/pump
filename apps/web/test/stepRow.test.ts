@@ -1,7 +1,7 @@
 import { GAME_CONFIG, multiplierAt, topRungForBet } from '@pump/engine';
 import { describe, expect, it } from 'vitest';
 import type { BalloonStatus } from '../src/api/contract';
-import { stepAnchor, stepRow, type StepRowInput } from '../src/game/stepRow';
+import { stepAnchor, stepRow, stepWords, type StepRowInput } from '../src/game/stepRow';
 import { formatMultiplier } from '../src/money';
 
 /**
@@ -122,10 +122,43 @@ describe('the row of multiplier steps', () => {
     }
   });
 
-  it('reads the same for every status that cannot be pumped at rung 0', () => {
-    const ladder = GAME_CONFIG.difficulties[0]?.ladder ?? [];
+  it('shows a refunded balloon with nothing passed, current, next or popped', () => {
+    // A refunded bet was never pumped: its whole ladder is simply ahead.
     const status: BalloonStatus = 'refunded';
-    const steps = stepRow({ ladder, rung: 0, topRung: ladder.length, status });
-    expect(steps.every((step) => step.state === 'ahead')).toBe(true);
+    for (const { ladder } of GAME_CONFIG.difficulties) {
+      const steps = stepRow({ ladder, rung: 0, topRung: ladder.length, status });
+      expect(steps.every((step) => step.state === 'ahead')).toBe(true);
+    }
+  });
+});
+
+describe('the row in one short line, for a screen reader', () => {
+  it('names the next step and the top the bet can reach, while a pump can be made', () => {
+    let said = 0;
+    for (const input of everyCase()) {
+      const words = stepWords(input);
+      const canPump =
+        (input.status === 'active' || input.status === 'preview') && input.rung < input.topRung;
+      if (!canPump) {
+        expect(words).toBeNull();
+        continue;
+      }
+      said += 1;
+      const next = formatMultiplier(multiplierAt(input.ladder, input.rung + 1));
+      const top = formatMultiplier(multiplierAt(input.ladder, input.topRung));
+      const lead = input.status === 'preview' ? 'First step' : 'Next';
+      expect(words).toBe(`${lead} ${next}. Top at this bet ${top}.`);
+    }
+    expect(said).toBeGreaterThan(0);
+  });
+
+  it('never names a step above the top the bet can reach', () => {
+    for (const input of everyCase()) {
+      const words = stepWords(input);
+      if (words === null) continue;
+      for (let rung = input.topRung + 1; rung <= input.ladder.length; rung += 1) {
+        expect(words).not.toContain(formatMultiplier(multiplierAt(input.ladder, rung)));
+      }
+    }
   });
 });
