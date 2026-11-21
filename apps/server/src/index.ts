@@ -28,18 +28,22 @@ const databasePath = process.env.DATABASE_PATH ?? inPackage('data/pump.db');
 // The built game screen. If it has been built (npm run build), the server
 // hands it out too, so one address serves the game and its API.
 const builtScreen = process.env.WEB_ROOT ?? inPackage('../web/dist');
-const webRoot = existsSync(join(builtScreen, 'index.html')) ? builtScreen : undefined;
+// The built screen carries its own copy of the RTP and the ladders, for what it
+// shows before a bet. While the game is being worked on (npm run dev) that
+// copy can be older than the server, so there the server is started with
+// --api-only and the screen comes from its own, always fresh, address.
+const apiOnly = process.argv.includes('--api-only');
+const webRoot =
+  !apiOnly && existsSync(join(builtScreen, 'index.html')) ? builtScreen : undefined;
 
 const db = openDatabase(databasePath);
 migrate(db);
 
 const runtime = systemRuntime(db);
 const app = buildApp({ runtime, logger: true, ...(webRoot === undefined ? {} : { webRoot }) });
-app.log.info(
-  webRoot === undefined
-    ? 'serving the API only (the game screen has not been built: npm run build)'
-    : `serving the game screen from ${webRoot}`,
-);
+if (webRoot !== undefined) app.log.info(`serving the game screen from ${webRoot}`);
+else if (apiOnly) app.log.info('serving the API only (the game screen has its own address: npm run dev)');
+else app.log.info('serving the API only (the game screen has not been built: npm start)');
 
 // The 24-hour rule for players who never come back: now and then, settle
 // every round that has been left idle that long.
