@@ -2,11 +2,12 @@
  * npm run rtp: the exact RTP check.
  *
  * Reads the RTP and the ladders from the game's configuration and proves, in
- * whole numbers and exact fractions, what cli/proof.ts lists: every cash-out
- * point returns exactly the RTP before rounding; for every legal bet no
- * cash-out and no Patch returns more than the RTP after rounding; and no way
- * of playing beats it. It prints every rung, the worst that cent rounding
- * does, and PASS or FAIL. It exits with an error if anything fails.
+ * whole numbers and exact fractions, what cli/proof.ts lists: every pump's
+ * chance is the one the rules give; every cash-out point and every Patch
+ * returns exactly the RTP before rounding; for every legal bet no cash-out
+ * and no Patch returns more than the RTP after rounding; and no way of
+ * playing beats it. It prints every rung, the worst that cent rounding does,
+ * and PASS or FAIL. It exits with an error if anything fails.
  *
  * Change RTP_BP in src/config.ts and run it again: nothing here assumes 97.
  */
@@ -15,7 +16,6 @@ import { compare, percent, toNumber, ZERO, type Fr } from './fraction';
 import { bestStrategyEdge, proveRungs, rtpOf, scanBets, type Worst } from './proof';
 
 const config = GAME_CONFIG;
-const rtp = rtpOf(config.rtpBp);
 let failures = 0;
 
 function dollars(cents: number): string {
@@ -37,21 +37,17 @@ function* everyBet(limits: Limits): Generator<number> {
   for (let bet = limits.minBetCents; bet <= limits.maxBetCents; bet += 1) yield bet;
 }
 
-/** Bets for the best-strategy search: every cent up to $20, then steps that miss round numbers. */
-function* strategyBets(limits: Limits): Generator<number> {
-  const dense = Math.min(limits.maxBetCents, 2000);
-  for (let bet = limits.minBetCents; bet <= dense; bet += 1) yield bet;
-  for (let bet = dense + 97; bet < limits.maxBetCents; bet += 97) yield bet;
-  if (limits.maxBetCents > dense) yield limits.maxBetCents;
-}
-
-function worstLine(label: string, worst: Worst | null, where: string): void {
+function worstLine(label: string, worst: Worst | null, where: string, none: string): void {
   if (worst === null) return;
+  if (worst.betCents === 0) {
+    console.log(`    ${label} ${none}`);
+    return;
+  }
   const place = `bet ${dollars(worst.betCents)}, ${where} ${String(worst.rung)}`;
   console.log(`    ${label} ${percent(worst.value)} (${place})`);
 }
 
-function proveDifficulty(difficulty: Difficulty): void {
+function proveDifficulty(difficulty: Difficulty, rtp: Fr): void {
   const { ladder } = difficulty;
   const top = ladder.at(-1) ?? 0;
   console.log('');
@@ -74,11 +70,24 @@ function proveDifficulty(difficulty: Difficulty): void {
       ].join(''),
     );
   }
-  const exactRungs = rows.filter((row) => row.exact).length;
-  const tally = `${String(exactRungs)} of ${String(rows.length)}`;
+  const of = (count: number, total: number): string => `${String(count)} of ${String(total)}`;
+  const rightChances = rows.filter((row) => row.chanceRight).length;
   check(
-    `Every cash-out point returns exactly ${percent(rtp)} before rounding (${tally})`,
+    `Every pump's chance is the one the rules give (${of(rightChances, rows.length)})`,
+    rightChances === rows.length,
+  );
+  const exactRungs = rows.filter((row) => row.exact).length;
+  check(
+    `Every cash-out point returns exactly ${percent(rtp)} before rounding ` +
+      `(${of(exactRungs, rows.length)})`,
     exactRungs === rows.length,
+  );
+  const patchRows = rows.filter((row) => row.patchExact !== null);
+  const exactPatches = patchRows.filter((row) => row.patchExact === true).length;
+  check(
+    `Every Patch returns exactly ${percent(rtp)} before rounding ` +
+      `(${of(exactPatches, patchRows.length)})`,
+    exactPatches === patchRows.length,
   );
 
   const scan = scanBets(config.rtpBp, ladder, config.limits, everyBet(config.limits));
@@ -89,25 +98,21 @@ function proveDifficulty(difficulty: Difficulty): void {
       `${scan.cashOuts.toLocaleString('en-US')} cash-outs, ` +
       `${scan.patches.toLocaleString('en-US')} Patches`,
   );
+  check("Each bet's top rung is the highest one under the cap", scan.topRungsRight);
   check('Payouts are bet x multiplier, rounded down to the cent', scan.payoutsRoundDown);
   check('Patch prices are the exact price, rounded up to the cent', scan.pricesRoundUp);
   check('Whole-dollar bets are paid bet x multiplier exactly', scan.wholeDollarsExact);
   check(`No payout is above the ${dollars(maxPayoutCents)} cap`, scan.underCap);
-  check(
-    `No cash-out returns more than ${percent(rtp)}`,
-    scan.payoutsRoundDown && compare(scan.worstCashOut.value, rtp) <= 0,
-  );
-  check(
-    `No Patch returns more than ${percent(rtp)}`,
-    scan.pricesRoundUp && (scan.worstPatch === null || compare(scan.worstPatch.value, rtp) <= 0),
-  );
+  check(`No cash-out returns more than ${percent(rtp)}`, scan.cashOutsWithinRtp);
+  check(`No Patch returns more than ${percent(rtp)}`, scan.patchesWithinRtp);
   console.log('  What cent rounding costs at worst (it only shows on tiny bets):');
-  worstLine('lowest cash-out return:', scan.worstCashOut, 'rung');
-  worstLine('lowest Patch return:   ', scan.worstPatch, 'pump');
+  const nothingLost = 'no payout loses anything to rounding';
+  worstLine('lowest cash-out return:', scan.worstCashOut, 'rung', nothingLost);
+  worstLine('lowest Patch return:   ', scan.worstPatch, 'pump', nothingLost);
 
   let checked = 0;
   let best: { edge: Fr; bet: number } | null = null;
-  for (const bet of strategyBets(config.limits)) {
+  for (const bet of everyBet(config.limits)) {
     checked += 1;
     const edge = bestStrategyEdge(config.rtpBp, ladder, config.limits, bet);
     if (best === null || compare(edge, best.edge) > 0) best = { edge, bet };
@@ -130,12 +135,17 @@ function proveDifficulty(difficulty: Difficulty): void {
 
 const started = performance.now();
 console.log('Pump: exact RTP check');
-console.log(`RTP ${percent(rtp)} (${String(config.rtpBp)} basis points), from src/config.ts`);
 
+let shown = `${String(config.rtpBp)} basis points`;
 try {
+  // First of all: a configuration the engine refuses is reported as that,
+  // in the engine's own words, before any arithmetic is tried on it.
   assertValidConfig(config);
+  const rtp = rtpOf(config.rtpBp);
+  shown = percent(rtp);
+  console.log(`RTP ${shown} (${String(config.rtpBp)} basis points), from src/config.ts`);
   check('The configuration passes every start-up check', true);
-  for (const difficulty of config.difficulties) proveDifficulty(difficulty);
+  for (const difficulty of config.difficulties) proveDifficulty(difficulty, rtp);
 } catch (error) {
   check('The configuration passes every start-up check', false);
   console.log(`  ${error instanceof Error ? error.message : String(error)}`);
@@ -145,7 +155,7 @@ const seconds = ((performance.now() - started) / 1000).toFixed(1);
 console.log('');
 console.log(
   failures === 0
-    ? `RESULT: PASS. Everything above holds exactly at RTP ${percent(rtp)}. (${seconds}s)`
+    ? `RESULT: PASS. Everything above holds exactly at RTP ${shown}. (${seconds}s)`
     : `RESULT: FAIL. ${String(failures)} check(s) failed. (${seconds}s)`,
 );
 process.exitCode = failures === 0 ? 0 : 1;
