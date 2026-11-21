@@ -1,4 +1,6 @@
 import type { BalloonView } from '../api/contract';
+import { nextPumpGainCents } from '../game/patchGain';
+import type { CSSProperties } from 'react';
 import { formatCents, formatChance, formatMultiplier } from '../money';
 import { HoldButton } from './HoldButton';
 
@@ -101,6 +103,18 @@ export function RoundControls({
   const cashable = balloons.filter((b) => b.status === 'active' && b.cashOutCents !== null);
   const cashAllCents = cashable.reduce((sum, b) => sum + (b.cashOutCents ?? 0), 0);
   const name = balloon && multi ? `balloon ${balloon.index + 1}` : null;
+  // What the next pump adds if it holds, shown beside the Patch price so the
+  // two can be weighed. Early pumps on a low-risk ladder price the Patch at
+  // about the whole gain, and the player should be able to see that.
+  const gain = balloon && patchPrice !== null ? nextPumpGainCents(balloon) : null;
+  const priceText = patchPrice === null ? '—' : formatCents(patchPrice);
+  const gainText = gain === null ? null : `for +${formatCents(gain)}`;
+  // Each amount shrinks to fit the button by its length (see .patch-price).
+  const chars = (text: string): CSSProperties => ({ '--chars': text.length }) as CSSProperties;
+  const patchHint =
+    patchPrice !== null && gain !== null && cashOut !== null
+      ? `Costs ${formatCents(patchPrice)}. If the pump holds, ${name ?? 'the balloon'} goes from ${formatCents(cashOut)} to ${formatCents(cashOut + gain)}. If it would pop, the Patch keeps it at ${formatCents(cashOut)}. (Shift+P)`
+      : `Buy a Patch for the next pump${name ? ` of ${name}` : ''}, then pump (Shift+P). If it would pop, the Patch is used up and the balloon stays.`;
 
   return (
     <section className="round" aria-label="Round controls">
@@ -152,10 +166,12 @@ export function RoundControls({
           className="btn btn-two btn-patch"
           disabled={off || patchPrice === null}
           onClick={onPatchPump}
-          title={`Buy a Patch for the next pump${name ? ` of ${name}` : ''}, then pump (Shift+P). If it would pop, the Patch is used up and the balloon stays.`}
+          title={patchHint}
           aria-label={
-            name && patchPrice !== null
-              ? `Patch + Pump ${name}, ${formatCents(patchPrice)}`
+            patchPrice !== null
+              ? `Patch + Pump${name ? ` ${name}` : ''}, ${formatCents(patchPrice)}${
+                  gain === null ? '' : `; the pump adds ${formatCents(gain)} if it holds`
+                }`
               : undefined
           }
         >
@@ -164,7 +180,13 @@ export function RoundControls({
             <PatchIcon />
             Patch + Pump
           </span>
-          <strong>{patchPrice === null ? '—' : formatCents(patchPrice)}</strong>
+          <strong className="patch-price" style={chars(priceText)}>
+            {priceText}
+          </strong>
+          {/* Always there, so the button keeps one height all round. */}
+          <span className="patch-gain" style={chars(gainText ?? '')}>
+            {gainText ?? '\u00a0'}
+          </span>
         </button>
         {/* Never greyed out while a pump is on its way, so a hold doesn't
             flash; a press that comes too soon is ignored by the game. */}

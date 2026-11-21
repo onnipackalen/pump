@@ -583,8 +583,65 @@ summary:focus-visible,
  * No dashed edge or stripes: those read as "locked", and this button works.
  */
 .btn-patch {
+  position: relative;
+  /* So the amounts can size themselves to the button (cqw below). */
+  container-type: inline-size;
   border: 1.5px solid #8a8f9a;
   background: var(--panel-raised);
+}
+
+/*
+ * Three lines: the name, the price, and what the pump adds if it holds
+ * ("for +$0.09"), so the two amounts can be weighed. A little tighter than
+ * the other buttons, so three lines take no more room than their two. Each
+ * amount takes the largest size that fits by its length, as the balloon
+ * labels do (150cqw / characters leaves a little air), so a $1,000 bet's
+ * five-figure amounts never spill out.
+ */
+.btn-patch.btn-two {
+  line-height: 1.05;
+}
+
+.btn-patch .patch-price {
+  display: block;
+  white-space: nowrap;
+  font-size: min(15px, 150cqw / max(var(--chars, 6), 1));
+}
+
+.btn-patch .patch-gain {
+  display: block;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: min(10.5px, 165cqw / max(var(--chars, 6), 1));
+  font-weight: 600;
+}
+
+/* Short screens have lower buttons: a smaller tape icon and no top and
+   bottom padding keep the three lines inside them. */
+@media (max-height: 720px) {
+  .btn-patch.btn-two {
+    padding-block: 0;
+  }
+
+  .btn-patch .patch-icon {
+    width: 13px;
+    height: 13px;
+  }
+}
+
+/*
+ * Stitches down both ends, just inside the solid edge, like the ends of a
+ * strip of tape. They set its shape apart from Cash out's plain outline
+ * (the user found the two too easy to mix up), and the edge stays solid,
+ * because a dashed outer edge with stripes read as a locked button. Only
+ * the ends, so the three lines of text keep the full height.
+ */
+.btn-patch::before {
+  content: '';
+  position: absolute;
+  inset: 5px 3px;
+  border-inline: 1.5px dashed rgba(244, 242, 238, 0.55);
+  pointer-events: none;
 }
 
 .btn-patch:hover:not(:disabled) {
@@ -846,10 +903,16 @@ input {
  * Pump with one balloon and Pump all with two or three.
  */
 
+/* The round panel's width decides how tight the numbers sit (see below). */
+.round {
+  container-type: inline-size;
+}
+
 .readouts {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 8px;
+  gap: 2px 8px;
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
@@ -875,6 +938,44 @@ input {
   color: var(--muted);
   font-size: 13px;
   font-weight: 500;
+}
+
+/*
+ * A narrow phone with big numbers ("100.00×", "$1,000.00") ran the row past
+ * the right edge and cut off the pop chance. Under 330 px the numbers sit
+ * tighter, which fits every case on a 320 px phone; if something still
+ * doesn't fit, the row wraps rather than cutting anything off. (After the
+ * rules above, so it wins.)
+ */
+@container (max-width: 330px) {
+  .readouts {
+    column-gap: 4px;
+  }
+  .readouts dt {
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+  .readouts dd {
+    font-size: 15px;
+  }
+  .readouts .readout-quiet dd {
+    font-size: 12px;
+  }
+}
+
+/* The 320 px phone's panel (about 278 px inside) with the widest numbers it
+   can show ("5,000.00×" next to "$3,000.00"): one step tighter, so it
+   still fits on one line and the page keeps its one-screen fit. */
+@container (max-width: 290px) {
+  .readouts dt {
+    font-size: 9px;
+  }
+  .readouts dd {
+    font-size: 14px;
+  }
+  .readouts .readout-quiet dd {
+    font-size: 11px;
+  }
 }
 
 .round-actions {
