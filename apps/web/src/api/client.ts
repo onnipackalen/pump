@@ -4,6 +4,7 @@ import type {
   ApiErrorCode,
   CashOutBody,
   FairnessView,
+  PlayerStats,
   PumpBody,
   PumpResult,
   RotateResult,
@@ -28,6 +29,8 @@ export interface GameClient {
 
   getSession(): Promise<SessionView>;
   getHistory(limit: number): Promise<readonly RoundSummary[]>;
+  /** The player's results over every finished round, for the stats page. */
+  getStats(): Promise<PlayerStats>;
   startRound(request: StartRoundRequest, key: string): Promise<ActionResult>;
   pump(roundId: string, body: PumpBody, key: string): Promise<PumpResult>;
   cashOut(roundId: string, body: CashOutBody, key: string): Promise<ActionResult>;

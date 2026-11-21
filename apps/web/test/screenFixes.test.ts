@@ -166,6 +166,9 @@ class FakeClient implements GameClient {
   getVerifiableRound(): never {
     throw new Error('not used');
   }
+  getStats(): never {
+    throw new Error('not used');
+  }
 }
 
 describe('E3: starting over like the first load', () => {

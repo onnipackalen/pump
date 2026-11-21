@@ -1056,6 +1056,58 @@ Not changed: a very large upright screen (1440x2560) shows the balloons at
 their largest size (762 px) with sky above them. The balloons stop growing
 at 960 px of stage width on every screen.
 
+## 2026-11-20: the stats page (branch `stats-page`)
+
+Built the brief's optional stats page: profit over time, best win, rounds
+by difficulty. It opens from settings ("Your results" → Stats) at `#stats`.
+
+- Server: `GET /api/stats` (contract type `PlayerStats`). A repository
+  query sums each finished round; `services/stats.ts` adds them up in a
+  pure `summarize` function. No game rule lives there: it only counts money
+  the game already settled.
+- What counts: bets played, Patches bought, payouts. A bet handed back by
+  the 24-hour rule is void and left out, the same as in the RTP figures; a
+  round whose bets were all handed back is not counted as a round.
+- Best win is the round with the biggest gain (payout minus bets and
+  Patches). A round that only got its money back, or less, is never called
+  a win. On a tie the earlier round keeps it. It shows its top multiplier
+  and opens on the verify page once its seed is revealed.
+- The profit line keeps every round up to 300. Past that it keeps the
+  lowest, highest and last point of each of 100 groups, so the overall peak
+  and dip and the latest round are always on the chart.
+- Screen: four headline numbers, one line chart (pointer or arrow keys show
+  the net after any round), the best win, a table by difficulty. Mint only
+  for a real gain. Like the verify page it scrolls inside its own box; the
+  game screen still never scrolls.
+
+Checked: 25 server tests, including 40 rounds of real play at RTP 9400,
+9700 and 9900 where the stats' net equals the wallet's change and the
+wagered and paid-out totals equal the ledger's, and the real 24-hour rule
+at all three RTPs: a round refunded unplayed shows as nothing at all, and
+after a pump only the pumped balloon counts. In the browser, 150 rounds
+played on a local server: net +$25.74 on the page and in the wallet, the
+best win's Verify button opened that round and it checked out, no console
+errors, no sideways scroll at 375x812 or 320x568.
+
+Turned out wrong, and how it was caught:
+
+- The first bars in the difficulty table were measured against the wrong
+  width, so a bar for half the rounds was not half as long. Caught on
+  re-reading the CSS before the first run; each bar now sits in its own
+  track.
+- The headline numbers cut a long amount short with "…" on a 320 px phone.
+  Caught by putting a seven-figure amount into the tiles at that size. They
+  now shrink and wrap only after a thousands comma.
+- One test check ("some round has the top gain") could never fail. Caught
+  on reading the test back; it now names the exact round.
+- A new 24-hour test first expected "no best win" for a round where one
+  balloon cashed out at 1.04x and the other bet was refunded. That was the
+  test's mistake: $10.40 back on the $10 really played is a real win; only
+  counting the refunded $5 as stake would make it a loss. Caught when the
+  test failed against the code; the test now expects the win.
+- The browser tool's hover and click did not move the chart's readout,
+  which looked like a bug. Real pointer and key events did move it; the
+  tool moves the pointer off the chart right after a click.
 ## 2026-11-20: the Pump row stays through a round
 
 Found while running the size check on the merge coordinator's batch before
@@ -1192,3 +1244,55 @@ Found on the way: in Chrome, a paused animation of an inherited
 registered property that is seeked (`currentTime`) does not always
 redraw the children until their style is read. Running animations are
 fine; only freeze-frame tools are affected.
+## 2026-11-20: balloon art: strain sheen, a real knot, latex depth
+
+From the "Hostile agent game fix" chat, on branch `strain-sheen`, after
+the user's own picks ("Fix the odd shine", "Yes, use it", "now do the
+knot and latex depth"). Balloon.tsx and balloon.css only.
+
+Built:
+
+- The strain spot is now a sheen. It was an oval with a dark rim on the
+  upper right that read as a dent or an eye, and on Expert it showed
+  before the first pump. The rubber over the upper right now goes paler
+  as the pop chance rises, with a bright band along the curve and no
+  edge. On the pearl balloon, where nothing is paler than its white, the
+  patch is a cool see-through grey. Strain levels and the level-3 pulse
+  are unchanged.
+- The knot shown at a cash-out tie-off is a wrapped lump with its crease
+  and a little light, the neck's end flaring out below, and a rolled lip.
+  It was a cone and a flat oval.
+- Latex depth: the balloon's own deeper colour towards the bottom, a
+  lighter black underside, light bounced up the lower left edge, creases
+  where the rubber gathers into the neck, a broad soft light on the
+  upper left, and a fuller rolled lip on the pumping neck.
+- Every new layer is drawn on the body outline or inside it. Masks and
+  gradients are black and white only, so their ids can repeat on every
+  balloon, like pb-shade; the colour comes from the fill.
+
+Turned out wrong, and how it was caught:
+
+- The user asked to "remove flashing dot". I hid the whole air pocket,
+  but another chat was building that same pocket at the user's request.
+  Caught by listing the running chats before going further; the user
+  then chose "Keep it, stop flashing", so the hide was reverted
+  (3780203) and the change went to the "Air pocket balloon animation"
+  chat, which owns the pocket.
+- The soft light was first a tilted ellipse whose measured box reached
+  x 22, past the 14-87% limit the phone layout relies on. Caught by
+  measuring every new shape's box with motion off; it is now the body
+  path with an elliptical gradient (c05cc7c). With motion off, every new
+  shape sits inside the body, x 28 to 172.
+- I built a fix for the round panel's readouts overflowing at 320 px
+  while the coordinator built the same fix on main; our messages
+  crossed. Mine was dropped (main has 3b02d33).
+
+How it was checked: typecheck, lint and all tests after merging main
+(1211 tests, including balloonLook.test.ts and pressTiming.test.ts,
+which read balloon.css). Every slot drawn at strain 0 to 3, Patch on,
+before the first pump, popped, cashed and tied, from the real component
+next to the merged coordinator art (grey shards, slate tape, pop scrap
+on the hose). Live in the game before the merge: 3 Expert balloons at
+375x667, no page scroll, same picture sizes, and a cash-out lifting off
+with the new knot. Layout files (styles.css, App.tsx, components) are
+identical to main.

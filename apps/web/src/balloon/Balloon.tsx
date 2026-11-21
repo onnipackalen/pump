@@ -58,6 +58,10 @@ export interface BalloonProps {
   readonly value?: string | undefined;
 }
 
+/** The balloon's outline. The depth and strain layers reuse it, so they never spill past the edge. */
+const BODY_PATH =
+  'M100 208C82 206 28 166 28 100C28 52 60 22 100 22C140 22 172 52 172 100C172 166 118 206 100 208Z';
+
 export function Balloon({
   slot,
   scale,
@@ -97,6 +101,66 @@ export function Balloon({
           <stop offset="0.62" className="pb-shade-c" />
           <stop offset="1" className="pb-shade-d" />
         </radialGradient>
+        {/* Depth: darker towards the bottom of the balloon. */}
+        <linearGradient id="pb-core-fade" gradientUnits="userSpaceOnUse" x1="0" y1="110" x2="0" y2="208">
+          <stop offset="0" className="pb-core-a" />
+          <stop offset="1" className="pb-core-b" />
+        </linearGradient>
+        {/* Neck: darker where it is pinched into the balloon and at the lip. */}
+        <linearGradient id="pb-neck-fade" gradientUnits="userSpaceOnUse" x1="0" y1="203" x2="0" y2="221">
+          <stop offset="0" className="pb-neck-fade-a" />
+          <stop offset="0.5" className="pb-neck-fade-b" />
+          <stop offset="1" className="pb-neck-fade-c" />
+        </linearGradient>
+        {/* Strain sheen: how far the stretched, paler patch reaches, as a
+             mask (white shows, black hides). It fades to nothing, with no
+             edge, so it can't read as a dent. */}
+        <radialGradient
+          id="pb-sheen-fade"
+          gradientUnits="userSpaceOnUse"
+          cx="132"
+          cy="56"
+          r="70"
+          gradientTransform="rotate(-32 132 56) scale(1 0.72) translate(0 22)"
+        >
+          <stop offset="0" className="pb-sheen-fade-a" />
+          <stop offset="0.55" className="pb-sheen-fade-b" />
+          <stop offset="1" className="pb-sheen-fade-c" />
+        </radialGradient>
+        <mask id="pb-sheen-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="320">
+          <rect x="0" y="0" width="200" height="320" fill="url(#pb-sheen-fade)" />
+        </mask>
+        {/* Strain band: the bright light along the stretched upper-right curve. */}
+        <linearGradient id="pb-band-fade" gradientUnits="userSpaceOnUse" x1="104" y1="28" x2="166" y2="96">
+          <stop offset="0" className="pb-band-a" />
+          <stop offset="0.45" className="pb-band-b" />
+          <stop offset="1" className="pb-band-c" />
+        </linearGradient>
+        {/* Latex: the balloon's own deeper colour builds towards the bottom,
+             where the rubber is thicker. A mask, so the colour comes from
+             the fill and the id can repeat. */}
+        <linearGradient id="pb-deep-fade" gradientUnits="userSpaceOnUse" x1="0" y1="118" x2="0" y2="208">
+          <stop offset="0" className="pb-deep-fade-a" />
+          <stop offset="1" className="pb-deep-fade-b" />
+        </linearGradient>
+        <mask id="pb-deep-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="320">
+          <rect x="0" y="0" width="200" height="320" fill="url(#pb-deep-fade)" />
+        </mask>
+        {/* Latex: the broad, soft light of the window on the upper left. */}
+        <radialGradient
+          id="pb-soft-light"
+          gradientUnits="userSpaceOnUse"
+          cx="72"
+          cy="72"
+          r="46"
+          gradientTransform="translate(72 72) rotate(-24) scale(0.74 1) translate(-72 -72)"
+        >
+          <stop offset="0" className="pb-soft-light-a" />
+          <stop offset="1" className="pb-soft-light-b" />
+        </radialGradient>
+        <clipPath id="pb-body-clip">
+          <path d={BODY_PATH} />
+        </clipPath>
       </defs>
 
       {/* Shadow on the floor, under the pump. */}
@@ -192,6 +256,26 @@ export function Balloon({
             <g className="pb-squash">
               <path className="pb-body" d="M100 208C82 206 28 166 28 100C28 52 60 22 100 22C140 22 172 52 172 100C172 166 118 206 100 208Z" />
               <path className="pb-shade" fill="url(#pb-shade)" d="M100 208C82 206 28 166 28 100C28 52 60 22 100 22C140 22 172 52 172 100C172 166 118 206 100 208Z" />
+              {/* depth: the balloon's deeper colour towards the bottom, a
+                   darker underside, and a little light bounced up along the
+                   lower left edge, so it reads as round rubber. */}
+              <path className="pb-deep" mask="url(#pb-deep-mask)" d={BODY_PATH} />
+              <path className="pb-core" fill="url(#pb-core-fade)" d={BODY_PATH} />
+              <path
+                className="pb-bounce"
+                clipPath="url(#pb-body-clip)"
+                d="M40 150C52 178 74 198 96 205C78 196 58 178 46 150Z"
+              />
+              {/* gather: the little creases where the rubber bunches into
+                   the neck, each with a lit edge beside it. */}
+              <g className="pb-gather" clipPath="url(#pb-body-clip)">
+                <path className="pb-gather-line" d="M87 198Q94 203 98.6 206.5M113 198Q106 203 101.4 206.5M93 192Q97 200 99.4 206.5M107 192Q103 200 100.6 206.5" />
+                <path className="pb-gather-light" d="M87.6 196.8Q94.6 201.8 99 205.4M93.9 191.4Q97.9 199.4 99.9 205.4" />
+              </g>
+              {/* soft light: the broad glow of the window on the upper left.
+                   Drawn on the body's own outline (the gradient makes the
+                   glow), so it can never reach past the balloon's edge. */}
+              <path className="pb-soft-light" fill="url(#pb-soft-light)" d={BODY_PATH} />
               <path className="pb-rim" d="M163 118C160 156 132 190 108 201C128 186 153 158 163 118Z" />
               <path className="pb-shine" d="M47 96C45 66 61 42 85 33C70 47 60 68 58 93C57.5 101 47.5 102 47 96Z" />
               <ellipse className="pb-glint" cx="99" cy="33" rx="7" ry="4" />
@@ -200,21 +284,22 @@ export function Balloon({
               <text className="pb-value" x="100" y="124">
                 {value}
               </text>
-              {/* strain: thin spot that shows as the pop chance rises. */}
+              {/* strain: the rubber over the upper right stretches thin as the pop
+                   chance rises: it goes paler, with a bright band along the
+                   curve. Soft to the edge, with no ring: the old oval spot had a
+                   dark rim and read as a dent. The mask and band are black and
+                   white only, so their ids can repeat on every balloon; the
+                   colour comes from the fill (balloon.css). */}
               <g className="pb-strain">
-                {/* Thin spot: the rubber looks paler where it is stretched most, with a
-                     soft darker edge so it still shows on the pale slot. Black and white
-                     only, so it works on every balloon colour and the gradient id can
-                     repeat on every balloon. Sits inside the body outline. */}
-                <defs>
-                  <radialGradient id="pb-thin" cx="0.5" cy="0.5" r="0.5">
-                    <stop offset="0" className="pb-thin-a" />
-                    <stop offset="0.5" className="pb-thin-b" />
-                    <stop offset="0.8" className="pb-thin-c" />
-                    <stop offset="1" className="pb-thin-d" />
-                  </radialGradient>
-                </defs>
-                <ellipse className="pb-thin" fill="url(#pb-thin)" cx="122" cy="64" rx="29" ry="21" transform="rotate(-24 122 64)" />
+                <g className="pb-thin">
+                  <path className="pb-sheen" mask="url(#pb-sheen-mask)" d={BODY_PATH} />
+                  <path
+                    className="pb-band"
+                    fill="url(#pb-band-fade)"
+                    clipPath="url(#pb-body-clip)"
+                    d="M106 29C140 30 163 55 166 90C158 63 137 41 106 35Z"
+                  />
+                </g>
               </g>
               {/* patch: the Patch sticker goes here. */}
               <g className="pb-patch">
@@ -243,12 +328,33 @@ export function Balloon({
           {/* neck: the open neck the hose blows into while the balloon is pumped. */}
           <g className="pb-neck">
             <path className="pb-neck-tube" d="M95.5 204C96.6 210 96.6 215.5 95.2 220H104.8C103.4 215.5 103.4 210 104.5 204Z" />
-            <ellipse className="pb-neck-lip" cx="100" cy="220.6" rx="6.4" ry="2.4" />
+            <path
+              className="pb-neck-shade"
+              fill="url(#pb-neck-fade)"
+              d="M95.5 204C96.6 210 96.6 215.5 95.2 220H104.8C103.4 215.5 103.4 210 104.5 204Z"
+            />
+            {/* lip: the rubber rolled over the hose nozzle. */}
+            <ellipse className="pb-neck-lip" cx="100" cy="220.8" rx="7.2" ry="2.9" />
+            <ellipse className="pb-neck-gleam" cx="98" cy="219.9" rx="3.6" ry="0.9" />
           </g>
           {/* tie: the knot. Hidden until the balloon is tied off on cash-out. */}
           <g className="pb-tie">
-            <path className="pb-knot" d="M100 205C96 209 92.5 214 91 219.5Q100 217 109 219.5C107.5 214 104 209 100 205Z" />
-            <ellipse className="pb-knot" cx="100" cy="220" rx="9.5" ry="2.6" />
+            {/* tail: the end of the neck left below the knot, flaring out. */}
+            <path
+              className="pb-knot-tail"
+              d="M97.6 213.5C97.8 216 96.6 218.6 94.4 220.4H105.6C103.4 218.6 102.2 216 102.4 213.5Z"
+            />
+            <path
+              className="pb-knot-tail-shade"
+              fill="url(#pb-neck-fade)"
+              d="M97.6 213.5C97.8 216 96.6 218.6 94.4 220.4H105.6C103.4 218.6 102.2 216 102.4 213.5Z"
+            />
+            {/* lip: the rolled end of the neck. */}
+            <ellipse className="pb-knot" cx="100" cy="220.6" rx="6.2" ry="2" />
+            {/* knot: the wrapped lump, with the wrap's crease and a little light. */}
+            <ellipse className="pb-knot" cx="100" cy="210.4" rx="5.2" ry="4.4" />
+            <path className="pb-knot-crease" d="M95.4 210.6Q100 213.6 104.6 209.8" />
+            <ellipse className="pb-knot-gleam" cx="98.2" cy="208.6" rx="1.9" ry="1.1" />
           </g>
           {/* shards: 8 pieces of rubber that fly out on a pop. Hidden until
                then. They rest inside the body outline so they don't move the
