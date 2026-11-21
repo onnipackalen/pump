@@ -4,7 +4,9 @@ import type {
   ApiErrorCode,
   CashOutBody,
   FairnessView,
+  PlayerSettings,
   PlayerStats,
+  PublicWinsResponse,
   PumpBody,
   PumpResult,
   RotateResult,
@@ -38,6 +40,15 @@ export interface GameClient {
   rotateSeed(key: string): Promise<RotateResult>;
   /** A finished round to recompute. Fails with seed_not_revealed until its seed is rotated. */
   getVerifiableRound(roundId: string): Promise<VerifiableRound>;
+  /**
+   * Everyone's latest, largest and luckiest wins. Needs no player, so it is
+   * not held back until the session is open. `enabled: false` means the
+   * server has the lists switched off: the screen then shows nothing of them.
+   */
+  getPublicWins(): Promise<PublicWinsResponse>;
+  /** The player's own choices (for now: whether their wins are kept private). */
+  getSettings(): Promise<PlayerSettings>;
+  setSettings(settings: PlayerSettings, key: string): Promise<PlayerSettings>;
 }
 
 /** The server said no. Carries the error body, including any current state. */
