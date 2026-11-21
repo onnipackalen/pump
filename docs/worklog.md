@@ -1928,6 +1928,7 @@ Built on `bet-pump-spot`:
   big Pump (so the second tap of a double-tap on Bet never pumps) and on
   Bet and Start auto-play (so a quick tap on Pump as the balloon pops
   never places a bet). Stop has none: stopping always works at once.
+  (Changed in the re-check below: Stop has it too.)
   Enter still bets and Space still pumps, so the keys can't double up.
 - BetPanel.tsx and AutoPlayPanel.tsx changed by one tag each
   (`<button>` to `<GuardedButton>`) plus its import; nothing else there.
@@ -1953,7 +1954,7 @@ What turned out wrong, and how it was caught:
 Checked: the panel and stage rendered statically (renderToStaticMarkup
 with the real CSS) and measured in headless Chrome at 1440x900, 1280x720,
 1024x768, 390x844, 375x667, 430x932, 320x568, 768x1024, 667x375 and
-640x360, with 1, 2 and 3 balloons and $1 and $1,000 bets. In all 90
+640x360, with 1, 2 and 3 balloons and $1 and $1,000 bets. In all 60
 bet/round pairs the big button's box is the same as Bet's (0 px apart),
 the stage is the same in both states, nothing scrolls and no button's
 text spills. Start and Stop: the same box in all 30 pairs.
@@ -1961,3 +1962,39 @@ text spills. Start and Stop: the same box in all 30 pairs.
 Not checked: the live game (no server was free). The guard's timing with
 real taps on a phone, the round's answer time on Render, and Safari or a
 real iPhone (`:has()`, container queries and event time stamps).
+
+### Re-check fixes (Bet and Pump in one spot)
+
+A review drove the real panels in headless Chrome with real mouse and
+touch events. Two holes in the guard, both fixed on `bet-pump-spot`:
+
+- Start auto-play stays in the page, hidden, while a round is finished by
+  hand after Stop (so the typed settings are kept). Its guard started when
+  it was put in the page, not when it could be seen. When the last
+  balloon popped, Start showed up in Pump's place with its guard long
+  over, and a quick extra tap on Pump started a new run of 10 rounds.
+  Now every guarded button watches its own box (`useShownGuard`, with
+  ResizeObserver) and starts its guard when it goes from hidden to seen.
+- Stop sits in Start's box and had no guard, so a double-click on Start
+  stopped the run at once and left one bet in a round to finish by hand.
+  Stop now has the same guard; Esc still stops at once. The first try
+  failed in the harness: Start and Stop were the same kind of button in
+  the same place, so React kept one button and its old guard. Each now
+  has its own key.
+- No test failed if a guard was taken off a button. What the buttons do
+  with each event now lives in plain functions in game/controls.ts
+  (tested directly), and guarded buttons carry `data-guard-ms`, which
+  the tests look for on Pump, Bet, Start and Stop. Checked by taking each
+  guard off in turn: a test failed every time.
+- Fixed a stale comment on Cash out all, and the count above (60
+  bet/round pairs, not 90).
+
+Checked again in the static harness: the 16 tap and key cases (double
+tap on Bet, hold from Bet, tap as the balloon pops, Stop mid-round then
+finish by hand, double-click on Start, Enter on a focused Stop, touch on
+a phone) all behave, and the 60 bet/round pairs at ten sizes still give
+the same boxes for Bet, Pump, Start and Stop and the same stage.
+
+Not checked: the live game, real phones, Safari (ResizeObserver timing
+there), and that `useShownGuard` really calls watchShown (only the
+harness shows that; there is no DOM in the tests).
