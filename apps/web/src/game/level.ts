@@ -14,18 +14,23 @@ import type { BalloonLevel } from '../balloon/Balloon';
  * needs no change here.
  *
  * The four stay clear of every colour that already means something on the
- * screen: the mint of a real win, the grey of a pop, the orange of a
- * warning, red, and the three balloon colours (pearl, azure, violet), which
- * tell balloons 1, 2 and 3 apart and sit on the same pump. All four reach
- * at least 3 to 1 against the pump's barrel. They also differ in lightness
- * (gold lightest, orchid darkest), and the number of rings says the level
- * too, so no player has to rely on colour alone.
+ * screen: the mint of a real win, the grey of a pop, the sand-to-orange
+ * steps kept for the pop chance, the orange of a warning, red, and the
+ * three balloon colours (pearl, azure, violet), which tell balloons 1, 2
+ * and 3 apart and sit on the same pump. All four reach at least 3 to 1
+ * against the pump's barrel.
+ *
+ * The colours alone do not tell every player the level: Medium and Expert
+ * are about as light as each other, and with red-green colour blindness
+ * Easy and Expert both look yellow, Medium and Hard both lavender. The
+ * number of rings does: one on Easy, up to four on Expert. The colour is
+ * a quicker hint on top, for players who see colour normally.
  */
 export const LEVEL_COLOURS: Readonly<Record<string, string>> = {
   easy: '#8ac157', // lime
   medium: '#74ddee', // aqua
   hard: '#d07ed5', // orchid
-  expert: '#f6d156', // gold
+  expert: '#dee053', // lemon
 };
 
 /** For a difficulty with no colour of its own: the pump's own light grey. */
