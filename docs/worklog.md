@@ -1145,3 +1145,56 @@ step in the README cover it.
 
 Not done by anyone yet: the deploy itself. Nothing here has run on
 Render; the dry run was on a Mac. The first deploy is the real test.
+
+## 2026-11-20: balloon art: strain sheen, a real knot, latex depth
+
+From the "Hostile agent game fix" chat, on branch `strain-sheen`, after
+the user's own picks ("Fix the odd shine", "Yes, use it", "now do the
+knot and latex depth"). Balloon.tsx and balloon.css only.
+
+Built:
+
+- The strain spot is now a sheen. It was an oval with a dark rim on the
+  upper right that read as a dent or an eye, and on Expert it showed
+  before the first pump. The rubber over the upper right now goes paler
+  as the pop chance rises, with a bright band along the curve and no
+  edge. On the pearl balloon, where nothing is paler than its white, the
+  patch is a cool see-through grey. Strain levels and the level-3 pulse
+  are unchanged.
+- The knot shown at a cash-out tie-off is a wrapped lump with its crease
+  and a little light, the neck's end flaring out below, and a rolled lip.
+  It was a cone and a flat oval.
+- Latex depth: the balloon's own deeper colour towards the bottom, a
+  lighter black underside, light bounced up the lower left edge, creases
+  where the rubber gathers into the neck, a broad soft light on the
+  upper left, and a fuller rolled lip on the pumping neck.
+- Every new layer is drawn on the body outline or inside it. Masks and
+  gradients are black and white only, so their ids can repeat on every
+  balloon, like pb-shade; the colour comes from the fill.
+
+Turned out wrong, and how it was caught:
+
+- The user asked to "remove flashing dot". I hid the whole air pocket,
+  but another chat was building that same pocket at the user's request.
+  Caught by listing the running chats before going further; the user
+  then chose "Keep it, stop flashing", so the hide was reverted
+  (3780203) and the change went to the "Air pocket balloon animation"
+  chat, which owns the pocket.
+- The soft light was first a tilted ellipse whose measured box reached
+  x 22, past the 14-87% limit the phone layout relies on. Caught by
+  measuring every new shape's box with motion off; it is now the body
+  path with an elliptical gradient (c05cc7c). With motion off, every new
+  shape sits inside the body, x 28 to 172.
+- I built a fix for the round panel's readouts overflowing at 320 px
+  while the coordinator built the same fix on main; our messages
+  crossed. Mine was dropped (main has 3b02d33).
+
+How it was checked: typecheck, lint and all tests after merging main
+(1211 tests, including balloonLook.test.ts and pressTiming.test.ts,
+which read balloon.css). Every slot drawn at strain 0 to 3, Patch on,
+before the first pump, popped, cashed and tied, from the real component
+next to the merged coordinator art (grey shards, slate tape, pop scrap
+on the hose). Live in the game before the merge: 3 Expert balloons at
+375x667, no page scroll, same picture sizes, and a cash-out lifting off
+with the new knot. Layout files (styles.css, App.tsx, components) are
+identical to main.
