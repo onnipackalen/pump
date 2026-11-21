@@ -10,11 +10,12 @@
  * - the tick badge after a cash-out (the card says "Cashed out" and the
  *   amount in words instead, as UK RTS 14F guidance suggests).
  *
- * The torn rubber scrap after a pop was on this list too. The user then
- * asked for it back (2026-11-20): with it off, a popped balloon and a
- * cashed-out one ended as nearly the same picture, an empty pump. So the
- * scrap is on again, as the one quiet mark of a pop. It now sits on the
- * end of the fallen hose, not in the air where the knot used to be.
+ * The torn rubber scrap after a pop was on this list too, then back on
+ * as a torn neck on the fallen hose with bits on the floor. On 2026-11-20
+ * the user asked for no marks at all ("just make it pop like blast into
+ * oblivion"), so it is gone from the art itself: the pieces float down and
+ * vanish, and the hose lies on the floor as after a cash-out. The label
+ * under the balloon says which it was.
  */
 .pump-balloon :is(.pb-ghost, .pb-tick) {
   display: none;
@@ -59,4 +60,14 @@
   .pump-balloon {
     --pb-value-floor: 0.8;
   }
+}
+
+/*
+ * A new balloon's closer view (balloon.css --pb-first-zoom) only when it is
+ * the one balloon on the stage. With two or three side by side it brought
+ * each hose to within a pixel of the next pump, and a row mixing waiting
+ * and lifted balloons showed pumps at two sizes.
+ */
+.slots:has(> .slot:nth-child(2)) .pump-balloon {
+  --pb-first-zoom: scale(1);
 }

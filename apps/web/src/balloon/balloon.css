@@ -47,12 +47,6 @@
   transform-origin: 100px 208px;
 }
 
-/* The hose turns and shrinks around the pump's nozzle. */
-.pump-balloon .pb-hose {
-  transform-box: view-box;
-  transform-origin: 116px 295px;
-}
-
 /* Size for the current rung. Only this layer changes size. */
 .pump-balloon .pb-grow {
   transform: scale(var(--balloon-scale));
@@ -665,135 +659,262 @@
 }
 
 /* ---------------------------------------------------------------------
- * Set-up
+ * First pump
  *
- * On a fresh balloon of a new round, your code sets data-setup to how the
- * balloon before it in the same place ended (game/setUp.ts):
- *   "popped"  the hose is picked up off the floor and swings back up to
- *             the neck; the torn neck on its end and the bits on the
- *             floor fade away.
- *   "cashed"  the hose stretches back out from the pump to the neck.
- * Then the new balloon fills in at the end of the hose. Each starts from
- * exactly the end picture the round before left (the "popped" and
- * "cashed" rules below), so nothing jumps. After a pop that picture is
- * the lying hose; in the first 80 ms it hands back to the standing hose,
- * which starts turned down exactly over it and then lifts. A balloon with
- * nothing before it in its place gets no data-setup and no set-up.
+ * A new balloon goes on at the bet, small and flat, on the end of the
+ * hose lying on the floor, and stays there until its first pump. The
+ * first pump blows it up, and only its answer shows what happened. The
+ * user chose this on 2026-11-20 ("make ballon appaer when bet but have to
+ * pump seperately to get off florr"; stay flat until the first pump).
  *
- * Display only: the round is already live and nothing waits for this. A
- * pump during it is fine: the air pocket is in the hose layer, so it rides
- * the moving hose. Keep data-setup while the balloon is in play (taking it
- * away early would cut the set-up short) and remove it in the same update
- * as the pop or cash-out, so it never plays again: when that motion ends,
- * the hose would otherwise fall back to the set-up rule and replay it.
+ * Your code sets data-first (Balloon's `first`, game/setUp.ts firstPump):
+ *   "floor"         in play, not yet pumped. The hose lies on the floor,
+ *                   the small flat balloon lies along its end, and the
+ *                   view is a little closer (--pb-first-zoom; only with
+ *                   one balloon on the stage, balloon-app.css). The first
+ *                   press runs its air pocket along the lying hose.
+ *   "lift"          the first pump just held, seen live. On that answer
+ *                   the hose lifts off the floor (Balloon.tsx bends it),
+ *                   the flat balloon comes up with it and blows up to its
+ *                   first size, and the view eases back out, slowly, so
+ *                   you see it grow next to the pump. Kept for the whole
+ *                   lift (FIRST_LIFT_MS), whatever comes next, then gone:
+ *                   a page load or a return from another page never
+ *                   replays it.
+ *   "floor-popped"  the first pump popped it. It bursts on the floor: no
+ *                   fall and no pieces in the air, just the burst, and
+ *                   the view eases back out into the usual popped picture.
+ *   "floor-void"    its bet was refunded unpumped (the 24-hour rule): it
+ *                   stays flat on the floor and the view eases back out.
+ * Before any bet, data-idle shows the hose on the floor and no balloon.
  *
- * This section comes before Pop and Cash-out on purpose. Their rules
- * weigh the same as these, and the later rule wins, so a pop or a
- * cash-out always takes the hose over.
+ * Never a pump and never a draw: the handle and the press keep their own
+ * rules and timing (PRESS_MS). The first pump's answer is never shown
+ * early: "lift" and "floor-popped" only come with the answer.
+ *
+ * The closer view is anchored at the right edge of the pump's shadow
+ * (174, 314), so the drawing grows only to the left and up: its leftmost
+ * part, the hose's fitting at x 41, comes to x 30.4, inside the 14% (x 28)
+ * the layout relies on. Nothing grows below the floor.
  * ------------------------------------------------------------------- */
 
 .pump-balloon {
-  --pb-setup-hose-ms: 300ms;
-  --pb-setup-fill-ms: 240ms;
-  /* The balloon fills in once the hose is most of the way there. */
-  --pb-setup-fill-delay: 150ms;
+  --pb-first-zoom: scale(1.08);
+  /* The hose lifting the balloon off the floor. Over by the next press of
+   * a held Pump button (about 250 ms after the answer). */
+  --pb-lift-ms: 280ms;
+  /* The view easing back out after the first pump: slow on purpose. */
+  --pb-zoom-ms: 900ms;
 }
-.pump-balloon[data-setup="popped"] .pb-hose {
-  animation: pb-hose-up var(--pb-setup-hose-ms) linear backwards;
+.pump-balloon .pb-scene {
+  transform-box: view-box;
+  transform-origin: 174px 314px;
 }
-.pump-balloon[data-setup="cashed"] .pb-hose {
-  animation: pb-hose-out var(--pb-setup-hose-ms) cubic-bezier(0.25, 0.8, 0.35, 1.15) backwards;
+/* The small flat balloon: hidden unless a balloon waits for its first
+ * pump. It unrolls from the fitting, so it scales from its top. */
+.pump-balloon .pb-limp {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
 }
-/* Picked up: the lying hose hands back to the standing one. */
-.pump-balloon[data-setup="popped"] .pb-hose-flat {
-  animation: pb-hose-put-away 80ms linear backwards;
+.pump-balloon .pb-limp-body {
+  fill: var(--balloon-base);
+  stroke: var(--balloon-deep);
+  stroke-width: 0.7;
+  stroke-linejoin: round;
 }
-.pump-balloon[data-setup="popped"] .pb-hose-stand {
-  animation: pb-hose-pick-up var(--pb-setup-hose-ms) linear backwards;
+.pump-balloon .pb-limp-crease {
+  fill: none;
+  stroke: var(--balloon-deep);
+  stroke-width: 0.6;
+  stroke-linecap: round;
+  opacity: 0.8;
 }
-/* The torn neck and the bits on the floor go as the hose starts to lift. */
-.pump-balloon[data-setup="popped"] :is(.pb-remnant, .pb-floor-bits) {
-  animation: pb-scrap-off 140ms ease-in backwards;
+
+/* No blown-up balloon before any bet, while a new balloon waits for its
+ * first pump, when that pump popped it on the floor, or when its bet was
+ * refunded. (The hose lies on the floor then; Balloon.tsx draws it,
+ * hoseShape.ts.) Not drawn at all, so its sway and strain loops stop too:
+ * with three pumps waiting they cost real work for nothing. */
+.pump-balloon:is([data-idle], [data-first="floor"], [data-first="floor-popped"], [data-first="floor-void"]) .pb-float {
+  display: none;
 }
-/* The new balloon fills in from nothing at the end of the hose. */
-.pump-balloon[data-setup] .pb-float {
-  animation: pb-fill-in var(--pb-setup-fill-ms) cubic-bezier(0.2, 0.8, 0.3, 1.25)
-    var(--pb-setup-fill-delay) backwards;
+.pump-balloon:is([data-first="floor"], [data-first="floor-void"]) .pb-limp {
+  opacity: 1;
 }
-/* With motion off the hose is simply there (see Reduced motion), and the
- * new balloon fades in instead of growing. */
+.pump-balloon[data-first="floor"] .pb-scene {
+  transform: var(--pb-first-zoom);
+}
+
+/* ---------------------------------------------------------------------
+ * Set-up
+ *
+ * At the bet, your code sets data-setup to what was in the balloon's place
+ * before (game/setUp.ts), and the new balloon goes on from that picture:
+ *   "idle"    the picture before any bet: the hose already lies on the
+ *             floor, and the small flat balloon unrolls from its end.
+ *   "popped"  the hose already lies on the floor, clean: the flat
+ *             balloon unrolls from its end.
+ *   "cashed"  the hose already lies on the floor, clean: the flat
+ *             balloon unrolls from its end.
+ *   "void"    a refunded balloon already lies flat there: it stays.
+ * Meanwhile the view moves a little closer, to the "floor" picture above.
+ * Each starts from exactly the picture before it, so nothing jumps. A
+ * round restored after a page load gets no set-up and shows the "floor"
+ * picture at once.
+ *
+ * Display only: the round is live as soon as the server says so, and
+ * nothing waits for this (game/setUp.ts SET_UP_MS is how long it moves,
+ * for auto-play to wait out). Set data-setup only while the balloon waits
+ * for its first answer; from that answer on the first pump's own motion
+ * takes over, and a set-up still there would start again.
+ *
+ * This section comes after "First pump" and before Pop and Cash-out: the
+ * rules weigh the same, the later one wins, and so "lift" below, a pop and
+ * a cash-out always take over from a set-up.
+ * ------------------------------------------------------------------- */
+
+.pump-balloon {
+  --pb-setup-ms: 320ms;
+}
+.pump-balloon[data-setup] .pb-scene {
+  animation: pb-zoom-in var(--pb-setup-ms) cubic-bezier(0.3, 0, 0.3, 1) backwards;
+}
+.pump-balloon[data-setup]:not([data-setup="void"]) .pb-limp {
+  animation: pb-limp-on 240ms cubic-bezier(0.3, 0.7, 0.4, 1.2) 60ms backwards;
+}
+
+/* The first pump held: the hose lifts the balloon and it blows up.
+ * Kept for the whole lift (game/setUp.ts FIRST_LIFT_MS), whatever comes
+ * next, and on layers nothing else moves meanwhile: the blow-up on the
+ * grow layer's own scale (a cash-out floats the layer around it), the view
+ * on the scene. So a quick next pump or a cash-out never cuts it short.
+ * The blow-up starts as the hose comes upright, so the neck meets it. */
+.pump-balloon[data-first="lift"] .pb-limp {
+  animation: pb-limp-off var(--pb-lift-ms) linear;
+}
+.pump-balloon[data-first="lift"] .pb-grow {
+  animation: pb-blow-up 260ms cubic-bezier(0.2, 0.8, 0.3, 1.25) 160ms backwards;
+}
+.pump-balloon[data-first="lift"] .pb-scene {
+  animation: pb-zoom-out var(--pb-zoom-ms) cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+/* A refunded balloon: the view eases back out; it stays flat on the floor. */
+.pump-balloon[data-first="floor-void"] .pb-scene {
+  animation: pb-zoom-out 440ms cubic-bezier(0.3, 0, 0.3, 1);
+}
+
+/* The first pump popped it, on the floor, where the hose already lies:
+ * the flat balloon bursts there, with no pieces in the air. */
+.pump-balloon[data-first="floor-popped"] .pb-shards {
+  display: none;
+}
+.pump-balloon[data-first="floor-popped"][data-beat="pop"] .pb-limp {
+  animation: pb-limp-burst 160ms ease-out;
+}
+.pump-balloon[data-first="floor-popped"][data-beat="pop"] .pb-scene {
+  animation: pb-zoom-out 440ms cubic-bezier(0.3, 0, 0.3, 1);
+}
+
+/* With motion off: no zoom and no movement. The hose is simply where it
+ * belongs, and the new balloon fades in at once when the first pump holds
+ * (no wait for a hose that does not move). */
 @media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion="full"]) .pump-balloon[data-setup] .pb-float {
+  :root:not([data-motion="full"]) .pump-balloon[data-first="floor"] .pb-scene {
+    transform: none;
+  }
+  :root:not([data-motion="full"]) .pump-balloon[data-first="lift"] .pb-grow {
+    animation-name: pb-fade-in;
+    animation-delay: 0s;
+  }
+}
+:root[data-motion="reduce"] .pump-balloon[data-first="floor"] .pb-scene {
+  transform: none;
+}
+/* With motion off the small flat balloon still fades in and out (no
+ * unrolling, no burst): switched in one frame it flickered. */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .pump-balloon[data-setup]:not([data-setup="void"]) .pb-limp {
     animation-name: pb-fade-in;
   }
+  :root:not([data-motion="full"]) .pump-balloon[data-first="floor-popped"][data-beat="pop"] .pb-limp {
+    animation-name: pb-limp-off;
+  }
 }
-:root[data-motion="reduce"] .pump-balloon[data-setup] .pb-float {
+:root[data-motion="reduce"] .pump-balloon[data-setup]:not([data-setup="void"]) .pb-limp {
   animation-name: pb-fade-in;
 }
+:root[data-motion="reduce"] .pump-balloon[data-first="floor-popped"][data-beat="pop"] .pb-limp {
+  animation-name: pb-limp-off;
+}
+:root[data-motion="reduce"] .pump-balloon[data-first="lift"] .pb-grow {
+  animation-name: pb-fade-in;
+  animation-delay: 0s;
+}
 
-/* Lifted, not thrown: quick at first, a small swing past upright, still. */
-@keyframes pb-hose-up {
-  0% {
-    transform: var(--pb-hose-down);
-    animation-timing-function: cubic-bezier(0.3, 0.6, 0.4, 1);
+@keyframes pb-zoom-in {
+  from {
+    transform: scale(1);
   }
-  72% {
-    transform: rotate(4deg);
-    animation-timing-function: ease-in-out;
-  }
-  100% {
-    transform: rotate(0deg);
+  to {
+    transform: var(--pb-first-zoom);
   }
 }
 
-/* The cash-out's hose-back, played the other way. */
-@keyframes pb-hose-out {
+@keyframes pb-zoom-out {
   from {
-    transform: scale(0.6);
+    transform: var(--pb-first-zoom);
   }
   to {
     transform: scale(1);
   }
 }
 
-@keyframes pb-scrap-off {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes pb-hose-put-away {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
-
-/* The standing hose shows over the first 80 ms of the set-up (the same
- * 80 ms the lying one goes in), then stays. */
-@keyframes pb-hose-pick-up {
-  0% {
-    opacity: 0;
-  }
-  26.7%,
-  100% {
-    opacity: 1;
-  }
-}
-
-@keyframes pb-fill-in {
+/* The flat balloon unrolls from the fitting. */
+@keyframes pb-limp-on {
   from {
     opacity: 0;
-    transform: scale(0.2);
+    transform: scale(0.4);
   }
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+/* It rides up with the hose, then the blown-up balloon takes its place. */
+@keyframes pb-limp-off {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  85%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Popped on the floor: a quick swell and gone. */
+@keyframes pb-limp-burst {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes pb-blow-up {
+  from {
+    opacity: 0;
+    scale: 0.2;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
   }
 }
 
@@ -801,11 +922,14 @@
  * Pop
  *
  * After the same press and hold, your code sets data-beat to:
- *   "pop"     when the pump popped. The body vanishes at once, 8 grey
- *             pieces fly out and fall (three small ones stay on the
- *             floor), and the hose, with nothing left to hold it up,
- *             drops to the floor and lies there loose, the balloon's
- *             torn neck still on its end.
+ *   "pop"     when the pump popped. The body vanishes at once and
+ *             bursts into 8 grey pieces that fly out, float down and are
+ *             gone: nothing of the balloon stays behind. The hose, with
+ *             nothing left to hold it up, drops to the floor and lies
+ *             there, clean, as after a cash-out. The user asked for this
+ *             on 2026-11-20 ("just make it pop like blast into oblivion";
+ *             grey shards that float down), after first trying a torn
+ *             neck on the hose and bits on the floor.
  *   "popped"  the same end picture with no movement. Use it when a
  *             round is restored after a page refresh, so the pop does
  *             not play again.
@@ -814,36 +938,13 @@
 
 .pump-balloon {
   --pb-popped: #6f7789; /* neutral grey for what is left after a pop */
-  /* The torn neck left on the hose: rubber in a dull, darker shade of the
-   * balloon's own colour (its deep shade lifted a third of the way to its
-   * base, a fifth grey), with a pale edge (its base, halfway to white).
-   * The edge stands out from the hose it lies on (3.1 to 1 or more) and
-   * from the dark floor (9.4 to 1 or more), on every balloon colour; the
-   * flying pieces stay grey, so a loss never looks like confetti. These
-   * are slot 1 (pearl); slots 2 and 3 are below. */
-  --pb-torn: #b8b1a7;
-  --pb-torn-edge: #f6f4ee;
-  --pb-shard-ms: 480ms;
+  /* Out fast, then a slow float down while they fade. */
+  --pb-shard-ms: 900ms;
   --pb-ghost-ms: 300ms;
-  --pb-hose-drop-ms: 440ms;
-  /* The standing hose turned down to the floor, to the left of its pump.
-   * At this angle its end lands on the floor, exactly where the lying
-   * hose (FLAT_HOSE_PATH in Balloon.tsx) ends. */
-  --pb-hose-down: rotate(-87deg);
-}
-.pump-balloon[data-slot="2"] {
-  /* azure */
-  --pb-torn: #4680bf;
-  --pb-torn-edge: #b3d7f8;
-}
-.pump-balloon[data-slot="3"] {
-  /* violet */
-  --pb-torn: #6849af;
-  --pb-torn-edge: #c4b0ed;
 }
 
 /* Hidden until a pop. */
-.pump-balloon :is(.pb-ghost, .pb-remnant, .pb-shard, .pb-hose-flat, .pb-floor-bits) {
+.pump-balloon :is(.pb-ghost, .pb-shard) {
   opacity: 0;
 }
 .pump-balloon .pb-ghost {
@@ -852,20 +953,6 @@
   stroke: var(--pb-popped);
   stroke-width: 2;
   stroke-dasharray: 6 7;
-}
-/* The pop mark: the balloon's torn neck, still on the end of the hose.
- * It is drawn inside the hose layer, so it falls to the floor with the
- * hose and lies there. A cashed-out balloon never has it. */
-.pump-balloon .pb-remnant {
-  fill: var(--pb-torn);
-  stroke: var(--pb-torn-edge);
-  stroke-width: 0.8;
-  stroke-linejoin: round;
-}
-/* Three small pieces that stay on the floor: the same quiet grey as the
- * pieces that fly (4.2 to 1 on the floor), lying still. */
-.pump-balloon .pb-floor-bit {
-  fill: var(--pb-popped);
 }
 /* The pieces are the quiet grey, not the balloon's colour: coloured
  * pieces flying out read as confetti, and a loss is never a party. */
@@ -890,32 +977,15 @@
 .pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-wobble {
   opacity: 0;
 }
-.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-remnant {
-  opacity: 1;
-}
 /* The neck goes with the balloon. A grey neck left standing on the hose
  * looked like a broken picture, not a popped balloon. */
 .pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-neck {
   opacity: 0;
 }
-/* The hose lies loose on the floor with the torn neck on its end:
- * clearly a pop, clearly not a cash-out (there the hose curls back to the
- * pump, clean). The lying hose is its own shape, not the standing one
- * turned over (that made a stiff hook at the nozzle with its end in the
- * air). The standing hose is still turned down, out of sight, because it
- * carries the fitting and the torn neck, and they land on the lying
- * hose's end. This is the end picture; the fall below only plays into it,
- * so "Animations off" gets the same picture. The number plate stays at
+/* The hose falls to the floor and lies there, clean, the same as after
+ * a cash-out; the label under the balloon says which it was. Balloon.tsx
+ * bends it there as one line (hoseShape.ts). The number plate stays at
  * full strength: the number is how players tell balloons apart. */
-.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-hose {
-  transform: var(--pb-hose-down);
-}
-.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-hose-stand {
-  opacity: 0;
-}
-.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) :is(.pb-hose-flat, .pb-floor-bits) {
-  opacity: 1;
-}
 .pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-knot {
   fill: var(--pb-popped);
 }
@@ -930,69 +1000,6 @@
 .pump-balloon[data-beat="pop"] .pb-shard {
   animation: pb-shard-fly var(--pb-shard-ms) linear;
 }
-.pump-balloon[data-beat="pop"] .pb-hose {
-  animation: pb-hose-drop var(--pb-hose-drop-ms) linear;
-}
-/* The standing hose falls; as it settles, the lying hose takes over. */
-.pump-balloon[data-beat="pop"] .pb-hose-stand {
-  animation: pb-hose-hand-over var(--pb-hose-drop-ms) linear;
-}
-.pump-balloon[data-beat="pop"] .pb-hose-flat {
-  animation: pb-hose-take-over var(--pb-hose-drop-ms) linear;
-}
-/* Three of the pieces come down and stay. */
-.pump-balloon[data-beat="pop"] .pb-floor-bits {
-  animation: pb-bits-land 200ms ease-in 280ms backwards;
-}
-
-@keyframes pb-hose-hand-over {
-  0%,
-  86% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-@keyframes pb-hose-take-over {
-  0%,
-  86% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-@keyframes pb-bits-land {
-  from {
-    opacity: 0;
-    translate: 0 -10px;
-  }
-  to {
-    opacity: 1;
-    translate: 0 0;
-  }
-}
-
-/* The hose falls like a rope let go: slow at first, fast into the floor,
- * one small bounce, then still. Quiet: no whip, no shake. */
-@keyframes pb-hose-drop {
-  0% {
-    transform: rotate(0deg);
-    animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.5);
-  }
-  58% {
-    transform: var(--pb-hose-down);
-    animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
-  }
-  76% {
-    transform: rotate(-74deg);
-    animation-timing-function: cubic-bezier(0.5, 0, 0.8, 0.5);
-  }
-  100% {
-    transform: var(--pb-hose-down);
-  }
-}
 
 @keyframes pb-fade-in {
   from {
@@ -1003,24 +1010,29 @@
   }
 }
 
-/* Fast out, then falls and fades. */
+/* Out and up, then a slow float down while they fade. Mostly up and down,
+ * little sideways (a third of --dx), and fading from early on, so with
+ * three balloons none crosses into the next slot or off the screen still
+ * showing. */
 @keyframes pb-shard-fly {
   0% {
     opacity: 1;
     transform: translate(0, 0) rotate(0deg);
-    animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1);
+    animation-timing-function: cubic-bezier(0.15, 0.75, 0.35, 1);
   }
-  30% {
-    opacity: 1;
-    transform: translate(calc(var(--dx) * 0.8), calc(var(--dy) * 0.8)) rotate(calc(var(--r) * 0.4));
-    animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6);
+  22% {
+    opacity: 0.75;
+    transform: translate(calc(var(--dx) * 0.3), calc(var(--dy) * 0.85)) rotate(calc(var(--r) * 0.35));
+    animation-timing-function: ease-in-out;
   }
-  60% {
-    opacity: 1;
+  55% {
+    opacity: 0.35;
+    transform: translate(calc(var(--dx) * 0.33), calc(var(--dy) + 22px)) rotate(calc(var(--r) * 0.65));
+    animation-timing-function: ease-in;
   }
   100% {
     opacity: 0;
-    transform: translate(var(--dx), calc(var(--dy) + 70px)) rotate(var(--r));
+    transform: translate(calc(var(--dx) * 0.35), calc(var(--dy) + 60px)) rotate(var(--r));
   }
 }
 
@@ -1037,7 +1049,7 @@
  * ------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion="full"]) .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-hose-stand, .pb-hose-flat, .pb-floor-bits, .pb-remnant, .pb-shard, .pb-neck, .pb-tie, .pb-value) {
+  :root:not([data-motion="full"]) .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-scene, .pb-shard, .pb-neck, .pb-tie, .pb-value) {
     animation: none !important;
   }
   :root:not([data-motion="full"]) .pump-balloon .pb-grow {
@@ -1048,7 +1060,7 @@
   }
 }
 
-:root[data-motion="reduce"] .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-hose-stand, .pb-hose-flat, .pb-floor-bits, .pb-remnant, .pb-shard, .pb-neck, .pb-tie, .pb-value) {
+:root[data-motion="reduce"] .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-scene, .pb-shard, .pb-neck, .pb-tie, .pb-value) {
   animation: none !important;
 }
 :root[data-motion="reduce"] .pump-balloon[data-beat="pop"] :is(.pb-wobble, .pb-neck) {
@@ -1067,8 +1079,12 @@
  *
  * Your code sets data-beat on the balloon svg element:
  *   "cashout"  when the SERVER CONFIRMS the cash-out (not on tap).
- *              The balloon dips, then floats up and fades. The pump
- *              stays, its hose shrinks back, and its number gets a tick.
+ *              The balloon dips, then floats up and fades. Once it is
+ *              let go, the hose falls to the floor and lies there exactly
+ *              as after a pop, but clean: no torn neck, no bits. The
+ *              user asked for this on 2026-11-20 ("the pipe will also
+ *              fall into the same position as it would if it would
+ *              break"), so every new balloon starts on the floor.
  *   "cashed"   the same end picture with no movement. Use it when a
  *              round is restored after a page refresh.
  * The look is neutral and the same for every cash-out, profit or not.
@@ -1116,11 +1132,6 @@
 .pump-balloon:is([data-beat="cashout"], [data-beat="cashed"]) .pb-tie {
   opacity: 1;
 }
-/* Also for "cashout": with "Animations off" the hose-back animation is
- * removed, and the hose must still not be left standing in the air. */
-.pump-balloon:is([data-beat="cashout"], [data-beat="cashed"]) .pb-hose {
-  transform: scale(0.6);
-}
 .pump-balloon[data-beat="cashed"] .pb-tick {
   opacity: 1;
 }
@@ -1136,9 +1147,9 @@
 .pump-balloon[data-beat="cashout"] .pb-tie {
   animation: pb-tie-on 140ms cubic-bezier(0.3, 0.7, 0.4, 1.3) 20ms both;
 }
-.pump-balloon[data-beat="cashout"] .pb-hose {
-  animation: pb-hose-back 300ms cubic-bezier(0.2, 0.8, 0.3, 1) calc(var(--pb-release-delay) + 40ms) both;
-}
+/* The hose: once the balloon is let go (after its glow, on a real win),
+ * it falls to the floor as on a pop. Balloon.tsx bends it there and reads
+ * --pb-release-delay for when to start. */
 .pump-balloon[data-beat="cashout"] .pb-tick {
   animation: pb-tick-in var(--pb-tick-ms) ease-out var(--pb-tick-delay) both;
 }
@@ -1191,15 +1202,6 @@
   to {
     opacity: 1;
     transform: scale(1);
-  }
-}
-
-@keyframes pb-hose-back {
-  from {
-    transform: scale(1);
-  }
-  to {
-    transform: scale(0.6);
   }
 }
 

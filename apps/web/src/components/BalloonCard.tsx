@@ -4,7 +4,7 @@ import { Balloon, balloonSize, type BalloonBeat } from '../balloon/Balloon';
 import { afterRoundWords, twoLineChars, type AfterRoundWords } from '../game/afterRound';
 import type { Beat } from '../game/useGame';
 import { balloonTension } from '../game/risk';
-import { balloonSetUp, type SetUpFrom } from '../game/setUp';
+import { balloonSetUp, firstPump, useFirstLift, type SetUpFrom } from '../game/setUp';
 import { HoldButton } from './HoldButton';
 import { StepRow } from './StepRow';
 import type { WinTier } from '../game/winTier';
@@ -302,6 +302,8 @@ export function BalloonCard({
   afterRoundShown,
 }: BalloonCardProps) {
   const slot = balloon.index + 1;
+  // Its first pump's lift, only when this screen sees that pump hold.
+  const lifting = useFirstLift(balloon.rung, beat);
   // Only a real gain is celebrated, judged over the whole round: never a
   // round that paid back no more than its bets and Patches.
   const win = balloon.status === 'cashed' && roundWin !== null ? roundWin : undefined;
@@ -336,6 +338,7 @@ export function BalloonCard({
           scale={cardScale(balloon)}
           beat={balloonBeat(balloon, beat, pending)}
           setUp={balloonSetUp(balloon, setUp)}
+          first={firstPump(balloon, lifting)}
           // How tense its next pump is within this balloon's own range of
           // pop chances; the game's press length reads the same number.
           strain={balloonTension({ rtpBp, ladder }, balloon)}
@@ -399,7 +402,9 @@ export function PreviewCard({ slot, betCents, ladder, maxPayoutCents }: PreviewC
         mainChars={main.length}
       />
       <div className="balloon-box">
-        <Balloon slot={slot} scale={0.45} />
+        {/* Before any bet: the pump with its hose on the floor, no balloon.
+             The balloon goes on when the bet is placed. */}
+        <Balloon slot={slot} scale={0.45} idle />
       </div>
       <SlotLabel main={main} sub="" />
       <SlotAction slot={slot} show={false} onPump={() => undefined} onPumpHold={() => undefined} />

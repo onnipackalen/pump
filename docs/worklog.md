@@ -1889,6 +1889,53 @@ entered.
 Found while checking: a $1,000 bet capped by the max payout shows as
 "$ 100" in its box, because the "Top 100.00×" label takes the room. This
 is on main too, so it is reported, not fixed here.
+## 2026-11-20: a new balloon starts flat on the floor until its first pump
+
+Item 2 of the user's competitor list, the start animation. Two of the
+user's notes pulled different ways: from Stake, "starts from a flat, empty
+balloon that pumps up by itself, and it zooms out slowly"; from SmartSoft,
+"starts at the bottom: lying on the floor, then rises slowly"; and, later
+while playing, "attach a new undeflated, very small balloon, and then the
+first pump will pump it up". Asked in this chat, the user chose: the
+balloon appears at the bet, "have to pump seperately to get off florr",
+and it stays flat until the first pump.
+
+What it does now (balloon.css "First pump" and "Set-up";
+`game/setUp.ts` balloonFirst):
+
+- Before any bet the pump stands with its hose on the floor, no balloon.
+- At the bet a small flat balloon goes onto the end of the hose, on the
+  floor, and the view moves a little closer (8%). After a pop the torn
+  neck and bits go first; after a cash-out the shrunk hose lays itself
+  down first.
+- The first press runs its air pocket along the lying hose (a second
+  pocket, on FLAT_HOSE_PATH, with the same keyframes).
+- If the first pump holds, its answer lifts the hose off the floor, the
+  flat balloon comes up with it and blows up to its first size, and the
+  view eases back out over 900 ms: the Stake zoom. If it pops, the flat
+  balloon bursts on the floor: no fall (the hose is already down) and no
+  pieces in the air, just the burst, the torn neck and the bits.
+- The first pump's answer is never shown early: the lift and the burst
+  only come with the answer. The handle and the press timing (PRESS_MS)
+  are unchanged.
+
+Kept inside the layout's rules: the viewBox is still 0 0 200 320, nothing
+is added under the floor, and the closer view is anchored at the right
+edge of the pump's shadow (174, 314), so the drawing only grows left and
+up; its leftmost point, the hose fitting at x 41, comes to x 30.4, inside
+the 14% (x 28). A test measures this. With motion off: no zoom, no
+movement; the blown-up balloon fades in.
+
+Decided on the way: the lift is quick (280 ms) and the slow part is the
+zoom, so a held Pump button's next press (about 250 ms after the answer)
+finds the hose already up. The "lift" state lasts the whole first rung
+so it plays once and is never cut; a balloon restored after a page load
+shows the floor picture at once, with no set-up.
+
+Not seen yet: a live round on this branch. All five preview slots in the
+folder were taken by other chats, so the frames were checked from the
+branch's real markup and CSS in headless Chrome, with the animations
+stepped.
 ## 2026-11-20: the swipe-up sheet, checked again on top of the reveal and the new pump set-up
 
 The sheet waited for two other merges (the after-round reveal and the
@@ -2329,3 +2376,102 @@ What went wrong, and how it was caught:
 - The `live-stats` server still serves the API only, so the live checks
   ran in a headless Chrome with no port, the page files served from
   `apps/web/dist` and every /api call going to that server.
+## 2026-11-20: the hose falls as one line, pops leave nothing, start fixes
+
+Three requests from the user, then the coordinator's live check of the
+start animation.
+
+- "make it after you cash out. The pipe will also fall into the same
+  position as it would if it would break": after a cash-out the hose now
+  falls to the floor like after a pop (it used to curl back to the pump),
+  so every new balloon starts on the floor and its first pump lifts it.
+- "I don't like the torn rubber bits on the hose nor them on the floor.
+  Just make it pop like blast into oblivion", then "gray into shards and
+  then floats down": the torn neck and the floor bits are gone from the
+  art. The grey shards fly out, float down and fade (900 ms). A popped
+  and a cashed-out pump now end as the same picture; the label under the
+  balloon says which it was.
+- "It falls and then when it hits the floor it crumples. It's not fluid":
+  the fall was the standing hose turned over as a stiff piece and swapped
+  for the lying shape as it landed. Now the hose line itself bends, frame
+  by frame (`balloon/hoseShape.ts`, drawn by `useHoseMotion` in
+  Balloon.tsx): at each moment it is the standing hose turned partway
+  around the nozzle, blended more and more into the lying shape and kept
+  above the floor. Safari (iPhones included) cannot animate a path's
+  shape in CSS, so this is done in code; it works everywhere. The air
+  pocket's lines are hose lines too, so the pocket runs along whatever
+  shape the hose has, and the fitting and the flat balloon ride its end.
+
+The live check found, and this fixes:
+- (blocker) the bet's set-up replayed on the second pump, because
+  data-setup stayed for the balloon's whole life. It now ends at the
+  first answer.
+- the lift replayed after a reload or a return from another page. It now
+  plays only when this screen sees the first pump hold (`useFirstLift`).
+- a quick next pump or cash-out cut the lift short with a jump. The lift
+  is now kept for its whole length (FIRST_LIFT_MS, 900 ms) whatever comes
+  next, and runs on layers nothing else moves (the blow-up on the grow
+  layer's own scale, the view on the scene).
+- with motion off a first-pump pop showed a blown-up balloon for 200 ms;
+  a 24-hour refund jumped to a blown-up balloon on a standing hose. Both
+  now stay flat on the floor ("floor-void" for the refund).
+- smaller: the flat balloon now sits on the floor line; no push-in with
+  2 or 3 balloons (balloon-app.css); a slot that had no balloon before
+  gets the "idle" set-up; with motion off the balloon fades in at once.
+- auto-play pumped during the set-up: `SET_UP_MS` (320) is exported from
+  game/setUp.ts for the auto-bet branch to wait out.
+
+Checked in headless Chrome against the branch's own server (the session's
+browser pane was hidden, so it would not draw): two rounds on Easy and
+four on Expert, every frame recorded. The set-up never ran after a first
+answer; the lift ran once per first pump and cleared after about 900 ms;
+the hose moved in 12 to 18 frames per fall or lift, ending exactly in
+the lying or standing shape; the cash-out fall waited for the release.
+Tests now pin the unhappy paths too (findings 1 to 3).
+
+## 2026-11-20: the balloon grows more in its early pumps
+
+"We have a lot of space at the top. Zoom out, the balloon needs to grow
+more" (relayed from the layout chat). The picture already had the whole
+stage height; the size curve was the limit. The layout chat suggested
+0.45 + 0.55 * p^0.4, but on its own that broke the floor under late pumps
+(a test from an earlier fix: no pump may grow the balloon by less than
+half an even share; p^0.4 gives 0.40 at the top). The approved blend,
+0.45 + 0.55 * (0.2p + 0.8p^0.4), keeps 0.52 there and most of the early
+growth: Easy 0.56 / 0.63 / 0.68 / 0.76 after 1 / 3 / 5 / 10 pumps (was
+0.51 / 0.56 / 0.60 / 0.69), Expert 0.64 after one. Full size is still
+the top rung only, so the biggest balloon, its top at y = 22 and three
+balloons side by side at their biggest are unchanged.
+
+## 2026-11-21: the balloon points out of the nozzle; the re-check's fixes
+
+"make baloon in direction of nozzle": the small flat balloon now comes
+straight out of the hose's end, in line with it, and points left on the
+floor. It did not fit where the hose lay (its end at x 47.3 left 2 units
+before the 14% line under the push-in, and about 2 before the next pump
+with three balloons), so the lying hose now comes off the nozzle in a
+small arc and rests flat on the floor out to x 56 (66.6 long; standing
+79.2). The coordinator asked whether the length change would look like
+a stretch: it did, 76% of it in 3 of 27 frames. hoseAt now scales each
+frame to an even share of the length, so no frame carries more than
+0.8 units (a test holds it under 2.5 times the even share).
+
+The coordinator's re-check of f1a4fab found two majors, both in the
+hose motion: a cash-out during the first pump's lift snapped the hose
+upright (the old clean-up drew the old motion's end shape, and the fall
+started from there), and turning animations off mid-round left the hose
+standing (the clean-up redrew it after React drew the lying one). Every
+motion now starts from the pose drawn last (`hoseFrame`), and the
+clean-up only stops the frames. Live in headless Chrome: a cash-out 100
+ms into the lift turned the hose back to the floor in 34 frames, no step
+over 13.8 units; with motion off the hose lay down at once and stayed
+down at the next bet.
+
+Minor fixes from the same check: going to the stats or verify page and
+back no longer replays the set-up; with motion off the flat balloon
+fades; pop shards fly mostly up and down (a third of their old sideways
+travel) and fade from early on, so none leaves a phone screen still
+showing; the balloon hidden while a new one waits is not drawn at all,
+so its sway and strain loops stop. The fitting at the hose's end rests
+on the floor too, lifting the very end 1.5 units: dead flat, it poked
+1.5 units below the floor line (caught by the floor-line test).
