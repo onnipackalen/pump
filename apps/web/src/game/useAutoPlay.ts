@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ActionResult, RoundView } from '../api/contract';
 import {
+  addHandCashOuts,
   checkBeforeRound,
   enteredBets,
+  handCashOutsFor,
   maxStepsPerRound,
   nextBets,
   nextSteps,
@@ -12,6 +14,7 @@ import {
   type AutoPlaySettings,
   type AutoStep,
   type BetLimits,
+  type HandCashOuts,
   type RoundBets,
   type StopReason,
 } from './autoPlay';
@@ -40,6 +43,8 @@ export interface AutoPlayStatus {
    * a run, the bets the next round would have had. Null before the first run.
    */
   readonly bets: RoundBets | null;
+  /** Balloons the player has cashed out by hand during this run. */
+  readonly handCashOuts: HandCashOuts | null;
   /** Why the last run stopped. Null while running or before the first run. */
   readonly stopReason: StopReason | null;
 }
@@ -48,6 +53,11 @@ export interface AutoPlay {
   readonly status: AutoPlayStatus;
   readonly start: (plan: AutoPlayPlan) => void;
   readonly stop: () => void;
+  /**
+   * The player's own Cash out while auto-play runs, for these balloons of the
+   * round on screen. Auto-play sends it on its next beat (see runAutoPlay).
+   */
+  readonly cashOut: (round: RoundView, balloonIndexes: readonly number[]) => void;
 }
 
 export interface AutoPlayPauses {
@@ -63,6 +73,8 @@ export interface AutoPlayHooks {
   readonly shouldStop: () => boolean;
   /** Called after each round: the new progress, and the next round's bets. */
   readonly report: (progress: AutoPlayProgress, bets: RoundBets) => void;
+  /** The balloons of this round the player has cashed out by hand so far. */
+  readonly handCashOuts: (roundId: string) => ReadonlySet<number>;
 }
 
 export interface AutoPlayEnd {
@@ -80,6 +92,7 @@ const idle: AutoPlayStatus = {
   settings: null,
   progress: { roundsPlayed: 0, netCents: 0 },
   bets: null,
+  handCashOuts: null,
   stopReason: null,
 };
 
@@ -124,6 +137,12 @@ async function sendBeat(
  * same GameActions as a player's clicks, and the next step is worked out
  * from the server's last answer, never from a guess.
  *
+ * Auto-play is the only thing that sends requests while it runs. The
+ * player's own Cash out doesn't go to the server directly: it is noted
+ * (hooks.handCashOuts) and sent here as that balloon's next step. So a
+ * balloon never has two requests on their way, a pump can't follow its
+ * cash-out, and the round carries on for the other balloons as usual.
+ *
  * After each round the bets change by the On win or On loss setting
  * (nextBets), and the stop rules are checked with the changed bets.
  */
@@ -154,8 +173,31 @@ export async function runAutoPlay(
     let taken = 0;
     while (nextSteps(round, settings.targetPumps).length > 0) {
       await sleep(pauses.stepMs);
-      if (hooks.shouldStop()) return end('player');
-      const steps = nextSteps(round, settings.targetPumps);
+      // Read after the pause, so a Cash out pressed during it goes on this beat.
+      const handCashOuts = hooks.handCashOuts(round.id);
+      const steps = nextSteps(round, settings.targetPumps, handCashOuts);
+
+      if (hooks.shouldStop()) {
+        // Stop leaves the balloons to the player, but a Cash out they have
+        // already pressed still goes, rather than being lost.
+        const theirs = steps.filter(
+          (step) => step.kind === 'cash-out' && handCashOuts.has(step.balloonIndex),
+        );
+        if (theirs.length > 0) {
+          const newest = await sendBeat(actions, round, theirs);
+          if (!newest) return end('error');
+          round = newest.round;
+        }
+        // If those were the last balloons in play, the round is over: count it.
+        if (round.status === 'finished') {
+          progress = {
+            roundsPlayed: progress.roundsPlayed + 1,
+            netCents: progress.netCents + roundNetCents(round),
+          };
+        }
+        return end('player');
+      }
+
       taken += steps.length;
       if (taken > stepLimit) return end('error');
       // Every balloon still in play at once. Each request carries its own
@@ -180,6 +222,8 @@ export function useAutoPlay(actions: GameActions): AutoPlay {
   const [status, setStatus] = useState<AutoPlayStatus>(idle);
   const running = useRef(false);
   const stopRequested = useRef(false);
+  // The player's hand cash-outs. A ref, so the loop reads the newest at once.
+  const handCashOuts = useRef<HandCashOuts | null>(null);
 
   // Leaving the page (or this component) stops auto-play for good: it never
   // carries on, or starts again, without the player.
@@ -195,12 +239,14 @@ export function useAutoPlay(actions: GameActions): AutoPlay {
       if (running.current) return;
       running.current = true;
       stopRequested.current = false;
+      handCashOuts.current = null;
       setStatus({
         running: true,
         stopping: false,
         settings: plan.settings,
         progress: { roundsPlayed: 0, netCents: 0 },
         bets: enteredBets(plan.betsCents),
+        handCashOuts: null,
         stopReason: null,
       });
       void (async () => {
@@ -208,14 +254,17 @@ export function useAutoPlay(actions: GameActions): AutoPlay {
           shouldStop: () => stopRequested.current,
           report: (latest, nextRound) =>
             setStatus((s) => ({ ...s, progress: latest, bets: nextRound })),
+          handCashOuts: (roundId) => handCashOutsFor(handCashOuts.current, roundId),
         });
         running.current = false;
+        handCashOuts.current = null;
         setStatus((s) => ({
           ...s,
           running: false,
           stopping: false,
           progress,
           bets,
+          handCashOuts: null,
           stopReason: reason,
         }));
       })();
@@ -229,5 +278,13 @@ export function useAutoPlay(actions: GameActions): AutoPlay {
     setStatus((s) => ({ ...s, stopping: true }));
   }, []);
 
-  return { status, start, stop };
+  const cashOut = useCallback((round: RoundView, balloonIndexes: readonly number[]) => {
+    if (!running.current) return;
+    const next = addHandCashOuts(handCashOuts.current, round, balloonIndexes);
+    if (next === handCashOuts.current) return;
+    handCashOuts.current = next;
+    setStatus((s) => ({ ...s, handCashOuts: next }));
+  }, []);
+
+  return { status, start, stop, cashOut };
 }

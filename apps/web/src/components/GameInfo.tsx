@@ -53,9 +53,9 @@ export function GameInfo({ config, autoPlay, autoBetSizing }: GameInfoProps) {
         {autoPlay && (
           <li>
             Auto-play uses your bets, pumps each balloon the set number of times, then cashes it
-            out. It buys no Patches and never starts a round that could take you past your loss
-            limit. Up to {MAX_AUTO_ROUNDS} rounds. Stopping mid-round leaves the balloons for you to
-            finish.
+            out. You can still cash out a balloon yourself while it runs. It buys no Patches and
+            never starts a round that could take you past your loss limit. Up to {MAX_AUTO_ROUNDS}{' '}
+            rounds. Stopping mid-round leaves the balloons for you to finish.
           </li>
         )}
         {autoPlay && autoBetSizing && (

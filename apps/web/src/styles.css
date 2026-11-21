@@ -1011,6 +1011,23 @@ input {
   visibility: hidden;
 }
 
+/* The player's own Cash out while auto-play runs: one per balloon, then all. */
+.auto-cash {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 6px;
+}
+
+.auto-cash .btn-two span {
+  white-space: nowrap;
+}
+
+/* Four buttons across a phone: the names a little smaller, so they fit. */
+.auto-cash[data-count='3'] .btn-two span {
+  font-size: 11px;
+}
+
 /*
  * Round: the picked balloon's numbers, then its buttons. The big one is
  * Pump with one balloon and Pump all with two or three.

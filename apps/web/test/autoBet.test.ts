@@ -51,6 +51,7 @@ const settings = (overrides: Partial<AutoPlaySettings> = {}): AutoPlaySettings =
 const hooks = (overrides: Partial<AutoPlayHooks> = {}): AutoPlayHooks => ({
   shouldStop: () => false,
   report: () => undefined,
+  handCashOuts: () => new Set(),
   ...overrides,
 });
 
@@ -403,8 +404,10 @@ describe('the auto-play panel: auto-bet', () => {
     betSizing: true,
     roundActive: false,
     starting: false,
+    round: null,
     onStart: () => undefined,
     onStop: () => undefined,
+    onCashOut: () => undefined,
   };
   const status = (overrides: Partial<AutoPlayStatus> = {}): AutoPlayStatus => ({
     running: true,
@@ -412,6 +415,7 @@ describe('the auto-play panel: auto-bet', () => {
     settings: settings({ rounds: 10 }),
     progress: { roundsPlayed: 2, netCents: -150 },
     bets: { betsCents: [100, 200], held: [null, null] },
+    handCashOuts: null,
     stopReason: null,
     ...overrides,
   });

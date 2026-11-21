@@ -233,6 +233,15 @@ export function App() {
     });
   };
 
+  /**
+   * The player's own Cash out while auto-play runs. It goes through
+   * auto-play, which sends it as the balloon's next step, so the balloon
+   * never gets a pump or a second cash-out after it.
+   */
+  const autoCashOut = (indexes: readonly number[]): void => {
+    if (round && autoRunning) autoPlay.cashOut(round, indexes);
+  };
+
   /** Opens the verify page, on a round if one is given. Back returns to the game. */
   const openVerify = (roundId: string | null): void => {
     setVerifyRoundId(roundId);
@@ -580,8 +589,10 @@ export function App() {
                   roundActive={roundActive && !autoRunning}
                   starting={state.starting && !autoRunning}
                   status={autoPlay.status}
+                  round={autoRunning ? round : null}
                   onStart={startAutoPlay}
                   onStop={autoPlay.stop}
+                  onCashOut={autoCashOut}
                 />
               </div>
             )}

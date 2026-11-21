@@ -49,6 +49,7 @@ const limits = GAME_CONFIG.limits;
 const hooks = (overrides: Partial<AutoPlayHooks> = {}): AutoPlayHooks => ({
   shouldStop: () => false,
   report: () => undefined,
+  handCashOuts: () => new Set(),
   ...overrides,
 });
 

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import type { BalloonView, RoundView } from '../api/contract';
 import {
   checkAutoPlayForm,
   describeHeld,
   describeStop,
+  handCashOutsFor,
   totalBetCents,
   type AutoPlayField,
   type AutoPlayForm,
@@ -32,8 +34,15 @@ interface AutoPlayPanelProps {
   /** A round the player started by hand is on its way to the server. */
   readonly starting: boolean;
   readonly status: AutoPlayStatus;
+  /**
+   * The round on screen while auto-play runs, for the Cash out buttons. They
+   * stay between rounds (greyed), so the panel doesn't jump every round.
+   */
+  readonly round: RoundView | null;
   readonly onStart: (settings: AutoPlaySettings) => void;
   readonly onStop: () => void;
+  /** The player's own Cash out for these balloons, while auto-play runs. */
+  readonly onCashOut: (balloonIndexes: readonly number[]) => void;
 }
 
 const initialForm: AutoPlayForm = {
@@ -87,8 +96,8 @@ const ERROR_NAMES: readonly (readonly [AutoPlayField, string])[] = [
  * Auto-play: a number of rounds, a target pump count, stop limits, and what
  * happens to the bets after a win or a loss. It starts from the bets in the
  * bet panel below it. While it runs, this shows the progress with the
- * round's bet, and Stop. The rules are spelled out in settings, under Game
- * info.
+ * round's bet, Stop, and Cash out for the balloons in play. The rules are
+ * spelled out in settings, under Game info.
  */
 export function AutoPlayPanel({
   maxPumps,
@@ -99,8 +108,10 @@ export function AutoPlayPanel({
   roundActive,
   starting,
   status,
+  round,
   onStart,
   onStop,
+  onCashOut,
 }: AutoPlayPanelProps) {
   const [form, setForm] = useState<AutoPlayForm>(initialForm);
   const check = checkAutoPlayForm(form, maxPumps, roundBetCents, betSizing);
@@ -206,6 +217,14 @@ export function AutoPlayPanel({
         ) : null}
       </p>
 
+      {running && round && (
+        <HandCashOuts
+          round={round}
+          asked={handCashOutsFor(status.handCashOuts, round.id)}
+          onCashOut={onCashOut}
+        />
+      )}
+
       {/* The fields come after the button and the result line: the same
           top-to-bottom order as the bet panel, most used first. */}
       {!running && (
@@ -292,5 +311,79 @@ export function AutoPlayPanel({
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * The player's own Cash out while auto-play runs. With one balloon, one
+ * button. With two or three, one per balloon (with its colour dot) and Cash
+ * out all, in fixed places, so nothing moves under a finger as balloons end.
+ *
+ * A press doesn't go to the server here: auto-play sends it as that
+ * balloon's next step, right after any pump already on its way (and only if
+ * that pump holds). The amount is the balloon's cash-out value as the stage
+ * shows it. Once pressed, the button says "queued" until the balloon is out.
+ */
+function HandCashOuts({
+  round,
+  asked,
+  onCashOut,
+}: {
+  readonly round: RoundView;
+  readonly asked: ReadonlySet<number>;
+  readonly onCashOut: (balloonIndexes: readonly number[]) => void;
+}) {
+  const multi = round.balloons.length > 1;
+  const open = (b: BalloonView): boolean =>
+    b.status === 'active' && b.cashOutCents !== null && !asked.has(b.index);
+  const cashable = round.balloons.filter(open);
+  const queued = round.balloons.filter((b) => b.status === 'active' && asked.has(b.index));
+  const allCents = cashable.reduce((sum, b) => sum + (b.cashOutCents ?? 0), 0);
+  const text = (b: BalloonView): string =>
+    b.status !== 'active' || b.cashOutCents === null
+      ? '—'
+      : asked.has(b.index)
+        ? 'queued'
+        : formatCents(b.cashOutCents);
+  const hint = 'Cashes out right after any pump on its way, if that pump holds.';
+
+  return (
+    <div className="auto-cash" data-count={round.balloons.length}>
+      {round.balloons.map((b) => (
+        <button
+          key={b.index}
+          type="button"
+          className="btn btn-outline btn-two"
+          disabled={!open(b)}
+          onClick={() => onCashOut([b.index])}
+          title={multi ? `Cash out balloon ${b.index + 1}. ${hint}` : `Cash out. ${hint}`}
+          aria-label={
+            open(b)
+              ? `Cash out${multi ? ` balloon ${b.index + 1}` : ''}, ${text(b)}`
+              : undefined
+          }
+        >
+          <span className="btn-name">
+            {multi && <span className="dot" data-slot={b.index + 1} aria-hidden="true" />}
+            Cash out
+          </span>
+          <strong>{text(b)}</strong>
+        </button>
+      ))}
+      {multi && (
+        <button
+          type="button"
+          className="btn btn-outline btn-two"
+          disabled={cashable.length === 0}
+          onClick={() => onCashOut(cashable.map((b) => b.index))}
+          title={`Cash out every balloon in play that has been pumped. ${hint}`}
+        >
+          <span>Cash out all</span>
+          <strong>
+            {cashable.length > 0 ? formatCents(allCents) : queued.length > 0 ? 'queued' : '—'}
+          </strong>
+        </button>
+      )}
+    </div>
   );
 }

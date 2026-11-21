@@ -13,6 +13,8 @@
  *   is pumped if it is below the target number of successful pumps, or
  *   cashed out if it has reached it. Balloons are independent and each has
  *   its own draws, so playing them together changes no outcome;
+ * - a balloon the player cashed out by hand is cashed out on the next beat
+ *   instead, and is then done (see nextSteps);
  * - a balloon whose top rung (after the payout cap) is below the target
  *   cashes out by itself when it reaches the top;
  * - no Patches are bought.
@@ -73,19 +75,35 @@ export type AutoStep =
   | { readonly kind: 'pump'; readonly balloonIndex: number }
   | { readonly kind: 'cash-out'; readonly balloonIndex: number };
 
+const NONE: ReadonlySet<number> = new Set();
+
 /**
  * The actions for the next beat of a round: one for every balloon still in
  * play, all sent together. A balloon below the target (or its own lower
- * top) is pumped; one that has reached the target is cashed out. Empty when
- * no balloon is in play, so the round is over.
+ * top) is pumped; one that has reached the target is cashed out.
+ *
+ * `handCashOuts` are the balloons the player has cashed out by hand during
+ * this round. Each of those still in play is cashed out now instead of
+ * pumped, so its very next request is the cash-out. Only one that has been
+ * pumped, as there is nothing to cash out before that (and the player's
+ * Cash out can't be pressed then either). Once it has cashed out it is no
+ * longer in play, so nothing is ever sent for it again.
+ *
+ * Empty when no balloon is in play, so the round is over.
  */
-export function nextSteps(round: RoundView, targetPumps: number): readonly AutoStep[] {
+export function nextSteps(
+  round: RoundView,
+  targetPumps: number,
+  handCashOuts: ReadonlySet<number> = NONE,
+): readonly AutoStep[] {
   const steps: AutoStep[] = [];
   for (const balloon of round.balloons) {
     if (balloon.status !== 'active') continue;
+    const cashOut =
+      balloon.rung >= targetPumps || (balloon.rung >= 1 && handCashOuts.has(balloon.index));
     // An active balloon is always below its top: the top cashes out by itself.
     steps.push(
-      balloon.rung >= targetPumps
+      cashOut
         ? { kind: 'cash-out', balloonIndex: balloon.index }
         : { kind: 'pump', balloonIndex: balloon.index },
     );
@@ -96,8 +114,9 @@ export function nextSteps(round: RoundView, targetPumps: number): readonly AutoS
 /**
  * The most actions one round can take: per balloon, one pump per rung up to
  * the target and one cash-out. Auto-play buys no Patches, so every pump
- * either moves up a rung or ends the balloon. A round that takes more
- * actions than this means something is wrong, and auto-play stops.
+ * either moves up a rung or ends the balloon, and a hand cash-out only
+ * comes sooner. A round that takes more actions than this means something
+ * is wrong, and auto-play stops.
  */
 export function maxStepsPerRound(balloonCount: number, targetPumps: number): number {
   return balloonCount * (targetPumps + 1);
@@ -244,6 +263,48 @@ export function checkBeforeRound(
   }
   if (roundBetCents > balanceCents) return 'balance';
   return null;
+}
+
+/**
+ * The balloons the player has cashed out by hand while auto-play runs, in
+ * the round they were pressed in. Auto-play sends those cash-outs itself
+ * (nextSteps), so each balloon gets exactly one request at a time and never
+ * a cash-out from both the player and auto-play.
+ */
+export interface HandCashOuts {
+  readonly roundId: string;
+  readonly indexes: readonly number[];
+}
+
+/**
+ * The hand cash-outs after the player presses Cash out on these balloons,
+ * as the round on screen shows them. A balloon counts only while it is in
+ * play and has a cash-out value (it has been pumped): the same rule as the
+ * Cash out button. A press in a new round starts a new list. Returns the
+ * same object when the press changes nothing, so a second press is a no-op.
+ */
+export function addHandCashOuts(
+  asked: HandCashOuts | null,
+  round: RoundView,
+  indexes: readonly number[],
+): HandCashOuts | null {
+  const before = asked?.roundId === round.id ? asked.indexes : [];
+  const added = indexes.filter((index) => {
+    const balloon = round.balloons[index];
+    return (
+      round.status === 'active' &&
+      balloon?.status === 'active' &&
+      balloon.cashOutCents !== null &&
+      !before.includes(index)
+    );
+  });
+  if (added.length === 0) return asked;
+  return { roundId: round.id, indexes: [...before, ...new Set(added)] };
+}
+
+/** The balloons of this round the player has cashed out by hand. */
+export function handCashOutsFor(asked: HandCashOuts | null, roundId: string): ReadonlySet<number> {
+  return asked?.roundId === roundId ? new Set(asked.indexes) : NONE;
 }
 
 /**
