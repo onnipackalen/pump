@@ -12,7 +12,7 @@ import {
   thinLine,
   watchShown,
   type LiveStats,
-} from '../src/stats/liveStats';
+} from '../src/stats/liveTally';
 import { balloon, round } from './fixtures';
 
 /** A finished one-balloon round. */
