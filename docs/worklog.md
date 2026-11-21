@@ -1403,3 +1403,38 @@ deleted by about 20 December 2026.
 Left as it is: Render calls the health check every five seconds and the
 server logs each call, so the log is mostly health checks. Search the log
 for `the database file is` to find the start line.
+
+## 2026-11-20: README: the math, rounding, tradeoffs and more time
+
+The brief asks the README for the pop curves and Patch pricing with the
+reasoning, which way money is rounded and why, the tradeoffs, and what we
+would do with more time. None of it was there. Four sections were added at
+the end of the README: "The math: pop curves and Patch prices" (with the
+payout cap, rounding and how the math is checked), "Tradeoffs" and "With more
+time". The reasoning comes from this worklog and `config.ts`; nothing in the
+game changed.
+
+Every number in them was worked out again by a separate scratch script from
+`config.ts` alone, in BigInt, and matched against `npm run rtp`: the first
+pump's pop chance at 94%, 97% and 99%, the lowest RTP the ladders allow
+(93.59%, set by Easy), the largest single Patch ($25,773.20, Hard, $500 bet,
+pump 13), the Hard Patch example ($10.53, worth 96.96% of its price) and the
+Easy $1 Patches that cost their whole step (pumps 2 to 8). The numbers are
+labelled as being at 97% with the ladders of this date, and point to `npm run
+rtp` for the current ones.
+
+Turned out wrong in the first draft, and how it was caught:
+
+- "Rounding toward the house is the only rule that never pays more than the
+  RTP" claimed too much: rounding down by two cents never pays more either.
+  It now says "the only direction", as `math.ts` does. Caught on re-reading.
+- "The tests run at 94%, 97% and 99%": only the tests that depend on the RTP
+  do. Caught by checking the test files.
+- "The bet panel shows each balloon's top": it shows the top only when the
+  cap cuts the ladder. Caught by reading `BetPanel.tsx`.
+
+Left for the owner: "Tradeoffs" and "With more time" are drafted from the
+record and should be read in the owner's own words before submitting. The
+README intro on main ("is live") and on `cashout-reveal` ("Not live yet")
+already clash when merged; the new sections add no clash of their own
+(checked with `git merge-file`).
