@@ -1730,3 +1730,30 @@ it is in the motion-off list now.
 
 `balloonLook.test.ts` asked for the old grey scrap; it now checks the
 torn neck's colours on every balloon and that the number is not dimmed.
+
+## 2026-11-20: the swipe-up sheet, checked again on top of the reveal and the new pump set-up
+
+The sheet waited for two other merges (the after-round reveal and the
+new-balloon set-up with the popped picture). With both in main, main was
+merged into `one-screen-layout` (no conflicts, 1461 tests pass) and the
+size check was run again on the real server before main was moved.
+
+Result, 32 sizes and eight states (a one-balloon round and the screen
+after it, a three-balloon round, the same round down to its last balloon,
+the screen after it, capped bets, the Auto form, auto-play running):
+31 pass, and nothing moves between the states on any upright screen.
+568x320 on its side fails as before (the panel scrolls inside itself).
+The after-round line passes everywhere except with three balloons on the
+three phones on their side (667x375, 640x360, 568x320), where it runs
+into the numbers. That was already so on main before the sheet and is
+the reveal's own fix, not a change from the sheet.
+
+What went wrong, and how it was caught: the first run of the check died
+part-way ("Cannot read properties of undefined (reading 'click')") after
+one state. The check drives the game in a hidden frame inside the preview
+tab, and the user was playing in that same tab at the same time. Both
+were the same player (one cookie for `localhost`), so each kept ending
+the other's round. The fix is the one the pump set-up entry above found
+for a different reason: run the check in its own tab on `127.0.0.1`,
+which is a different player from `localhost`. The script now also waits
+for a button and says which one is missing, instead of clicking nothing.
