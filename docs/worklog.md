@@ -1757,3 +1757,26 @@ the other's round. The fix is the one the pump set-up entry above found
 for a different reason: run the check in its own tab on `127.0.0.1`,
 which is a different player from `localhost`. The script now also waits
 for a button and says which one is missing, instead of clicking nothing.
+
+## 2026-11-20: the after-round line on phones on their side
+
+The sheet's size check found the last gap in the after-round line: with
+three balloons on a phone on its side (667x375, 640x360, 568x320) each
+slot is only 64 to 70 px wide. The line, at its 9px floor, wrapped to
+four lines there and ran up into the numbers above it.
+
+Built: a second, shorter wording of the same facts ("Would pop next",
+"Would pop after 1.37×", "Would reach top (25.00×)"). The card writes
+both, and a container query on the slot shows the short one only below
+104 px. The full line stays as the title. Upright phones (about 120 px a
+slot) still show the full line.
+
+Checked live on its own server at all three sizes after a real
+three-balloon round: no overlap, two lines. Then the longest wording any
+ladder can produce (the 5,000× top) was put in by hand: three lines at
+9px, still clear of the numbers. A test now wraps every short line word
+by word at 12 characters, for every ladder's top multiplier, and asks for
+three lines at most, so a new ladder with a bigger top fails the test
+instead of the screen. 1465 tests pass.
+
+Nothing turned out wrong in this step.
