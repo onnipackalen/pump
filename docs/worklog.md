@@ -2671,7 +2671,8 @@ balloons until the next bet, so picking 3 balloons or another difficulty
 changed nothing on screen. Only the pump's colour followed (stageLevelId),
 and the step row still showed the old ladder.
 
-Built on `claude/instant-settings-7f5ff1` (95512e2), screen only:
+Built on `claude/competent-jemison-9d0e5b` (the fix is 95512e2, first
+made on `claude/instant-settings-7f5ff1`), screen only:
 
 - `game/stage.ts`, `stageRound`: a round in play always stays on the
   stage. A round that is over stays until the bet panel picks another
