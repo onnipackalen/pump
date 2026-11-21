@@ -14,17 +14,25 @@
  *              pumped; the round is abandoned, so its bet is refunded.
  * The nonce is the first one, counting from 0, whose draws give that story,
  * so the same round comes out at every RTP without hard-coding any roll.
+ *
+ * Once the round is over, Balloon 1 (cashed out below its top rung) has a
+ * reveal: where it would have popped. Its Patch save means its draw count is
+ * above its rung, so the reveal starts at the draw count.
  */
 import { describe, expect, it } from 'vitest';
 import {
+  canReveal,
   cashOut,
   GAME_CONFIG,
+  isRoundOver,
   pump,
+  revealAfterCashOut,
   RTP_BP,
   settleAbandoned,
   startRound,
   surviveChance,
   type BalloonAction,
+  type CashOutReveal,
   type DrawRecord,
   type GameConfig,
   type PumpOutcome,
@@ -34,12 +42,13 @@ import {
   drawerFor,
   drawRoll,
   hashServerSeed,
+  revealDrawerFor,
   verifyRound,
   type BalloonRecord,
   type ClaimedBalloon,
   type RoundRecord,
 } from '@pump/engine/fair';
-import { fixedLadder } from '../fixtures';
+import { fixedConfig, fixedLadder } from '../fixtures';
 
 /** The three RTP values reviewers will try, plus whatever is configured now. */
 const RTPS = [...new Set([9400, 9700, 9900, RTP_BP])];
@@ -117,6 +126,19 @@ class Recorder {
     this.round = settled.round;
   }
 
+  /**
+   * What the server works out once the round is over: the reveal of each
+   * balloon cashed out below its top rung, from the round's seeds. Null for
+   * every other balloon, and for all of them while the round is in play.
+   */
+  afterRound(balloonIndex: number, round: Round = this.round): CashOutReveal | null {
+    const balloon = round.balloons[balloonIndex];
+    if (balloon === undefined || !isRoundOver(round) || !canReveal(balloon)) return null;
+    const seeds = { serverSeed: SERVER_SEED, clientSeed: CLIENT_SEED, nonce: this.nonce };
+    const draws = revealDrawerFor({ ...seeds, balloonIndex, drawIndex: balloon.drawIndex });
+    return revealAfterCashOut(round, balloonIndex, draws);
+  }
+
   record(): RoundRecord {
     return {
       serverSeed: SERVER_SEED,
@@ -137,6 +159,7 @@ class Recorder {
         patchesCents: balloon.patchesCents,
         payoutCents: balloon.payoutCents,
         draws: this.draws[i] ?? [],
+        afterRound: this.afterRound(i),
       })),
     };
   }
@@ -223,6 +246,24 @@ function withDraw(
   }));
 }
 
+/** Balloon `index`'s reveal, which the test needs to be there. */
+function revealOf(balloon: ClaimedBalloon): CashOutReveal {
+  if (balloon.afterRound === null) throw new Error('this balloon has no reveal');
+  return balloon.afterRound;
+}
+
+/** A copy of the record with balloon `index`'s reveal replaced by `change(reveal)`. */
+function withReveal(
+  record: RoundRecord,
+  index: number,
+  change: (reveal: CashOutReveal) => CashOutReveal | null,
+): RoundRecord {
+  return withClaim(record, index, (claimed) => ({ afterRound: change(revealOf(claimed)) }));
+}
+
+/** What a reveal outcome reads as in a problem sentence. */
+const REVEAL_WORDS = { popped: 'would have popped', top: 'would have reached its top rung' };
+
 /**
  * The roll sentence for the first draw that changes when a record's seeds or
  * nonce are swapped for `changed`'s. Up to that draw every roll is the same,
@@ -254,7 +295,8 @@ function plural(n: number, noun: string): string {
 // ---------------------------------------------------------------------------
 
 describe.each(RTPS)('verifyRound at RTP %i', (rtpBp) => {
-  const honest = honestRound(rtpBp).record();
+  const recorder = honestRound(rtpBp);
+  const honest = recorder.record();
   const [one, two, three] = [at(honest.balloons, 0), at(honest.balloons, 1), at(honest.balloons, 2)];
 
   it('passes the honest round, which has a Patch save, a pop, a cash-out and a refund', () => {
@@ -456,11 +498,155 @@ describe.each(RTPS)('verifyRound at RTP %i', (rtpBp) => {
         actions: balloon.actions.slice(0, -1),
         status: 'active',
         payoutCents: 0,
+        afterRound: null,
       }));
       expect(verifyRound(hidden).problems).toEqual([
         `Balloon 1: after its last action it is still in play on rung ${String(one.rung)}. ` +
           'In a finished round it would have popped or been cashed out.',
       ]);
+    });
+  });
+
+  describe('the reveal (where Balloon 1 would have popped)', () => {
+    const reveal = revealOf(one);
+    const last = reveal.draws.length - 1;
+    const lastDraw = at(reveal.draws, last);
+
+    it('is worked out again from the seeds, starting at the draw count', () => {
+      const check = verifyRound(honest);
+      const mine = check.balloons[0]?.afterRound;
+      expect(mine).toMatchObject({ outcome: reveal.outcome, reachedRung: reveal.reachedRung });
+      const plain = mine?.draws.map(({ drawIndex, den, num, roll }) => ({ drawIndex, den, num, roll }));
+      expect(plain).toEqual(reveal.draws);
+      // The Patch save put the draw count above the rung; the reveal starts at the count.
+      expect(one.drawIndex).toBeGreaterThan(one.rung);
+      expect(reveal.draws[0]?.drawIndex).toBe(one.drawIndex);
+      // Plain pumps from the next rung, each one surviving but a final pop.
+      expect(mine?.draws.map((d) => [d.message, d.patched, d.survived])).toEqual(
+        reveal.draws.map((d, i) => [
+          `${CLIENT_SEED}:${String(honest.nonce)}:0:${String(d.drawIndex)}:0`,
+          false,
+          !(reveal.outcome === 'popped' && i === last),
+        ]),
+      );
+      reveal.draws.forEach((d, i) => {
+        expect({ num: d.num, den: d.den }).toEqual(
+          surviveChance(honest.rtpBp, honest.ladder, one.rung + 1 + i),
+        );
+      });
+      // The popped and the refunded balloon have none.
+      expect(check.balloons.map((b) => b.afterRound === null)).toEqual([false, true, true]);
+    });
+
+    it('catches a changed outcome', () => {
+      const other = reveal.outcome === 'popped' ? 'top' : 'popped';
+      const check = verifyRound(withReveal(honest, 0, (r) => ({ ...r, outcome: other })));
+      expect(check.problems).toEqual([
+        `Balloon 1: the server says that after cash-out it ${REVEAL_WORDS[other]}, ` +
+          `the seeds say it ${REVEAL_WORDS[reveal.outcome]}.`,
+      ]);
+      expect(check.balloons.map((b) => b.ok)).toEqual([false, true, true]);
+    });
+
+    it('catches a changed rung reached', () => {
+      const rung = reveal.reachedRung + 1;
+      const check = verifyRound(withReveal(honest, 0, (r) => ({ ...r, reachedRung: rung })));
+      expect(check.problems).toEqual([
+        'Balloon 1: the server says that after cash-out it would have reached rung ' +
+          `${String(rung)}, the seeds say rung ${String(reveal.reachedRung)}.`,
+      ]);
+    });
+
+    it('catches a changed roll, chance or draw index in a reveal draw', () => {
+      const where =
+        `Balloon 1, pump ${String(last + 1)} after cash-out ` +
+        `(draw index ${String(lastDraw.drawIndex)})`;
+      const change = (patch: Partial<DrawRecord>) =>
+        withReveal(honest, 0, (r) => ({
+          ...r,
+          draws: r.draws.map((d, j) => (j === last ? { ...d, ...patch } : d)),
+        }));
+      const fake = (lastDraw.roll + 1) % lastDraw.den;
+      expect(verifyRound(change({ roll: fake })).problems).toEqual([
+        `${where}: the server says roll ${String(fake)}, the seeds give ${String(lastDraw.roll)}.`,
+      ]);
+      expect(verifyRound(change({ num: lastDraw.num + 1 })).problems).toEqual([
+        `${where}: the server says the survival chance was ` +
+          `${String(lastDraw.num + 1)}/${String(lastDraw.den)}, the round's RTP and ladder give ` +
+          `${String(lastDraw.num)}/${String(lastDraw.den)}.`,
+      ]);
+      expect(verifyRound(change({ drawIndex: 0 })).problems).toEqual([
+        `${where}: the server gives it draw index 0.`,
+      ]);
+    });
+
+    it('catches a reveal draw left out or added', () => {
+      const made = reveal.draws.length;
+      const missing = withReveal(honest, 0, (r) => ({ ...r, draws: r.draws.slice(0, -1) }));
+      expect(verifyRound(missing).problems).toEqual([
+        `Balloon 1: after cash-out the server lists ${plural(made - 1, 'draw')}, ` +
+          `the seeds make ${String(made)}.`,
+      ]);
+      const extraDraw = { drawIndex: lastDraw.drawIndex + 1, den: 2, num: 1, roll: 0 };
+      const extra = withReveal(honest, 0, (r) => ({ ...r, draws: [...r.draws, extraDraw] }));
+      expect(verifyRound(extra).problems).toEqual([
+        `Balloon 1: after cash-out the server lists ${plural(made + 1, 'draw')}, ` +
+          `the seeds make ${String(made)}.`,
+      ]);
+    });
+
+    it('catches a missing reveal, and still shows the true one', () => {
+      const check = verifyRound(withReveal(honest, 0, () => null));
+      expect(check.problems).toEqual([
+        `Balloon 1: it cashed out on rung ${String(one.rung)}, below its top rung ` +
+          `${String(one.topRung)}, so the round should show where it would have popped, ` +
+          'but the server shows nothing.',
+      ]);
+      expect(check.balloons[0]?.afterRound).toEqual(verifyRound(honest).balloons[0]?.afterRound);
+    });
+
+    it('catches a reveal shown for the popped or the refunded balloon', () => {
+      const onPopped = withClaim(honest, 1, () => ({ afterRound: reveal }));
+      expect(verifyRound(onPopped).problems).toEqual([
+        'Balloon 2: the server shows where it would have popped, but it popped, ' +
+          'so there is nothing to show.',
+      ]);
+      const onRefunded = withClaim(honest, 2, () => ({ afterRound: reveal }));
+      expect(verifyRound(onRefunded).problems).toEqual([
+        'Balloon 3: the server shows where it would have popped, but it was refunded, ' +
+          'so there is nothing to show.',
+      ]);
+    });
+
+    // A server that plays the reveal on from the rung re-reads draws that
+    // decided real pumps. Draw index `rung` is one of them.
+    const fromRung = recorder.afterRound(0, {
+      ...recorder.round,
+      balloons: recorder.round.balloons.map((b, i) => (i === 0 ? { ...b, drawIndex: b.rung } : b)),
+    });
+    const startsAtRung =
+      `Balloon 1, pump 1 after cash-out (draw index ${String(one.drawIndex)}): ` +
+      `the server gives it draw index ${String(one.rung)}.`;
+
+    it('catches a reveal started at the rung instead of the draw count', () => {
+      expect(fromRung?.draws[0]?.drawIndex).toBe(one.rung);
+      const check = verifyRound(withReveal(honest, 0, () => fromRung));
+      expect(check.problems).toContain(startsAtRung);
+      expect(check.balloons[0]?.afterRound?.draws[0]?.drawIndex).toBe(one.drawIndex);
+    });
+
+    it('works it out from the replayed draw count, not the claimed one', () => {
+      // The server also claims a draw count that matches its reveal.
+      const lied = withClaim(withReveal(honest, 0, () => fromRung), 0, () => ({
+        drawIndex: one.rung,
+      }));
+      const check = verifyRound(lied);
+      expect(check.problems).toContain(
+        `Balloon 1: the server says it used ${plural(one.rung, 'draw')}, ` +
+          `the replay uses ${String(one.drawIndex)}.`,
+      );
+      expect(check.problems).toContain(startsAtRung);
+      expect(check.balloons[0]?.afterRound).toEqual(verifyRound(honest).balloons[0]?.afterRound);
     });
   });
 
@@ -536,6 +722,7 @@ describe('verifyRound uses the RTP stored with the round', () => {
     const played = GAME_CONFIG.rtpBp === 9900 ? 9400 : 9900;
     const honest = honestRound(played).record();
     expect(honest.rtpBp).toBe(played);
+    expect(honest.balloons[0]?.afterRound).not.toBeNull();
     // Read with the configured RTP instead, pump 1 would have another chance.
     expect(surviveChance(played, honest.ladder, 1)).not.toEqual(
       surviveChance(GAME_CONFIG.rtpBp, honest.ladder, 1),
@@ -598,9 +785,59 @@ describe('a server that let a balloon climb past the cap', () => {
   });
 });
 
+describe('a reveal played on to a top rung above the cap', () => {
+  // $1,000 on the fixed Expert ladder tops out at rung 6 under the cap. The
+  // player pumps, then buys a Patch on every pump (so it cannot pop) up to
+  // rung 5, and cashes out. A server that says the top is rung 7 plays the
+  // reveal on one pump further than the cap allows.
+  const script = (rtpBp: number) => (nonce: number) => {
+    const r = new Recorder(fixedConfig(rtpBp), nonce, 'expert', [100_000]);
+    r.play({ balloon: 0, patch: false });
+    while (r.balloon(0).status === 'active' && r.balloon(0).rung < 5) {
+      r.play({ balloon: 0, patch: true });
+    }
+    if (r.balloon(0).status === 'active') r.play({ cashOut: 0 });
+    return r;
+  };
+  const raised = (r: Recorder): Round => ({
+    ...r.round,
+    balloons: [{ ...r.balloon(0), topRung: 7 }],
+  });
+
+  it.each(RTPS)('is caught, and the true reveal stops at the real top (RTP %i)', (rtpBp) => {
+    // The first nonce where the pump to rung 6, and the one to rung 7, both survive.
+    const r = firstRound(
+      script(rtpBp),
+      (rec) =>
+        rec.balloon(0).status === 'cashed' &&
+        rec.balloon(0).rung === 5 &&
+        rec.afterRound(0)?.outcome === 'top' &&
+        rec.afterRound(0, raised(rec))?.outcome === 'top',
+    );
+    const honest = r.record();
+    expect(at(honest.balloons, 0).topRung).toBe(6);
+    expect(revealOf(at(honest.balloons, 0))).toMatchObject({ outcome: 'top', reachedRung: 6 });
+    expect(verifyRound(honest).problems).toEqual([]);
+
+    const lie = r.afterRound(0, raised(r));
+    expect(lie).toMatchObject({ outcome: 'top', reachedRung: 7 });
+    const check = verifyRound(withClaim(honest, 0, () => ({ topRung: 7, afterRound: lie })));
+    const cap = fixedConfig(rtpBp).limits.maxPayoutCents;
+    expect(check.problems).toEqual([
+      'Balloon 1: the server says its top rung is 7, but a bet of 100000 cents under the ' +
+        `${String(cap)}-cent cap tops out at rung 6.`,
+      'Balloon 1: the server says that after cash-out it would have reached rung 7, ' +
+        'the seeds say rung 6.',
+      'Balloon 1: after cash-out the server lists 2 draws, the seeds make 1.',
+    ]);
+    expect(check.balloons[0]?.afterRound).toMatchObject({ outcome: 'top', reachedRung: 6 });
+  });
+});
+
 describe('records that are wrong but of the right types', () => {
   it('never throws, and says what is wrong', () => {
     const honest = honestRound(9700).record();
+    const badDraw = { drawIndex: -1, den: 0, num: 0, roll: Number.NaN };
     const broken: RoundRecord[] = [
       { ...honest, ladder: [] },
       { ...honest, rtpBp: 0 },
@@ -612,6 +849,15 @@ describe('records that are wrong but of the right types', () => {
       withBalloon(honest, 0, (b) => ({ ...b, betCents: 12.5 })),
       withClaim(honest, 0, () => ({ status: 'lost' as unknown as ClaimedBalloon['status'] })),
       { ...honest, ladder: honest.ladder.map((h) => h + 0.5) },
+      withClaim(honest, 0, () => ({
+        afterRound: { outcome: 'boom' as never, reachedRung: 99, draws: [badDraw] },
+      })),
+      withClaim(honest, 0, () => ({ afterRound: { outcome: 'top', reachedRung: -1, draws: [] } })),
+      withClaim(honest, 1, () => ({
+        afterRound: { outcome: 'popped', reachedRung: 0, draws: [] },
+      })),
+      // A record from before reveals existed has no afterRound at all.
+      withClaim(honest, 0, () => ({ afterRound: undefined })),
     ];
     for (const record of broken) {
       const check = verifyRound(record);
@@ -630,6 +876,14 @@ describe('records that are wrong but of the right types', () => {
     expect(verifyRound(withClaim(honest, 0, () => ({ status: 'lost' as never }))).problems).toEqual([
       'Balloon 1: the server says it has a status the game does not have ("lost"), ' +
         'the replay says it cashed out.',
+    ]);
+    const truth = revealOf(at(honest.balloons, 0));
+    const boom = withClaim(honest, 0, () => ({
+      afterRound: { ...truth, outcome: 'boom' as never },
+    }));
+    expect(verifyRound(boom).problems).toEqual([
+      'Balloon 1: the server says that after cash-out it would have done something the game ' +
+        `does not have ("boom"), the seeds say it ${REVEAL_WORDS[truth.outcome]}.`,
     ]);
   });
 });
@@ -673,6 +927,7 @@ describe('the docs/fairness.md worked round with a Patch save', () => {
         patchesCents: 10,
         payoutCents: 0,
         draws,
+        afterRound: null,
       },
     ],
   };

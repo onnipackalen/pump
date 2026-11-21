@@ -29,6 +29,7 @@ import {
 import { market } from './market';
 import { formatCents, formatElapsed, formatSignedCents, parseDollarsToCents } from './money';
 import { useMotionSetting } from './motion';
+import { shownReveals } from './verify/shownReveals';
 import { cuesFor } from './sound/cues';
 import { soundBoard } from './sound/SoundBoard';
 import { StatsPage } from './stats/StatsPage';
@@ -127,6 +128,23 @@ export function App() {
   const setUp = useSetUpFrom(round);
   const roundActive = round?.status === 'active';
   const roundWin = round ? roundWinTier(round) : null;
+  // Where each cashed-out balloon would have popped: only once the round is
+  // over and every balloon's last motion has finished, so it never shows
+  // during play or over a pop, cash-out or win.
+  const afterRoundShown =
+    round?.status === 'finished' &&
+    state.beats.every((beat) => beat === 'idle') &&
+    !state.pending.some(Boolean);
+  // Keep the lines as they go on screen, so the verify page can check later
+  // that the round's record says the same.
+  useEffect(() => {
+    if (afterRoundShown) shownReveals.remember(round);
+  }, [afterRoundShown, round]);
+  // And each balloon's top rung as the screen first shows the round: a
+  // reveal stops there, so the verify page checks the record's top against it.
+  useEffect(() => {
+    if (round) shownReveals.rememberTops(round);
+  }, [round]);
   // Net position since this visit began (UK RTS 2E). No deposits happen
   // here, so it is the change in balance.
   const sessionNet =
@@ -434,7 +452,10 @@ export function App() {
         />
       ) : (
       <main className="layout">
-        <section className="stage" aria-label="Balloons">
+        <section
+          className="stage"
+          aria-label="Balloons"
+        >
           <div className="stage-top">
             {state.notice && (
               <div className={`notice notice-${state.notice.tone}`} role="status">
@@ -487,6 +508,7 @@ export function App() {
                         setChosen(balloon.index);
                         holdOne(balloon.index);
                       }}
+                      afterRoundShown={afterRoundShown}
                     />
                   ))
                 : setup.bets.map((text, index) => (
@@ -538,8 +560,36 @@ export function App() {
               />
             )}
 
+            {/* Always mounted, so the typed auto-play settings are kept. Before the
+                bet panel, so on the Auto tab Start is the first thing in the panel. */}
+            {autoOffered && (
+              <div hidden={!(panel === 'auto-running' || (panel === 'bet' && mode === 'auto'))}>
+                <AutoPlayPanel
+                  maxPumps={setupDifficulty.ladder.length}
+                  roundBetCents={check.totalCents}
+                  betsValid={check.betsCents !== null}
+                  roundActive={roundActive && !autoRunning}
+                  starting={state.starting && !autoRunning}
+                  status={autoPlay.status}
+                  onStart={startAutoPlay}
+                  onStop={autoPlay.stop}
+                />
+              </div>
+            )}
+
             {panel === 'bet' && (
               <>
+                <BetPanel
+                  config={config}
+                  setup={setup}
+                  check={check}
+                  disabled={state.phase !== 'ready'}
+                  starting={state.starting}
+                  showBet={mode === 'manual' || !market.autoPlay}
+                  onChange={setSetup}
+                  onStart={start}
+                />
+                {/* Last in the panel: how to play is chosen once, the rest every round. */}
                 {market.autoPlay && (
                   <div className="segmented" role="radiogroup" aria-label="How to play">
                     <button
@@ -562,33 +612,7 @@ export function App() {
                     </button>
                   </div>
                 )}
-                <BetPanel
-                  config={config}
-                  setup={setup}
-                  check={check}
-                  disabled={state.phase !== 'ready'}
-                  starting={state.starting}
-                  showBet={mode === 'manual' || !market.autoPlay}
-                  onChange={setSetup}
-                  onStart={start}
-                />
               </>
-            )}
-
-            {/* Always mounted, so the typed auto-play settings are kept. */}
-            {autoOffered && (
-              <div hidden={!(panel === 'auto-running' || (panel === 'bet' && mode === 'auto'))}>
-                <AutoPlayPanel
-                  maxPumps={setupDifficulty.ladder.length}
-                  roundBetCents={check.totalCents}
-                  betsValid={check.betsCents !== null}
-                  roundActive={roundActive && !autoRunning}
-                  starting={state.starting && !autoRunning}
-                  status={autoPlay.status}
-                  onStart={startAutoPlay}
-                  onStop={autoPlay.stop}
-                />
-              </div>
             )}
           </aside>
         )}

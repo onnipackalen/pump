@@ -16,23 +16,33 @@
  * It also keeps the server's promises the screen relies on: one active
  * round, idempotency keys, expected draw index checks (409 with the current
  * state), and seeds that stay fixed during a round.
+ *
+ * Once a round is over it works out each reveal ("where it would have
+ * popped") for every balloon cashed out below its top rung, as the server
+ * does: with the engine's revealAfterCashOut and the round's own seeds, only
+ * after the engine accepted the action that ended the round. Nothing about a
+ * reveal exists while the round is in progress.
  */
 
 import {
+  canReveal,
   cashOut as engineCashOut,
   EngineError,
   GAME_CONFIG,
   isRoundOver,
+  multiplierAt,
   pump as enginePump,
   quoteBalloon,
+  revealAfterCashOut,
   startRound as engineStartRound,
   type GameConfig,
   type Round,
 } from '@pump/engine';
-import { drawerFor, hashServerSeed } from '@pump/engine/fair';
+import { drawerFor, hashServerSeed, revealDrawerFor } from '@pump/engine/fair';
 import { ApiFailure, type GameClient } from '../api/client';
 import type {
   ActionResult,
+  AfterRoundView,
   ApiErrorBody,
   BalloonAction,
   DrawRecordView,
@@ -46,6 +56,7 @@ import type {
   RoundView,
   SessionView,
   StartRoundRequest,
+  VerifiableAfterRound,
   VerifiableRound,
 } from '../api/contract';
 import { CLIENT_SEED_PATTERN } from '../game/clientSeed';
@@ -68,6 +79,11 @@ interface DemoRound {
   readonly actions: BalloonAction[][];
   /** Per balloon, the draw of every pump in order: what the verify page compares. */
   readonly draws: DrawRecordView[][];
+  /**
+   * Per balloon, its reveal with its draws. All null until the round is
+   * over; then set for each balloon cashed out below its top rung.
+   */
+  readonly afterRounds: (VerifiableAfterRound | null)[];
 }
 
 /** A new server seed: 32 random bytes as 64 lowercase hex characters. */
@@ -157,6 +173,7 @@ export class DemoClient implements GameClient {
         maxPayoutCents: this.config.limits.maxPayoutCents,
         actions: started.round.balloons.map(() => []),
         draws: started.round.balloons.map(() => []),
+        afterRounds: started.round.balloons.map(() => null),
       };
       this.nonce += 1;
       return { round: this.roundView(this.active), wallet: this.wallet() };
@@ -192,11 +209,11 @@ export class DemoClient implements GameClient {
       this.balanceCents -= result.patchChargedCents ?? 0;
       this.balanceCents += result.payoutCents;
       demo.actions[balloonIndex]?.push({ kind: 'pump', patch });
-      const { drawIndex, den, num, roll } = result.draw;
-      demo.draws[balloonIndex]?.push({ drawIndex, den, num, roll });
-      const view = this.roundView(demo);
+      demo.draws[balloonIndex]?.push(drawView(result.draw));
+      // Only now that the engine has accepted the pump: if it ended the
+      // round, the reveals are worked out before the answer is built.
       this.finishIfOver(demo);
-      return { outcome: result.outcome, round: view, wallet: this.wallet() };
+      return { outcome: result.outcome, round: this.roundView(demo), wallet: this.wallet() };
     });
   }
 
@@ -208,9 +225,9 @@ export class DemoClient implements GameClient {
       demo.round = result.round;
       this.balanceCents += result.payoutCents;
       demo.actions[body.balloonIndex]?.push({ kind: 'cashOut' });
-      const view = this.roundView(demo);
+      // As with a pump: reveals only after the engine has accepted it.
       this.finishIfOver(demo);
-      return { round: view, wallet: this.wallet() };
+      return { round: this.roundView(demo), wallet: this.wallet() };
     });
   }
 
@@ -277,6 +294,7 @@ export class DemoClient implements GameClient {
         patchesCents: b.patchesCents,
         payoutCents: b.payoutCents,
         draws: demo.draws[index] ?? [],
+        afterRound: demo.afterRounds[index] ?? null,
       })),
     };
   }
@@ -329,8 +347,33 @@ export class DemoClient implements GameClient {
     return answer;
   }
 
+  /**
+   * Files the round as finished once every balloon is over, and first works
+   * out each reveal: every balloon cashed out below its top rung is played on
+   * with plain pumps, from its draw count at cash-out, by the engine's
+   * revealAfterCashOut. Called only after the engine has accepted an action,
+   * so a refused request never makes a reveal draw.
+   */
   private finishIfOver(demo: DemoRound): void {
-    if (!isRoundOver(demo.round)) return;
+    const { round } = demo;
+    if (!isRoundOver(round)) return;
+    round.balloons.forEach((balloon, balloonIndex) => {
+      if (!canReveal(balloon)) return;
+      // Draws for this balloon only, strictly in order from its draw count.
+      const drawAt = revealDrawerFor({
+        serverSeed: demo.serverSeed,
+        clientSeed: demo.clientSeed,
+        nonce: demo.nonce,
+        balloonIndex,
+        drawIndex: balloon.drawIndex,
+      });
+      const reveal = revealAfterCashOut(round, balloonIndex, drawAt);
+      demo.afterRounds[balloonIndex] = {
+        outcome: reveal.outcome,
+        reachedRung: reveal.reachedRung,
+        draws: reveal.draws.map(drawView),
+      };
+    });
     demo.finishedAt = new Date().toISOString();
     this.finished.unshift(demo);
     this.active = null;
@@ -394,8 +437,30 @@ export class DemoClient implements GameClient {
           next: quote.next,
           patchesCents: b.patchesCents,
           payoutCents: b.payoutCents,
+          afterRound: this.afterRoundView(demo, index),
         };
       }),
     };
   }
+
+  /**
+   * A balloon's reveal as the live screen gets it: no draws, no money. Null
+   * while the round is in progress, whatever is stored, so no answer (a 409
+   * included) can ever carry one early.
+   */
+  private afterRoundView(demo: DemoRound, index: number): AfterRoundView | null {
+    if (!isRoundOver(demo.round)) return null;
+    const reveal = demo.afterRounds[index] ?? null;
+    if (reveal === null) return null;
+    return {
+      outcome: reveal.outcome,
+      reachedRung: reveal.reachedRung,
+      reachedMultiplierHundredths: multiplierAt(demo.round.ladder, reveal.reachedRung),
+    };
+  }
+}
+
+/** Just the four numbers of a draw that the API carries. */
+function drawView({ drawIndex, den, num, roll }: DrawRecordView): DrawRecordView {
+  return { drawIndex, den, num, roll };
 }

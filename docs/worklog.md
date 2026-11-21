@@ -1013,6 +1013,41 @@ the stage or the panel needs the size check run on small upright phones.
 Left open: an upright tablet (768x1024) still gets the side-by-side
 layout, so half its stage is empty sky.
 
+## 2026-11-20: merging main into `cashout-reveal`
+
+Main had connected the screen to the real server while this branch added
+the after-round reveal. Main's contract, web contract and verify fields won;
+the branch kept only its reveal additions.
+
+Turned out wrong, and how it was caught:
+
+- Both sides stored the payout cap per round: main in the first migration
+  (`rounds.max_payout_cents NOT NULL`), the branch again in its migration 2.
+  Git merged both without a conflict, so the merged schema added the column
+  twice. Caught by reading `migrations.ts` after the merge. Migration 2 now
+  holds only the reveals.
+- The branch used "no stored cap" to spot rounds that ended before reveals
+  were stored. Under main every round has a cap, so that test no longer
+  meant anything. Replaced by `rounds.reveals_recorded`: 0 for rounds
+  already in the database when migration 2 runs (set by the column default,
+  no UPDATE), 1 for every round started after (a trigger refuses anything
+  else, and another keeps it fixed). The verify answer works out a missing
+  reveal from the public seed only for rounds marked 0, and reconcile
+  forgives a missing reveal only for those.
+- On upright phones main closes the row under the balloons when no balloon
+  has a Pump button. That is exactly when the reveal line is shown, so the
+  line would have been hidden. Caught by reading main's new phone rule next
+  to the branch's `.slot-after`. A finished round with a reveal line now
+  keeps the row open (`.stage-after-round`). Checked at 375x812 and 320x568
+  with three balloons: the lines fit at the 9 px floor on two lines, nothing
+  scrolls. The cost: on the bet screen after such a round the pictures are
+  46 to 54 px smaller than main had them.
+
+Checked: typecheck, lint, all tests, the hammer against a server started by
+hand, and an upgrade: a database made by main's own code (hammer rounds plus
+a round left in play) opened by the merged server. The open round finished
+with its reveals stored, all 55 old rounds pass `verifyRound`, and reconcile
+is clean.
 ## 2026-11-20: upright tablets get the stacked layout
 
 The user's call: "Yes, fix tablets". One CSS change in `styles.css`.
@@ -1198,6 +1233,52 @@ step in the README cover it.
 Not done by anyone yet: the deploy itself. Nothing here has run on
 Render; the dry run was on a Mac. The first deploy is the real test.
 
+## 2026-11-20: `cashout-reveal` merged with main again, and the review's fixes
+
+Main had moved on (stats page, database location rule, Render, new balloon
+look, saved seed hashes, new Pump row rules), so main was merged into the
+branch again, up to f7eedde. Five files clashed; both sides were kept. The
+verify page now checks both things this browser saved: the seed hash shown
+before the round (main) and the reveal lines shown after it (this branch).
+Main's new Pump row rule closes the row after every round and in one-balloon
+rounds; a finished round with a reveal line keeps it open, except while
+auto-play runs.
+
+Turned out wrong, and how it was caught (a review that ran everything):
+
+- From the repo root, `npm run hammer -- --url=... --db=...` never reached
+  the hammer. The inner `npm run` kept the options as its own settings, and
+  the hammer quietly started its own server and said PASS. Caught by
+  pointing it at a port with nothing on it. The root script now ends in
+  `--` (like `sim`), and the hammer stops with a clear message when npm
+  kept an option, an option is unknown, or `--db` comes without `--url`.
+- A database made by this branch before the first merge has a step 2 with
+  another name and another shape. The server counted steps by number only,
+  skipped the new step 2 and died at start on a missing column. Caught by
+  building such a database from the old commit. `migrate()` now checks every
+  recorded step's name first and refuses, before changing anything, with a
+  message that says to delete the file.
+- `verifyRound` takes a balloon's top rung from the record's own payout cap.
+  A record with a lower cap, the top that gives and a reveal worked out
+  against it checked out against itself, and the saved reveal line could not
+  tell either. Caught by a review test that built such a record. The screen
+  now also keeps each balloon's top rung as it first saw the round, and the
+  verify page says when the record gives another one ("does not match what
+  this device showed"). `verifyRound` is unchanged: the cap stays per-round
+  config, like the RTP.
+- The worktree's own `node_modules` lacked `@fastify/static`, so its server
+  and tests used the main checkout's copy. `npm ci` in the worktree fixed it.
+
+Checked: typecheck, lint, all 1,447 tests, the hammer against a server
+started by hand (from the repo root, with the options) and on its own, a
+database from the old branch code refused at start, and the built screen at
+375x812: three balloons and one balloon, reveal lines in the row after the
+round, no scrolling. On the verify page an honest round checks out, and one
+whose saved top was changed by hand is flagged.
+
+Not done: main moved again during this work (to 297760c: the balloon art and
+the air pocket in the hose). It merges with this branch with no conflict but
+was not merged here.
 ## 2026-11-20: the air pocket is the hose swelling, and it no longer flashes
 
 The user could not see the air pocket in play and asked for one. It was
@@ -1338,3 +1419,229 @@ set-up live, frame by frame; the pop set-up by stepping its animations
 after the bet; the popped and cashed end pictures afterwards with no
 set-up running. A page refresh gets no set-up (nothing was on screen
 before), and neither does the first round after loading.
+## 2026-11-20: upright screens scroll down to bet, and Bet is at the top
+
+Two user decisions, both newer than "Make it fit" (the entry "upright
+phones fit on one screen again"), which they replace for upright screens.
+
+1. "Lets scroll down for manual and auto please dont pop up", then the
+   choice "Scroll down to bet" (made in the merge coordinator's chat).
+   After a round the tall bet panel had popped up and squeezed the stage.
+2. "bet should be at top reverse the order" (in the layout chat, with a
+   screenshot of the bet panel).
+
+Built, on the branch `one-screen-layout`:
+
+- On an upright screen the stage has one height: the screen minus the top
+  bar and the room the round panel needs (`--round-room`). It is the same
+  on the bet screen, in a round, after a round and during auto-play.
+- In a round the panel fills that room, so a round is one screen with no
+  scrolling. What is spare goes to the big Pump button.
+- The bet panel and the auto-play form are taller. They start in the same
+  place and run on below the screen; the page scrolls down to them. The
+  top bar stays at the top while scrolled, so the balance and the settings
+  button are always there. The page cannot move sideways.
+- The Pump row under the balloons depends only on the number of balloons:
+  closed with one, open with two or three.
+- The panel's order is reversed, in the markup: Bet (or Start auto-play),
+  the amounts, the number of balloons, the ladder line, the difficulty,
+  Manual or Auto. So on an upright screen Bet sits where Pump sits in a
+  round and needs no scrolling; scrolling is only for changing the bet.
+- Wide screens and phones on their side keep the panel beside the stage and
+  do not scroll. Their panel has the new order too.
+
+Checked on the real server: 32 sizes, nine states with three balloons
+unless said (one-balloon round, after it, three-balloon round, the same
+round down to its last balloon, after it, the bet screen with every bet
+capped, the bet screen with three error notes, the Auto form, auto-play
+running). 31 sizes pass; the one left is still 568x320 on its side.
+What "pass" means now: a round never scrolls; the page never moves
+sideways; on an upright screen the stage's height, the picture's size and
+the horizon are the same in every state; the main button (Bet, Start
+auto-play, Pump or Stop) is on screen without scrolling; after scrolling
+to the end the last control is on screen and the top bar is still at the
+top; no two controls overlap; the pumps stand on the floor.
+Also checked by hand at 375x812: scrolled to the end of the bet screen,
+pressed Bet, and the page was back at the top by itself with Pump on
+screen, because a round's page is exactly one screen tall.
+
+Numbers at 375x812: the stage is 550 px tall in every state (it was
+squeezed to as little as 104 px on the bet screen before). The bet screen
+is 939 px tall with one balloon, so it scrolls 127 px.
+
+Turned out wrong, and how it was caught:
+
+- The round panel's room was first a guess (206 px) and 24 px too much.
+  Measured instead: the panel was laid out at its natural height at 13
+  upright sizes, with one and three balloons and with the largest numbers
+  ($1,000 bets on Expert). It needs 181, 171 and 150 px at the three
+  button sizes; the room is now 192, 182 and 160.
+- The first measuring run stopped with an error: its one-balloon round had
+  popped on the first pump, so there was no round panel to measure. The
+  run now starts again when that happens.
+- Not checked: the screen after an auto-play run has ended (its result
+  line under Start). The run was stopped mid-round in the check, which
+  leaves the balloons for the player.
+
+Applies to upright tablets as well as phones, since they share the stacked
+layout. Not asked for and not done: a smooth opening of the Pump row.
+## 2026-11-20: the game is live on Render
+
+The site is at https://pump-wysj.onrender.com. Render built it from commit
+8562809 in 44 seconds, on Node 26.13.1, from `render.yaml` with nothing
+typed in by hand except the Blueprint's name. It was set up from the
+repository's public address, so Render was given no access to GitHub.
+
+Checked on the live site:
+
+- From outside: the health check answers, the game page loads, the player
+  cookie is HttpOnly and Secure, a request without a session gets 401, and
+  plain http is sent on to https.
+- Render's Disk page shows 1 GB mounted at `/var/data`, and the first start
+  logged "the database file is /var/data/pump.db: made a NEW, EMPTY file".
+- The deploy test: a bet was placed and the balloon pumped once, the round
+  left open. Then the service was deployed again from Render's page. After
+  it, the same balance and the same open round came back, the log said
+  "opened the existing file, 3 players", and the round was cashed out.
+
+Turned out different from what was written, and how it was seen:
+
+- The README said a push goes live by itself once the checks pass. With
+  the public-address setup it does not: another chat's push (297760c) got
+  its green check and Render started nothing. The README and `render.yaml`
+  now say a new version goes live with Manual Deploy.
+- "A Blueprint file was found, but there was an issue" on Render's page
+  meant only that no payment card was on file yet. It cleared after the
+  card was added.
+- In Render's Manual Deploy menu, a click made while the menu was still
+  sliding open landed on "Deploy a specific commit", which would have
+  switched automatic deploys off. It was cancelled before anything was
+  chosen. The README now warns about that entry.
+
+Cost: $7.25 a month (Render's own figure on the review page), counted by
+the second. The owner's limit is $10 in total, so the service has to be
+deleted by about 20 December 2026.
+
+Left as it is: Render calls the health check every five seconds and the
+server logs each call, so the log is mostly health checks. Search the log
+for `the database file is` to find the start line.
+
+## 2026-11-20: README: the math, rounding, tradeoffs and more time
+
+The brief asks the README for the pop curves and Patch pricing with the
+reasoning, which way money is rounded and why, the tradeoffs, and what we
+would do with more time. None of it was there. Four sections were added at
+the end of the README: "The math: pop curves and Patch prices" (with the
+payout cap, rounding and how the math is checked), "Tradeoffs" and "With more
+time". The reasoning comes from this worklog and `config.ts`; nothing in the
+game changed.
+
+Every number in them was worked out again by a separate scratch script from
+`config.ts` alone, in BigInt, and matched against `npm run rtp`: the first
+pump's pop chance at 94%, 97% and 99%, the lowest RTP the ladders allow
+(93.59%, set by Easy), the largest single Patch ($25,773.20, Hard, $500 bet,
+pump 13), the Hard Patch example ($10.53, worth 96.96% of its price) and the
+Easy $1 Patches that cost their whole step (pumps 2 to 8). The numbers are
+labelled as being at 97% with the ladders of this date, and point to `npm run
+rtp` for the current ones.
+
+Turned out wrong in the first draft, and how it was caught:
+
+- "Rounding toward the house is the only rule that never pays more than the
+  RTP" claimed too much: rounding down by two cents never pays more either.
+  It now says "the only direction", as `math.ts` does. Caught on re-reading.
+- "The tests run at 94%, 97% and 99%": only the tests that depend on the RTP
+  do. Caught by checking the test files.
+- "The bet panel shows each balloon's top": it shows the top only when the
+  cap cuts the ladder. Caught by reading `BetPanel.tsx`.
+
+Left for the owner: "Tradeoffs" and "With more time" are drafted from the
+record and should be read in the owner's own words before submitting. The
+README intro on main ("is live") and on `cashout-reveal` ("Not live yet")
+already clash when merged; the new sections add no clash of their own
+(checked with `git merge-file`).
+
+## 2026-11-21: the after-round reveal lands on main
+
+From the "Agents finishing and game compilation" chat, which coordinates
+merges. The user approved changing the locked Provably fair rule ("yes", then
+"Keep building it") and said "merge it when the builder says ok".
+
+Built: after a round is over, each balloon that was cashed out below its top
+shows where further plain pumps would have taken it ("Next pump would have
+popped", "Would have reached 1.37×, then popped", "Would have reached the top
+(25.00×)"). The draws are made only in the transaction that finishes the
+round, stored in their own append-only table (migration 2), never sent while
+the round is in progress, and checked by the verify page and the independent
+Python reference. With one balloon on an upright phone the line floats in the
+empty sky where the balloon was, so nothing on the stage moves.
+
+Review: the build had its own adversarial review and fixer; then the server
+chat ran four independent reviewers (leaks, database and upgrade, engine and
+fairness, wallet and load). All passed, including an upgrade of a database
+made by the live version with rounds in progress.
+
+Turned out wrong, and how it was caught:
+- The upgrade is one-way, and going back is exploitable. On a database that
+  has step 2, an older server can't close a round that is due a reveal (the
+  triggers refuse), so a pump that would end the round answers 500 and is
+  rolled back with its draw still waiting: the player resends it with a Patch
+  and dodges the pop. A reviewer turned $1 into $1,000 that way on a test
+  copy. Caught by the server chat's reviewers. Fix (6f5e3ff, by the server
+  chat): a server refuses to start on a database with a step it doesn't know,
+  and the README says never to put an older version back on the live site.
+- Design note so nobody "fixes" it the wrong way: a reveal that throws rolls
+  back the action that ends the round, payout included. That is right (no
+  round may close without its reveals), but any future bug that throws only
+  when a round ends would be the same kind of oracle. Never swallow such an
+  error; fix the cause.
+- My first refusal for a renamed migration step told the reader to delete the
+  database file; on the host that file holds every wallet. Reworded: delete
+  it only if it is a test database on your own computer.
+- The fairness recipe worked out the top rung with a fixed $100,000 cap; it
+  now says the cap saved with the round. The hammer counted the same reveal
+  several times (winner, repeat, late 409s); it now counts each once.
+## 2026-11-20: review of the after-round reveal, and a guard against going back
+
+The newest version (297760c) was put live by hand after its checks passed.
+It changes no database step; the same player kept their balance and history.
+
+Then the cashout-reveal branch (09319e2) was checked before its merge, as
+agreed with the chat that built it:
+
+- Its own checks in a clean copy: lint, typecheck, 1,448 tests, the build,
+  the RTP check and the hammer all pass.
+- An upgrade shaped like the live site: a database made by the live
+  version's server, with three rounds left in progress, then the branch's
+  server started on the same file. Balances and open rounds came back as
+  left; the old rounds were finished by cash-out and by the 24-hour rule;
+  every round, old and new, passed `verifyRound`; reconcile was clean,
+  also after the hammer had been run against the upgraded database.
+- Four reviewers (leaks, database, engine and fairness, wallet), each
+  finding attacked by a second reader. All four passed the code.
+
+Turned out wrong, and how it was caught:
+
+- All four reviewers ran the opposite direction, which nobody had tried:
+  the OLD server started again on the upgraded database. It starts without
+  complaint, cannot start or close rounds, and, worse, a pump that would end
+  the round answers 500 and is rolled back, so the same draw is still
+  waiting. A player can then send it again with a Patch. One reader took a
+  $1 balloon from rung 1 to rung 14 that way. The ledger stayed exact; the
+  money was real. Nothing in the branch is wrong: old code on a new
+  database is.
+- So `migrate()` now refuses to start on a database that holds a step the
+  code does not know (6f5e3ff), with words that say not to delete the file.
+  It was run on the very database the branch had upgraded and refuses it.
+  The README says never to put an older version back on the live site.
+  This guard version has to be live before the reveal version is, so that
+  the version just behind the reveal refuses instead of running.
+- My first upgrade run "failed" for a reason of my own making: I had given
+  the reviewers the same port range I then used, and my script talked to a
+  reviewer's server. Seen from "address already in use" in the log; rerun
+  on a free port.
+
+A note for whoever touches the round-ending code: a reveal that throws
+rolls back the action that ends the round. That is right, but it means any
+bug that throws only when a round ends tells the player the outcome, the
+same way. Never swallow such an error to "fix" it.

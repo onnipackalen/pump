@@ -128,6 +128,64 @@ describe('the round check notices', () => {
     expect(roundProblems(world.db).join('\n')).toContain('1 draws used but 0 pumps recorded');
   });
 
+  it('a finished round without the reveal it is due', () => {
+    cashOutByHand(world.db, 'by-hand', 0, 1010);
+    world.db.exec("UPDATE balloons SET status = 'popped' WHERE balloon_index = 1");
+    world.db.exec('DROP TRIGGER rounds_finish_with_their_reveals');
+    world.db.exec("UPDATE rounds SET status = 'finished', finished_at = '2026-01-01T01:00:00.000Z'");
+    expect(roundProblems(world.db).join('\n')).toContain(
+      'balloon 0: cashed out on rung 1, below its top rung 2, but has no reveal',
+    );
+  });
+
+  describe('with the reveal guards removed', () => {
+    const draw = (drawIndex: number, roll: number): string =>
+      `{"drawIndex":${String(drawIndex)},"den":111,"num":101,"roll":${String(roll)}}`;
+    const reveal = (balloonIndex: number, outcome: string, reached: number, draws: string): void => {
+      world.db.exec(
+        `INSERT INTO balloon_reveals (round_id, balloon_index, outcome, reached_rung, draws_json, created_at)
+         VALUES ('by-hand', ${String(balloonIndex)}, '${outcome}', ${String(reached)}, '${draws}', '${AT}')`,
+      );
+    };
+    beforeEach(() => {
+      world.db.exec('DROP TRIGGER balloon_reveals_at_round_end');
+      world.db.exec('DROP TRIGGER balloon_reveals_fit_their_balloon');
+    });
+
+    it('a reveal while the round is in progress', () => {
+      reveal(1, 'popped', 1, `[${draw(0, 105)}]`);
+      expect(roundProblems(world.db).join('\n')).toContain(
+        'balloon 1: has a reveal while its round is still in progress',
+      );
+    });
+
+    it('a reveal for a balloon that has none, and one that does not fit its balloon', () => {
+      cashOutByHand(world.db, 'by-hand', 0, 1010);
+      world.db.exec("UPDATE balloons SET status = 'popped' WHERE balloon_index = 1");
+      reveal(0, 'popped', 1, `[${draw(0, 105)}]`);
+      reveal(1, 'popped', 1, `[${draw(0, 105)}]`);
+      world.db.exec("UPDATE rounds SET status = 'finished', finished_at = '2026-01-01T01:00:00.000Z'");
+
+      const problems = roundProblems(world.db).join('\n');
+      expect(problems).toContain(
+        'balloon 1: popped on rung 0 of 2, so it has no reveal, but one is stored',
+      );
+      expect(problems).toContain('balloon 0: its reveal draws do not start at draw 1');
+    });
+
+    it('a reveal whose rolls tell another story than its outcome', () => {
+      cashOutByHand(world.db, 'by-hand', 0, 1010);
+      world.db.exec("UPDATE balloons SET status = 'popped' WHERE balloon_index = 1");
+      // Roll 5 is below 101: that pump survives, so it cannot be the pop.
+      reveal(0, 'popped', 1, `[${draw(1, 5)}]`);
+      world.db.exec("UPDATE rounds SET status = 'finished', finished_at = '2026-01-01T01:00:00.000Z'");
+
+      expect(roundProblems(world.db).join('\n')).toContain(
+        'balloon 0: its reveal draw 1 does not match the outcome popped',
+      );
+    });
+  });
+
   it('a finished round with a balloon still in play', () => {
     // Only possible with the guard removed, which is what this simulates.
     world.db.exec('DROP TRIGGER rounds_finish_when_no_balloon_in_play');

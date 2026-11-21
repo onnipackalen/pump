@@ -2,8 +2,10 @@ import type {
   Balloon,
   BalloonAction,
   BalloonStatus,
+  CashOutReveal,
   DrawRecord,
   PumpOutcome,
+  RevealOutcome,
   Round,
 } from '@pump/engine';
 import type { Db } from '../db/database';
@@ -57,7 +59,20 @@ export interface StoredRound {
   readonly finishedAt: string | null;
   /** The payout cap per balloon when the round started. */
   readonly maxPayoutCents: number;
+  /**
+   * True for a round started once reveals were stored: as it ended, the
+   * reveal of each balloon cashed out below its top rung was stored with it.
+   * False only for a round started before that, which may have ended with
+   * no reveal stored.
+   */
+  readonly revealsRecorded: boolean;
   readonly round: Round;
+  /**
+   * Each balloon's reveal, by balloon index: where it would have popped.
+   * Written as the round ends, so null for every balloon while the round is
+   * in progress, and null for a balloon that has none.
+   */
+  readonly reveals: readonly (CashOutReveal | null)[];
 }
 
 /** How a recorded action ended. The last two are cash-outs. */
@@ -101,6 +116,10 @@ function isActionOutcome(value: string): value is ActionOutcome {
   return ACTION_OUTCOMES.includes(value);
 }
 
+function isRevealOutcome(value: string): value is RevealOutcome {
+  return value === 'popped' || value === 'top';
+}
+
 /** The ladder is stored as JSON text: a list of whole numbers. */
 function parseLadder(json: string): number[] {
   const parsed: unknown = JSON.parse(json);
@@ -111,6 +130,42 @@ function parseLadder(json: string): number[] {
     }
     return value;
   });
+}
+
+/** A whole number read from parsed JSON, or a throw. */
+function wholeIn(value: unknown, what: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+    throw new Error(`A stored reveal draw has a ${what} that is not a whole number`);
+  }
+  return value;
+}
+
+/** A reveal's draws are stored as JSON text: a list of { drawIndex, den, num, roll }. */
+function parseDraws(json: string): DrawRecord[] {
+  const parsed: unknown = JSON.parse(json);
+  if (!Array.isArray(parsed)) throw new Error('Stored reveal draws are not a list');
+  return parsed.map((item: unknown): DrawRecord => {
+    if (typeof item !== 'object' || item === null) {
+      throw new Error('A stored reveal draw is not an object');
+    }
+    const draw: Readonly<Record<string, unknown>> = { ...item };
+    return {
+      drawIndex: wholeIn(draw.drawIndex, 'drawIndex'),
+      den: wholeIn(draw.den, 'den'),
+      num: wholeIn(draw.num, 'num'),
+      roll: wholeIn(draw.roll, 'roll'),
+    };
+  });
+}
+
+function toReveal(row: Row): CashOutReveal {
+  const outcome = text(row, 'outcome');
+  if (!isRevealOutcome(outcome)) throw new Error(`Unknown reveal outcome ${outcome}`);
+  return {
+    outcome,
+    reachedRung: int(row, 'reached_rung'),
+    draws: parseDraws(text(row, 'draws_json')),
+  };
 }
 
 function toBalloon(row: Row): Balloon {
@@ -170,7 +225,7 @@ export function roundsRepository(db: Db) {
     r.id, r.player_id, r.status, r.difficulty_id, r.rtp_bp, r.ladder, r.max_payout_cents,
     r.server_seed_id,
     r.client_seed, r.nonce, r.started_at, r.last_action_at, r.finished_at,
-    s.seed_hash, s.revealed_at
+    r.reveals_recorded, s.seed_hash, s.revealed_at
   `;
   const selectById = db.prepare(`
     SELECT ${ROUND_COLUMNS} FROM rounds r JOIN server_seeds s ON s.id = r.server_seed_id
@@ -182,6 +237,9 @@ export function roundsRepository(db: Db) {
   `);
   const selectBalloons = db.prepare(
     'SELECT * FROM balloons WHERE round_id = :roundId ORDER BY balloon_index',
+  );
+  const selectReveals = db.prepare(
+    'SELECT * FROM balloon_reveals WHERE round_id = :roundId ORDER BY balloon_index',
   );
   const countActive = db.prepare(
     "SELECT COUNT(*) AS n FROM rounds WHERE player_id = :playerId AND status = 'active'",
@@ -228,9 +286,10 @@ export function roundsRepository(db: Db) {
   `);
   const insertRound = db.prepare(`
     INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
-                        server_seed_id, client_seed, nonce, started_at, last_action_at)
+                        server_seed_id, client_seed, nonce, started_at, last_action_at,
+                        reveals_recorded)
     VALUES (:id, :playerId, 'active', :difficultyId, :rtpBp, :ladder, :maxPayoutCents,
-            :serverSeedId, :clientSeed, :nonce, :at, :at)
+            :serverSeedId, :clientSeed, :nonce, :at, :at, 1)
   `);
   const insertBalloon = db.prepare(`
     INSERT INTO balloons (round_id, balloon_index, bet_cents, status, rung, draw_index,
@@ -262,6 +321,11 @@ export function roundsRepository(db: Db) {
              WHERE round_id = :roundId AND balloon_index = :balloonIndex),
             :kind, :patch, :drawIndex, :den, :num, :roll, :outcome, :at)
   `);
+  const insertReveal = db.prepare(`
+    INSERT INTO balloon_reveals (round_id, balloon_index, outcome, reached_rung,
+                                 draws_json, created_at)
+    VALUES (:roundId, :balloonIndex, :outcome, :reachedRung, :drawsJson, :at)
+  `);
   const selectActions = db.prepare(`
     SELECT * FROM balloon_actions WHERE round_id = :roundId ORDER BY balloon_index, seq
   `);
@@ -272,6 +336,11 @@ export function roundsRepository(db: Db) {
       throw new Error(`Unknown round status ${status}`);
     }
     const id = text(row, 'id');
+    const balloons = selectBalloons.all({ roundId: id }).map(toBalloon);
+    const reveals: (CashOutReveal | null)[] = balloons.map(() => null);
+    for (const revealRow of selectReveals.all({ roundId: id })) {
+      reveals[int(revealRow, 'balloon_index')] = toReveal(revealRow);
+    }
     return {
       id,
       playerId: text(row, 'player_id'),
@@ -285,12 +354,14 @@ export function roundsRepository(db: Db) {
       lastActionAt: text(row, 'last_action_at'),
       finishedAt: nullableText(row, 'finished_at'),
       maxPayoutCents: int(row, 'max_payout_cents'),
+      revealsRecorded: int(row, 'reveals_recorded') === 1,
       round: {
         difficultyId: text(row, 'difficulty_id'),
         rtpBp: int(row, 'rtp_bp'),
         ladder: parseLadder(text(row, 'ladder')),
-        balloons: selectBalloons.all({ roundId: id }).map(toBalloon),
+        balloons,
       },
+      reveals,
     };
   }
 
@@ -335,7 +406,10 @@ export function roundsRepository(db: Db) {
       return selectExpired.all({ cutoff }).map((row) => text(row, 'id'));
     },
 
-    /** Stores a new round with its balloons, keeping its own copy of the RTP and ladder. */
+    /**
+     * Stores a new round with its balloons, keeping its own copy of the RTP,
+     * ladder and payout cap, and marked as storing its reveals as it ends.
+     */
     insert(round: NewRound): void {
       insertRound.run({
         id: round.id,
@@ -397,6 +471,24 @@ export function roundsRepository(db: Db) {
     finish(id: string, at: string): void {
       const changed = finishRound.run({ id, at });
       if (Number(changed.changes) !== 1) throw new Error('The round is not active');
+    },
+
+    /**
+     * Stores one balloon's reveal. The database takes it only while the
+     * round is ending: every balloon done, the round not yet closed.
+     */
+    saveReveal(roundId: string, balloonIndex: number, reveal: CashOutReveal, at: string): void {
+      insertReveal.run({
+        roundId,
+        balloonIndex,
+        outcome: reveal.outcome,
+        reachedRung: reveal.reachedRung,
+        // Field by field, so nothing but the draw itself is stored.
+        drawsJson: JSON.stringify(
+          reveal.draws.map(({ drawIndex, den, num, roll }) => ({ drawIndex, den, num, roll })),
+        ),
+        at,
+      });
     },
 
     /** Appends one action to a balloon's list. */

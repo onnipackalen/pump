@@ -1,22 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { RTP_BP, type GameConfig } from '../src/config';
+import { surviveChance } from '../src/math';
 import {
+  canReveal,
   cashOut,
   EngineError,
   isRoundOver,
   pump,
   quoteBalloon,
   replayBalloon,
+  revealAfterCashOut,
   settleAbandoned,
   startRound,
   type Balloon,
   type BalloonAction,
+  type CashOutReveal,
   type DrawRecord,
   type PumpDraw,
   type ReplayDraw,
   type Round,
 } from '../src/PumpEngine';
-import { fixedConfig, fixedLadder } from './fixtures';
+import { FIXED_DIFFICULTIES, fixedConfig, fixedLadder } from './fixtures';
 
 /** The three RTP values reviewers will try, plus whatever is configured now. */
 const RTPS = [...new Set([9400, 9700, 9900, RTP_BP])];
@@ -485,6 +489,285 @@ describe('replayBalloon', () => {
     expect(refusal(replay(afterPop, popsAt))).toBe('invalid_request');
     expect(refusal(replay([{ kind: 'cashOut' }], never))).toBe('invalid_request');
     expect(refusal(replay([{ kind: 'pump', patch: true }], never))).toBe('invalid_request');
+  });
+});
+
+/**
+ * The reveal: once a round is over, a balloon cashed out below its top rung
+ * is played on with plain pumps until one pops or it reaches its top rung.
+ * These tests use the fixed ladders, so the exact numbers do not move when
+ * the live ladders are tuned. Easy starts 101, 111, 123, 137; Expert is
+ * 150, 255, 465, 920, 2000, 4750, ... and $1,000 on it tops out at rung 6.
+ */
+describe('revealAfterCashOut', () => {
+  /** A reveal draw source that hands out the given rolls in order and notes each (index, den). */
+  function scriptedAt(rolls: readonly number[]): { drawAt: ReplayDraw; asked: number[][] } {
+    const asked: number[][] = [];
+    const drawAt: ReplayDraw = (drawIndex, den) => {
+      const roll = rolls[asked.length];
+      if (roll === undefined) throw new Error('the reveal asked for more draws than expected');
+      asked.push([drawIndex, den]);
+      return roll;
+    };
+    return { drawAt, asked };
+  }
+
+  /** A reveal draw source for a reveal that must be refused before any draw. */
+  const noReveal: ReplayDraw = () => {
+    throw new Error('a refused reveal must not draw');
+  };
+
+  /** One balloon of `bet` on `id`, pumped `rung` times without a Patch, then cashed out. */
+  function cashedAt(rung: number, id = 'easy', bet = 100, config = CONFIG): Round {
+    return frozen(cashOutNow(climb(start(id, [bet], config), rung)).round);
+  }
+
+  it('plays on from the next draw index with plain pumps, until one pops', () => {
+    // Cashed at rung 2 after 2 draws. Pump 3 survives with 111/123 = 37/41
+    // (roll 0); pump 4 has 123/137 and roll 136 pops it.
+    const { drawAt, asked } = scriptedAt([0, 136]);
+    expect(revealAfterCashOut(cashedAt(2), 0, drawAt)).toEqual({
+      outcome: 'popped',
+      reachedRung: 3,
+      draws: [
+        { drawIndex: 2, den: 41, num: 37, roll: 0 },
+        { drawIndex: 3, den: 137, num: 123, roll: 136 },
+      ],
+    });
+    expect(asked).toEqual([
+      [2, 41],
+      [3, 137],
+    ]);
+  });
+
+  it('when the very next pump pops, it reached the rung it cashed out on', () => {
+    // 37 is the first roll that pops pump 3 (37/41).
+    expect(revealAfterCashOut(cashedAt(2), 0, () => 37)).toEqual({
+      outcome: 'popped',
+      reachedRung: 2,
+      draws: [{ drawIndex: 2, den: 41, num: 37, roll: 37 }],
+    });
+  });
+
+  it('after a Patch save, starts at the draw count, not the rung', () => {
+    // Pump (survives), then Patch + pump (saved): rung 1 after 2 draws.
+    let round = start('easy', [10_000]);
+    round = pumpOnce(round, false, alwaysSurvive).round;
+    round = pumpOnce(round, true, alwaysPop).round;
+    expect(balloonOf(round)).toMatchObject({ status: 'active', rung: 1, drawIndex: 2 });
+    const cashed = frozen(cashOutNow(round).round);
+    // The pump to rung 2 has 101/111 and uses draw index 2, not 1. The pump
+    // to rung 3 has 37/41 and uses index 3; roll 40 pops it.
+    const { drawAt, asked } = scriptedAt([0, 40]);
+    expect(revealAfterCashOut(cashed, 0, drawAt)).toEqual({
+      outcome: 'popped',
+      reachedRung: 2,
+      draws: [
+        { drawIndex: 2, den: 111, num: 101, roll: 0 },
+        { drawIndex: 3, den: 41, num: 37, roll: 40 },
+      ],
+    });
+    expect(asked.map(([drawIndex]) => drawIndex)).toEqual([2, 3]);
+  });
+
+  it('stops at the top rung the cap allows, not at the end of the ladder', () => {
+    const cashed = cashedAt(2, 'expert', 100_000);
+    expect(balloonOf(cashed).topRung).toBe(6);
+    expect(fixedLadder('expert')).toHaveLength(10);
+    // Four rolls of 0 reach rung 6; a fifth draw would throw.
+    const reveal = revealAfterCashOut(cashed, 0, scriptedAt([0, 0, 0, 0]).drawAt);
+    expect(reveal.outcome).toBe('top');
+    expect(reveal.reachedRung).toBe(6);
+    expect(reveal.draws.map(({ drawIndex, num, den }) => [drawIndex, num, den])).toEqual([
+      [2, 17, 31], // 255/465
+      [3, 93, 184], // 465/920
+      [4, 23, 50], // 920/2000
+      [5, 8, 19], // 2000/4750
+    ]);
+  });
+
+  it('on the rung below the top, makes one draw, with either outcome', () => {
+    const cashed = cashedAt(5, 'expert', 100_000);
+    // Pump 6 survives with 2000/4750 = 8/19: roll 7 reaches the top, roll 8 pops.
+    expect(revealAfterCashOut(cashed, 0, () => 7)).toEqual({
+      outcome: 'top',
+      reachedRung: 6,
+      draws: [{ drawIndex: 5, den: 19, num: 8, roll: 7 }],
+    });
+    expect(revealAfterCashOut(cashed, 0, () => 8)).toEqual({
+      outcome: 'popped',
+      reachedRung: 5,
+      draws: [{ drawIndex: 5, den: 19, num: 8, roll: 8 }],
+    });
+  });
+
+  it('refuses, before any draw, every balloon that has no reveal', () => {
+    const fresh = start('easy', [100]);
+    const climbing = climb(fresh, 2);
+    const popped = pumpOnce(climbing, false, alwaysPop).round;
+    const refunded = settleAbandoned(fresh).round;
+    const topped = pumpOnce(climb(start('expert', [100_000]), 5), false, alwaysSurvive);
+    expect(topped.outcome).toBe('top');
+    const withoutReveal: readonly (readonly [string, Round])[] = [
+      ['active, never pumped', fresh],
+      ['active, pumped', climbing],
+      ['popped', popped],
+      ['refunded', refunded],
+      ['cashed out at its top rung', topped.round],
+    ];
+    for (const [label, round] of withoutReveal) {
+      expect(canReveal(balloonOf(round)), label).toBe(false);
+      expect(refusal(() => revealAfterCashOut(frozen(round), 0, noReveal)), label).toBe(
+        'invalid_request',
+      );
+    }
+    const cashed = cashedAt(2);
+    expect(canReveal(balloonOf(cashed))).toBe(true);
+    expect(refusal(() => revealAfterCashOut(cashed, 1, noReveal))).toBe('invalid_request');
+    expect(refusal(() => revealAfterCashOut(cashed, -1, noReveal))).toBe('invalid_request');
+  });
+
+  it('waits until the whole round is over', () => {
+    let round = start('easy', [100, 100, 100]);
+    round = cashOutNow(climb(round, 2, 0), 0).round;
+    round = climb(round, 1, 1);
+    // Balloon 1 is cashed out, but balloons 2 and 3 are still in play.
+    expect(canReveal(balloonOf(round, 0))).toBe(true);
+    expect(refusal(() => revealAfterCashOut(frozen(round), 0, noReveal))).toBe('invalid_request');
+    // Balloon 2 pops and balloon 3 is walked away from: now the round is over.
+    round = pumpOnce(round, false, alwaysPop, RICH, 1).round;
+    expect(refusal(() => revealAfterCashOut(frozen(round), 0, noReveal))).toBe('invalid_request');
+    const over = frozen(settleAbandoned(round).round);
+    expect(isRoundOver(over)).toBe(true);
+    expect(revealAfterCashOut(over, 0, () => 0)).toMatchObject({ outcome: 'top', reachedRung: 24 });
+    expect(refusal(() => revealAfterCashOut(over, 1, noReveal))).toBe('invalid_request');
+    expect(refusal(() => revealAfterCashOut(over, 2, noReveal))).toBe('invalid_request');
+  });
+
+  it('gives a balloon cashed out by the 24-hour rule its reveal too', () => {
+    const round = climb(start('easy', [100, 100]), 3, 0);
+    const settled = frozen(settleAbandoned(round).round);
+    expect(balloonOf(settled, 0)).toMatchObject({ status: 'cashed', rung: 3, drawIndex: 3 });
+    // Pump 4 (123/137) uses draw index 3.
+    expect(revealAfterCashOut(settled, 0, () => 123)).toEqual({
+      outcome: 'popped',
+      reachedRung: 3,
+      draws: [{ drawIndex: 3, den: 137, num: 123, roll: 123 }],
+    });
+    expect(canReveal(balloonOf(settled, 1))).toBe(false); // refunded
+  });
+
+  it('changes nothing, and answers with no balloon and no cents', () => {
+    const round = cashedAt(4);
+    const before = JSON.stringify(round);
+    const reveal = revealAfterCashOut(round, 0, () => 0);
+    expect(JSON.stringify(round)).toBe(before);
+    expect(Object.keys(reveal).sort()).toEqual(['draws', 'outcome', 'reachedRung']);
+    // Same input, same output.
+    expect(revealAfterCashOut(round, 0, () => 0)).toEqual(reveal);
+  });
+
+  it('lets a roll outside 0 .. den - 1 fail loudly instead of deciding anything', () => {
+    expect(() => revealAfterCashOut(cashedAt(2), 0, (_drawIndex, den) => den)).toThrow(RangeError);
+    expect(() => revealAfterCashOut(cashedAt(2), 0, () => -1)).toThrow(RangeError);
+  });
+
+  /** Live play: pump `index` on with plain pumps until it is over, rolls by draw index. */
+  function playedOn(round: Round, index: number, drawAt: ReplayDraw): CashOutReveal {
+    let current = round;
+    const draws: DrawRecord[] = [];
+    for (;;) {
+      const { drawIndex } = balloonOf(current, index);
+      const result = pumpOnce(current, false, (den) => drawAt(drawIndex, den), RICH, index);
+      draws.push(result.draw);
+      current = result.round;
+      if (result.outcome === 'popped' || result.outcome === 'top') {
+        return { outcome: result.outcome, reachedRung: balloonOf(current, index).rung, draws };
+      }
+    }
+  }
+
+  /** The same seeded generator as test/fair/engine.test.ts (mulberry32). */
+  function generator(seed: number): (n: number) => number {
+    let state = seed >>> 0;
+    return (n) => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) % n;
+    };
+  }
+
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+
+  describe.each(RTPS)('at RTP %i', (rtpBp) => {
+    it.each(FIXED_DIFFICULTIES.map((d) => d.id))(
+      '%s: is exactly what playing on with live plain pumps would have done',
+      (id) => {
+        const pick = generator(rtpBp + id.length * 7919);
+        let reveals = 0;
+        for (let game = 0; game < 60; game += 1) {
+          const bet = [10, 100, 12_345, 100_000][pick(4)] ?? 100;
+          let round = start(id, [bet], at(rtpBp));
+          const { topRung } = balloonOf(round);
+          if (topRung < 2) continue;
+          const target = 1 + pick(topRung - 1);
+          // Climb to the target rung, with some Patch saves on the way, so the
+          // draw count often runs ahead of the rung.
+          while (balloonOf(round).rung < target) {
+            const save = balloonOf(round).rung >= 1 && pick(3) === 0;
+            round = pumpOnce(round, save, save ? alwaysPop : alwaysSurvive).round;
+          }
+          // A roll for every draw index, the same whoever asks for it.
+          const words = Array.from({ length: 64 }, () => pick(2 ** 31));
+          const drawAt: ReplayDraw = (drawIndex, den) => (words[drawIndex] ?? 0) % den;
+
+          const reveal = revealAfterCashOut(cashOutNow(round).round, 0, drawAt);
+          expect(reveal).toEqual(playedOn(round, 0, drawAt));
+          expect(reveal.draws[0]?.drawIndex).toBe(balloonOf(round).drawIndex);
+          reveals += 1;
+        }
+        expect(reveals).toBeGreaterThan(40);
+      },
+    );
+
+    it.each(FIXED_DIFFICULTIES.map((d) => d.id))(
+      '%s: every reveal pump has chance m_(k-1) / m_k, so the RTP never enters',
+      (id) => {
+        const ladder = fixedLadder(id);
+        for (let rung = 1; rung < ladder.length; rung += 1) {
+          for (const popAt of [0, 1, 3, ladder.length]) {
+            // Roll 0 survives every pump; den - 1 pops the pump number popAt.
+            const drawAt: ReplayDraw = (drawIndex, den) =>
+              drawIndex - rung === popAt ? den - 1 : 0;
+            const here = revealAfterCashOut(cashedAt(rung, id, 10, at(rtpBp)), 0, drawAt);
+            here.draws.forEach((draw, i) => {
+              const k = rung + 1 + i;
+              const [below, above] = [ladder[k - 2] ?? 0, ladder[k - 1] ?? 0];
+              const common = gcd(below, above);
+              expect(k).toBeGreaterThanOrEqual(2);
+              expect(draw).toMatchObject({
+                drawIndex: rung + i,
+                num: below / common,
+                den: above / common,
+              });
+              expect({ num: draw.num, den: draw.den }).toEqual(surviveChance(rtpBp, ladder, k));
+            });
+            // The same balloon and the same rolls give the same reveal at any RTP.
+            for (const other of RTPS) {
+              const there = revealAfterCashOut(cashedAt(rung, id, 10, at(other)), 0, drawAt);
+              expect(there).toEqual(here);
+            }
+            if (popAt >= ladder.length - rung) {
+              expect(here).toMatchObject({ outcome: 'top', reachedRung: ladder.length });
+            } else {
+              expect(here).toMatchObject({ outcome: 'popped', reachedRung: rung + popAt });
+            }
+          }
+        }
+      },
+    );
   });
 });
 

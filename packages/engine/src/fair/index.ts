@@ -30,17 +30,31 @@
  *    words are at or above limit, the next block (block 1, 2, ...) is read.
  * 6. Decide (the engine, not here). The pump survives if roll < num.
  *
+ * After the round (draw.ts revealDrawerFor): once a round is over, each
+ * balloon cashed out below its top rung shows where it would have popped. The
+ * engine plays it on with plain pumps, using this same recipe at the next
+ * draw indexes (from the balloon's draw count up), until a pump pops or it
+ * reaches its top rung. Those draws decide nothing and move no money.
+ *
  * Checking a seed (hash.ts): its fingerprint is SHA-256 of its 64 characters
  * as ASCII, in lowercase hex.
  *
  * Checking a whole round (verify.ts): verifyRound takes what the server
  * stored about a finished round, replays every balloon with the engine's own
- * replayBalloon and draws from these seeds, and lists every place where the
- * server's account differs. This is the one file here that imports the game
- * rules; the rules never import this module (test/fair/boundary.test.ts).
+ * replayBalloon and draws from these seeds, works out each reveal again with
+ * the engine's revealAfterCashOut, and lists every place where the server's
+ * account differs. This is the one file here that imports the game rules;
+ * the rules never import this module (test/fair/boundary.test.ts).
  */
 export { asciiBytes } from './ascii';
-export { drawerFor, drawRoll, type DrawInputs, type Drawer } from './draw';
+export {
+  drawerFor,
+  drawRoll,
+  revealDrawerFor,
+  type DrawInputs,
+  type Drawer,
+  type RevealDrawer,
+} from './draw';
 export { bytesToHex, hashServerSeed, hmacSha256, verifyServerSeedHash } from './hash';
 export { drawMessage, type DrawMessageParts } from './message';
 export {
@@ -61,6 +75,7 @@ export {
   type BalloonCheck,
   type BalloonRecord,
   type CheckedDraw,
+  type CheckedReveal,
   type ClaimedBalloon,
   type RoundCheck,
   type RoundRecord,

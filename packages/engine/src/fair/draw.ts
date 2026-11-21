@@ -24,7 +24,10 @@ export interface DrawInputs {
   readonly nonce: number;
   /** Which balloon in the round. */
   readonly balloonIndex: number;
-  /** Draws already made on this balloon before this one. */
+  /**
+   * Draws already made on this balloon before this one. A reveal carries the
+   * count on past the cash-out (see revealDrawerFor).
+   */
   readonly drawIndex: number;
 }
 
@@ -78,5 +81,41 @@ export function drawerFor(inputs: DrawInputs): Drawer {
     if (used) throw new Error('This draw has already been used. One draw decides one pump.');
     used = true;
     return drawRoll(checked, den).roll;
+  };
+}
+
+/**
+ * What the engine's revealAfterCashOut is handed: given a draw index and den,
+ * the roll from 0 to den - 1. The same shape as the engine's ReplayDraw.
+ */
+export type RevealDrawer = (drawIndex: number, den: number) => number;
+
+/**
+ * The draws for one balloon's reveal, once its round is over:
+ * `revealDrawerFor(inputs)(i, den)` is `drawRoll({ ...inputs, drawIndex: i }, den).roll`.
+ *
+ * `inputs.drawIndex` is where the reveal starts: the balloon's draw count at
+ * cash-out (not its rung, which a Patch save leaves behind). The draws must
+ * then be asked for strictly in order, inputs.drawIndex, +1, +2, ..., each
+ * once. Asking for any other index throws and draws nothing. So the reveal
+ * can never re-read a draw that decided a real pump, skip one, or use one
+ * twice. A call that threw on a bad den still uses its index, as with
+ * drawerFor.
+ *
+ * The inputs are checked and copied now, and the balloon index is fixed, so
+ * it only ever draws for the balloon it was made for. Errors never include
+ * the server seed.
+ */
+export function revealDrawerFor(inputs: DrawInputs): RevealDrawer {
+  const checked = checkedInputs(inputs);
+  let next = checked.drawIndex;
+  return (drawIndex: number, den: number): number => {
+    if (drawIndex !== next) {
+      throw new Error(
+        `The reveal must ask for draw index ${String(next)} next, not ${String(drawIndex)}.`,
+      );
+    }
+    next += 1;
+    return drawRoll({ ...checked, drawIndex }, den).roll;
   };
 }

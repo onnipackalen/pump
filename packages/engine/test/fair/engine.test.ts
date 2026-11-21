@@ -5,9 +5,14 @@
  * pump (with drawerFor on the round's real seeds), Patch + pump, cash out, and
  * now and then a round walked away from and settled with settleAbandoned. It
  * records every action and every DrawRecord the way a server would store
- * them, builds the RoundRecord the verify page would be sent, and checks
- * that verifyRound finds nothing wrong, and that the draws and balloons it
- * recomputes from the seeds are exactly the live ones.
+ * them. Once the round is over it works out each reveal (where a balloon
+ * cashed out below its top would have popped) the way the server will:
+ * revealAfterCashOut with revealDrawerFor on the round's seeds. It builds the
+ * RoundRecord the verify page would be sent, and checks that verifyRound
+ * finds nothing wrong, and that the draws, balloons and reveals it
+ * recomputes from the seeds are exactly the live ones. Each reveal is also
+ * checked against simply going on pumping the live balloon, as if the player
+ * had not cashed out.
  *
  * It runs at 9400, 9700 and 9900 (and the configured RTP) on every
  * difficulty. Choices come from a small seeded generator, never Math.random,
@@ -16,19 +21,28 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
+  canReveal,
   cashOut,
   GAME_CONFIG,
   isRoundOver,
   pump,
+  revealAfterCashOut,
   RTP_BP,
   settleAbandoned,
   startRound,
   type BalloonAction,
+  type CashOutReveal,
   type DrawRecord,
   type GameConfig,
   type Round,
 } from '@pump/engine';
-import { drawerFor, hashServerSeed, verifyRound, type RoundRecord } from '@pump/engine/fair';
+import {
+  drawerFor,
+  hashServerSeed,
+  revealDrawerFor,
+  verifyRound,
+  type RoundRecord,
+} from '@pump/engine/fair';
 
 /** The three RTP values reviewers will try, plus whatever is configured now. */
 const RTPS = [...new Set([9400, 9700, 9900, RTP_BP])];
@@ -74,6 +88,8 @@ interface Played {
   readonly live: Round;
   /** Per balloon: whether each pump had a Patch, in order. */
   readonly patched: readonly (readonly boolean[])[];
+  /** Per balloon: the round just before it cashed out, or undefined if it never did. */
+  readonly beforeCashOut: readonly (Round | undefined)[];
 }
 
 /** Tallies of what happened, to show the rounds covered every path. */
@@ -85,9 +101,10 @@ function note(seen: Seen, what: string): void {
 
 /**
  * Plays one round with seeded choices. Each balloon is either cautious
- * (cashes out at random, rarely patches) or a climber (never cashes out,
- * patches most pumps, so it often reaches its top rung). With chance 1 in 6
- * the round is walked away from after a few steps and settled as abandoned.
+ * (cashes out at random, rarely patches) or a climber (patches most pumps, so
+ * it often reaches its top rung; it cashes out only on the rung below the
+ * top, half the time, so some reveals reach the top). With chance 1 in 6 the
+ * round is walked away from after a few steps and settled as abandoned.
  */
 function playRound(
   config: GameConfig,
@@ -107,6 +124,7 @@ function playRound(
   const actions: BalloonAction[][] = bets.map(() => []);
   const draws: DrawRecord[][] = bets.map(() => []);
   const patched: boolean[][] = bets.map(() => []);
+  const beforeCashOut: (Round | undefined)[] = bets.map(() => undefined);
 
   let round = startRound(config, difficultyId, bets, RICH).round;
   const abandonAfter = pick(6) === 0 ? pick(5) : Number.POSITIVE_INFINITY;
@@ -119,7 +137,10 @@ function playRound(
       for (const { balloonIndex, kind } of settled.settled) {
         note(seen, `abandoned ${kind}`);
         // A cash-out made by settling is stored as a plain cash-out; a refund has no action.
-        if (kind === 'cashed') actions[balloonIndex]?.push({ kind: 'cashOut' });
+        if (kind === 'cashed') {
+          actions[balloonIndex]?.push({ kind: 'cashOut' });
+          beforeCashOut[balloonIndex] = round;
+        }
       }
       round = settled.round;
       break;
@@ -133,7 +154,9 @@ function playRound(
     const isClimber = climber[balloonIndex] === true;
     const choice = pick(20);
 
-    if (balloon.rung >= 1 && !isClimber && choice < 5) {
+    const climberStops = isClimber && balloon.rung === balloon.topRung - 1 && choice < 10;
+    if (balloon.rung >= 1 && ((!isClimber && choice < 5) || climberStops)) {
+      beforeCashOut[balloonIndex] = round;
       round = cashOut(round, { balloonIndex, expectedDrawIndex: balloon.drawIndex }).round;
       actions[balloonIndex]?.push({ kind: 'cashOut' });
       note(seen, 'cash out');
@@ -154,6 +177,17 @@ function playRound(
     note(seen, result.outcome);
   }
 
+  // The round is over: the server works out each reveal, from the seeds, for
+  // every balloon cashed out below its top rung.
+  const afterRound = round.balloons.map((balloon, balloonIndex): CashOutReveal | null => {
+    if (!canReveal(balloon)) return null;
+    const draws = revealDrawerFor({ ...seeds, balloonIndex, drawIndex: balloon.drawIndex });
+    const reveal = revealAfterCashOut(round, balloonIndex, draws);
+    note(seen, `reveal ${reveal.outcome}`);
+    if (balloon.drawIndex > balloon.rung) note(seen, 'reveal after a Patch save');
+    return reveal;
+  });
+
   const record: RoundRecord = {
     serverSeed: seeds.serverSeed,
     serverSeedHash: hashServerSeed(seeds.serverSeed),
@@ -173,9 +207,40 @@ function playRound(
       patchesCents: balloon.patchesCents,
       payoutCents: balloon.payoutCents,
       draws: draws[i] ?? [],
+      afterRound: afterRound[i] ?? null,
     })),
   };
-  return { record, live: round, patched };
+  return { record, live: round, patched, beforeCashOut };
+}
+
+/**
+ * What live play would have done had the player gone on pumping balloon
+ * `balloonIndex` with no Patch instead of cashing out: the same seeds, the
+ * live engine's pump and a fresh drawerFor for each pump.
+ */
+function pumpedOn(
+  round: Round,
+  balloonIndex: number,
+  seeds: { readonly serverSeed: string; readonly clientSeed: string; readonly nonce: number },
+): CashOutReveal {
+  let current = round;
+  const draws: DrawRecord[] = [];
+  for (;;) {
+    const balloon = current.balloons[balloonIndex];
+    if (balloon === undefined) throw new Error('no such balloon');
+    const result = pump(
+      current,
+      { balloonIndex, expectedDrawIndex: balloon.drawIndex, patch: false, balanceCents: RICH },
+      drawerFor({ ...seeds, balloonIndex, drawIndex: balloon.drawIndex }),
+    );
+    current = result.round;
+    draws.push(result.draw);
+    const after = current.balloons[balloonIndex];
+    if (after === undefined) throw new Error('no such balloon');
+    if (result.outcome === 'popped' || result.outcome === 'top') {
+      return { outcome: result.outcome, reachedRung: after.rung, draws };
+    }
+  }
 }
 
 const CASES = RTPS.flatMap((rtpBp) =>
@@ -200,13 +265,8 @@ describe('verifyRound on rounds played by the live engine with real seeds', () =
       }
       if (pick(8) === 0) clientSeed = clientSeedFrom(pick);
 
-      const { record, live, patched } = playRound(
-        config,
-        id,
-        { serverSeed, clientSeed, nonce },
-        pick,
-        seen,
-      );
+      const seeds = { serverSeed, clientSeed, nonce };
+      const { record, live, patched, beforeCashOut } = playRound(config, id, seeds, pick, seen);
       nonce += 1;
 
       const check = verifyRound(record);
@@ -239,6 +299,25 @@ describe('verifyRound on rounds played by the live engine with real seeds', () =
             patch,
           ]),
         );
+        // The reveal: recomputed exactly, and the same as pumping on live.
+        const reveal = stored?.afterRound ?? null;
+        expect(balloonCheck.afterRound === null).toBe(reveal === null);
+        if (reveal === null) return;
+        expect(balloonCheck.afterRound).toMatchObject({
+          outcome: reveal.outcome,
+          reachedRung: reveal.reachedRung,
+        });
+        expect(
+          balloonCheck.afterRound?.draws.map(({ drawIndex, den, num, roll }) => ({
+            drawIndex,
+            den,
+            num,
+            roll,
+          })),
+        ).toEqual(reveal.draws);
+        const before = beforeCashOut[i];
+        if (before === undefined) throw new Error('a revealed balloon must have cashed out');
+        expect(pumpedOn(before, i, seeds)).toEqual(reveal);
       });
     }
 
@@ -252,6 +331,9 @@ describe('verifyRound on rounds played by the live engine with real seeds', () =
       'cash out',
       'abandoned cashed',
       'abandoned refunded',
+      'reveal popped',
+      'reveal top',
+      'reveal after a Patch save',
       ...SPECIAL_BETS.map((bet) => `bet ${String(bet)}`),
     ]) {
       expect(seen.get(path) ?? 0, path).toBeGreaterThan(0);

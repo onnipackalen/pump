@@ -1,7 +1,8 @@
 # How every pump is decided, and how to check it
 
 Pump is "provably fair": you can check every pump result yourself, with
-your own tools, after the fact. This page gives the exact recipe.
+your own tools, after the fact. That includes the "would have popped" the
+game shows after a round. This page gives the exact recipe.
 
 ## The idea in one paragraph
 
@@ -22,7 +23,7 @@ Then you can recompute every pump you played with it.
 | Client seed | 1 to 64 characters from `A-Z a-z 0-9 _ -`. Yours to edit between rounds. | `myseed` |
 | Nonce | Round counter for this server seed: 0, 1, 2, ... Never resets while the server seed is active. | `5` |
 | Balloon index | Which balloon: 0, 1 or 2. | `0` |
-| Draw index | How many draws this balloon has had before this one: 0, 1, 2, ... A pump saved by a Patch counts as a draw. | `0` |
+| Draw index | How many draws this balloon has had before this one: 0, 1, 2, ... A pump saved by a Patch counts as a draw. After the round, the reveal carries on the same count. | `0` |
 | Block | Starts at 0. Only goes up in the rare case described in step 4. | `0` |
 
 ## The recipe for one pump
@@ -100,9 +101,12 @@ move the balloon up one rung.
    same rung again, so it uses the **same** `num / den` again. A quick
    check: a pump's draw index is the balloon's rung just before it, plus
    the number of Patch saves on that balloon so far.
+5. For every balloon that cashed out below its top rung, work out where it
+   would have popped (see "After the round" below) and check that it
+   matches what the game showed.
 
-The verify page in the game does all of this in your browser, using the same
-code the server uses.
+The verify page in the game does all of this in your browser, the reveal
+included, using the same code the server uses.
 
 ## Worked example: a round with a Patch save
 
@@ -141,9 +145,130 @@ chance, 111/123 (37/41 in lowest terms). That gives
 look wrong. Press count and rung stop matching at the first Patch save, so
 always work from the rung.
 
+## After the round: where a cashed-out balloon would have popped
+
+When a round is over, the game shows, for each balloon you cashed out below
+its top, where it would have popped if you had kept pumping. This is not a
+guess and not a new kind of random number. It is the same recipe, carried on
+as if you had kept pressing Pump with no Patch.
+
+- It is worked out only when the **whole round** is over: every balloon has
+  popped, cashed out or reached its top. While any balloon is still in play,
+  nothing about a pump you did not make is worked out or sent to you.
+- It decides nothing and moves no money. Your balloon was already cashed out
+  and paid.
+- A balloon that popped, reached its top, or was never pumped has no
+  reveal. A balloon cashed out by the 24-hour rule gets one like any other.
+- Like every pump, you can check it once you rotate the server seed.
+
+Start from how the balloon ended:
+
+- `r`: its rung when it cashed out (always 1 or more).
+- `d`: its draw count, the draws it used. Patch saves count, so `d` is `r`
+  plus the number of Patch saves.
+- `T`: its top rung. That is the highest rung `k` where
+  `bet * h_k <= cap * 100` (bet and cap in cents, `h_k` in hundredths), so
+  its payout fits under the cap. `cap` is the payout cap saved with the
+  round (10,000,000 cents, $100,000, for every round so far). Rungs above
+  `T` are locked for that bet.
+
+Then:
+
+1. Run the recipe for one pump with draw index `d`, trying for rung `r + 1`.
+   Its chance is `h_r / h_(r+1)` in lowest terms (step 3 of "Checking a
+   whole round"). `r + 1` is at least 2, so the RTP never comes into a
+   reveal: the same end gives the same reveal at any RTP.
+2. If `roll >= num`, stop. It would have popped on that pump. The highest
+   rung it would have reached is `r`.
+3. Otherwise it would have reached rung `r + 1`. If that is `T`, stop: it
+   would have reached the top. If not, add 1 to `r` and 1 to `d` and go back
+   to step 1.
+
+There is no Patch, so every reveal draw either moves the balloon up a rung
+or ends it. A reveal makes at most `T - r` draws, and never one past the top.
+
+**Start at the draw count, not the rung.** After a Patch save they differ.
+Starting at the rung reads again a draw that already decided a real pump.
+
+## Worked example: a reveal after a Patch save
+
+Same server seed and client seed as above, nonce 338, balloon 0, bet $10.
+Easy, RTP 97%. The round's saved Easy ladder starts 101, 111, 123, 137
+(1.01x, 1.11x, 1.23x, 1.37x) and has 24 rungs, up to 25.00x. Even a $1,000
+bet pays only $25,000 there, so every bet can reach rung 24: `T = 24`.
+
+The round as played:
+
+1. **First press.** Rung 0, trying for rung 1. Draw index 0, chance 97/101.
+   - Message `myseed:338:0:0:0`. HMAC-SHA256:
+     `3a2862591d89f50da9c196812b8a30bcb319fb25d5cfff6eacce12c7be212be7`
+   - First number 975725145. `975725145 mod 101 = 0`.
+   - 0 < 97, so it survives. Rung 1 (1.01x).
+2. **Second press, with a Patch.** Rung 1, trying for rung 2. Draw index 1,
+   chance 101/111.
+   - Message `myseed:338:0:1:0`. HMAC-SHA256:
+     `665a5377d2cdc4b811064ffd338c052da8ec642cc175af6ee561cf5358efae94`
+   - First number 1717195639. `1717195639 mod 111 = 109`.
+   - 109 is not below 101, so it would pop. The Patch saves it. Still rung 1.
+3. **Cash out** at 1.01x. So `r = 1` and `d = 2`.
+
+The reveal, once the round is over:
+
+1. Draw index 2, trying for rung 2. Chance 101/111, `limit = 4,294,967,289`.
+   - Message `myseed:338:0:2:0`. HMAC-SHA256:
+     `094c68969e8236de34b8ec35cf340f7b67088600e7573522ea18e76dd18d84e1`
+   - First number 156002454. `156002454 mod 111 = 57`.
+   - 57 < 101: it would have reached rung 2 (1.11x).
+2. Draw index 3, trying for rung 3. Chance 111/123, which is 37/41.
+   `4,294,967,296 mod 41 = 37`, so `limit = 4,294,967,259`.
+   - Message `myseed:338:0:3:0`. HMAC-SHA256:
+     `8c4a0c226dda3f5812e5457950c9626cadce3a3f1e614a9c9118a4b7f442ae94`
+   - First number 2353663010. `2353663010 mod 41 = 36`.
+   - 36 < 37: it would have reached rung 3 (1.23x).
+3. Draw index 4, trying for rung 4. Chance 123/137 (already in lowest
+   terms). `4,294,967,296 mod 137 = 34`, so `limit = 4,294,967,262`.
+   - Message `myseed:338:0:4:0`. HMAC-SHA256:
+     `173be6f15d2b707b42f456f6b07c38d36bb7a894abc0095e254864e5b95cdae0`
+   - First number 389801713. `389801713 mod 137 = 134`.
+   - 134 is not below 123: it would have popped.
+
+So it would have reached 1.23x (rung 3), then popped. Three draws.
+
+The common mistake is to start at draw index 1, the rung. That reads
+`myseed:338:0:1:0` again: roll 109, the draw the Patch already used. It
+would show an instant pop, and an honest reveal would look wrong.
+
+## Worked example: a reveal stopped by the payout cap
+
+Same seeds, nonce 83, balloon 0. Expert, RTP 97%, bet $1,000 (100,000
+cents). The round's saved Expert ladder starts 150, 255, 465, 920, 2000,
+4750, 12500 (1.50x up to 47.50x, then 125.00x) and goes on up to 5,000x.
+
+The top rung: $1,000 at 47.50x pays $47,500, which fits under $100,000. At
+125.00x it would pay $125,000, which does not. In the integers:
+`100000 * 4750 = 475,000,000` is at most `1,000,000,000`, but
+`100000 * 12500 = 1,250,000,000` is not. So `T = 6`, and rung 7 and above
+are locked for this bet.
+
+The five real pumps, draw indexes 0 to 4, all survive (chance, roll):
+97/150 roll 10, 10/17 roll 0, 17/31 roll 10, 93/184 roll 41, 23/50 roll 20.
+The player cashes out on rung 5 (20.00x, $20,000). So `r = 5` and `d = 5`.
+
+The reveal, once the round is over:
+
+1. Draw index 5, trying for rung 6. Chance 2000/4750, which is 8/19.
+   `4,294,967,296 mod 19 = 6`, so `limit = 4,294,967,290`.
+   - Message `myseed:83:0:5:0`. HMAC-SHA256:
+     `be21d63ec5d65d703055b4b6c8f72e0b67bad2b5436ea4630dacd2349392107c`
+   - First number 3189888574. `3189888574 mod 19 = 6`.
+   - 6 < 8: it would have reached rung 6. That is `T`, so stop.
+
+So it would have reached the top, 47.50x. One draw, and no more: the ladder
+goes higher, but this bet can never climb past rung 6.
+
 ## Checking without our code
 
 `packages/engine/test/fair/reference/fair_reference.py` is the same recipe
 written separately in plain Python, using only Python's standard library.
 It doesn't use any of the game's code. The test suite checks that the game
-and this script agree on every example.
+and this script agree on every example, reveals included.

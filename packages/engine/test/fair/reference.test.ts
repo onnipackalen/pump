@@ -8,27 +8,44 @@
  * for every entry, so two separate implementations of the recipe have to agree
  * before either can be trusted.
  *
- * Three layers are checked separately, so a mismatch points at one step:
+ * Four layers are checked separately, so a mismatch points at one step:
  *
  *   seedHashes  SHA-256 of the server seed's 64 ASCII characters (the
  *               fingerprint a player sees before the seed is revealed)
  *   hmacBlocks  one HMAC-SHA256 block for one message (the mixing step)
  *   draws       the whole draw: message, HMAC blocks, words, rejection
  *               sampling, roll (every step together)
+ *   reveals     where a balloon cashed out below its top would have popped,
+ *               once its round is over: its top rung after the payout cap,
+ *               then plain pumps from its draw count until one pops or it
+ *               reaches the top (the engine's revealAfterCashOut)
+ *
+ * Each reveal carries its own RTP, ladder, bet and payout cap, as a stored
+ * round does, so nothing here reads the live config.
  */
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  cashOutCents,
+  revealAfterCashOut,
+  topRungForBet,
+  type Balloon,
+  type RevealOutcome,
+  type Round,
+} from '@pump/engine';
+import {
   bytesToHex,
   drawRoll,
   hashServerSeed,
   hmacSha256,
+  revealDrawerFor,
   verifyServerSeedHash,
   type DrawInputs,
   type SampledRoll,
 } from '@pump/engine/fair';
+import { fixedLadder } from '../fixtures';
 
 const VECTORS_PATH = fileURLToPath(new URL('./reference/vectors.json', import.meta.url));
 const SCRIPT_PATH = fileURLToPath(new URL('./reference/fair_reference.py', import.meta.url));
@@ -70,11 +87,42 @@ interface DrawVector {
   readonly word: number;
 }
 
+/** One draw of a reveal, in the engine's DrawRecord shape. */
+interface RevealDrawVector {
+  readonly drawIndex: number;
+  readonly den: number;
+  readonly num: number;
+  readonly roll: number;
+}
+
+/**
+ * One reveal: a balloon as it ended (cashed on `rung` with `drawIndex` draws
+ * used, below `topRung`), the round it was in, and where the reference says
+ * it would have popped.
+ */
+interface RevealVector {
+  readonly serverSeed: string;
+  readonly clientSeed: string;
+  readonly nonce: number;
+  readonly balloonIndex: number;
+  readonly rtpBp: number;
+  readonly ladder: readonly number[];
+  readonly betCents: number;
+  readonly maxPayoutCents: number;
+  readonly topRung: number;
+  readonly rung: number;
+  readonly drawIndex: number;
+  readonly outcome: RevealOutcome;
+  readonly reachedRung: number;
+  readonly draws: readonly RevealDrawVector[];
+}
+
 interface ReferenceVectors {
   readonly about: string;
   readonly seedHashes: readonly SeedHashVector[];
   readonly hmacBlocks: readonly HmacVector[];
   readonly draws: readonly DrawVector[];
+  readonly reveals: readonly RevealVector[];
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -141,14 +189,60 @@ function isDrawVector(value: unknown): value is DrawVector {
   );
 }
 
+const REVEAL_DRAW_KEYS = ['drawIndex', 'den', 'num', 'roll'] as const;
+
+function isRevealDrawVector(value: unknown): value is RevealDrawVector {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, REVEAL_DRAW_KEYS) &&
+    REVEAL_DRAW_KEYS.every((key) => isCount(value[key]))
+  );
+}
+
+const REVEAL_COUNT_KEYS = [
+  'nonce',
+  'balloonIndex',
+  'rtpBp',
+  'betCents',
+  'maxPayoutCents',
+  'topRung',
+  'rung',
+  'drawIndex',
+  'reachedRung',
+] as const;
+
+const isRevealOutcome = (value: unknown): value is RevealOutcome =>
+  value === 'popped' || value === 'top';
+
+function isRevealVector(value: unknown): value is RevealVector {
+  return (
+    isObject(value) &&
+    hasExactKeys(value, [
+      'serverSeed',
+      'clientSeed',
+      'ladder',
+      'outcome',
+      'draws',
+      ...REVEAL_COUNT_KEYS,
+    ]) &&
+    isString(value.serverSeed) &&
+    isString(value.clientSeed) &&
+    REVEAL_COUNT_KEYS.every((key) => isCount(value[key])) &&
+    isArrayOf(value.ladder, isCount) &&
+    isRevealOutcome(value.outcome) &&
+    isArrayOf(value.draws, isRevealDrawVector)
+  );
+}
+
 function isReferenceVectors(value: unknown): value is ReferenceVectors {
   return (
     isObject(value) &&
-    hasExactKeys(value, ['about', 'seedHashes', 'hmacBlocks', 'draws']) &&
+    hasExactKeys(value, ['about', 'seedHashes', 'hmacBlocks', 'draws', 'reveals']) &&
     isString(value.about) &&
     isArrayOf(value.seedHashes, isSeedHashVector) &&
     isArrayOf(value.hmacBlocks, isHmacVector) &&
-    isArrayOf(value.draws, isDrawVector)
+    isArrayOf(value.draws, isDrawVector) &&
+    isArrayOf(value.reveals, isRevealVector)
   );
 }
 
@@ -174,6 +268,60 @@ function orThrown<T>(fn: () => T): T | { readonly threw: string } {
     return { threw: error instanceof Error ? error.message : 'a value that is not an Error' };
   }
 }
+
+/**
+ * The finished round a reveal vector describes, built from the vector's own
+ * RTP and ladder (never the config). The cashed balloon sits at its balloon
+ * index. Every other balloon popped on its first pump: it only has to be
+ * over, so the round is over, and its draws use another balloon index.
+ * Patch spending plays no part in a reveal, so it is left at 0.
+ */
+function finishedRound(v: RevealVector): Round {
+  const cashed: Balloon = {
+    betCents: v.betCents,
+    status: 'cashed',
+    rung: v.rung,
+    drawIndex: v.drawIndex,
+    topRung: v.topRung,
+    patchesCents: 0,
+    payoutCents: cashOutCents(v.betCents, v.ladder, v.rung),
+  };
+  const popped: Balloon = {
+    ...cashed,
+    status: 'popped',
+    rung: 0,
+    drawIndex: 1,
+    payoutCents: 0,
+  };
+  return {
+    difficultyId: 'reference',
+    rtpBp: v.rtpBp,
+    ladder: v.ladder,
+    balloons: Array.from({ length: v.balloonIndex + 1 }, (_, i) =>
+      i === v.balloonIndex ? cashed : popped,
+    ),
+  };
+}
+
+const revealLabel = (i: number, v: RevealVector): string =>
+  `reveals[${String(i)}] ${v.clientSeed}:${String(v.nonce)}:${String(v.balloonIndex)} ` +
+  `rung ${String(v.rung)} draws ${String(v.drawIndex)} top ${String(v.topRung)} RTP ${String(v.rtpBp)}`;
+
+/** A reveal's balloon and round, without its RTP. The RTP must not change a reveal. */
+const endState = (v: RevealVector): string =>
+  JSON.stringify([
+    v.serverSeed,
+    v.clientSeed,
+    v.nonce,
+    v.balloonIndex,
+    v.ladder,
+    v.betCents,
+    v.maxPayoutCents,
+    v.rung,
+    v.drawIndex,
+  ]);
+
+const RTPS = [9400, 9700, 9900] as const;
 
 // ---------------------------------------------------------------------------
 // The checks
@@ -217,6 +365,55 @@ describe('the engine agrees with the Python reference on every vector', () => {
       const want: SampledRoll = { roll: v.roll, block: v.block, wordIndex: v.wordIndex, word: v.word };
       const label = `draws[${i}] ${v.clientSeed}:${v.nonce}:${v.balloonIndex}:${v.drawIndex} den ${v.den}`;
       expect.soft(orThrown(() => drawRoll(inputs, v.den)), label).toEqual(want);
+    }
+  });
+
+  it('drawRoll gives the roll of every reveal draw', () => {
+    // The bytes alone, so a mismatch here points at the draw, not the rules.
+    const { reveals } = vectors();
+    expect(reveals.length).toBeGreaterThan(0);
+    for (const [i, v] of reveals.entries()) {
+      for (const d of v.draws) {
+        const inputs: DrawInputs = {
+          serverSeed: v.serverSeed,
+          clientSeed: v.clientSeed,
+          nonce: v.nonce,
+          balloonIndex: v.balloonIndex,
+          drawIndex: d.drawIndex,
+        };
+        const roll = orThrown(() => drawRoll(inputs, d.den).roll);
+        expect.soft(roll, `${revealLabel(i, v)} draw ${String(d.drawIndex)}`).toBe(d.roll);
+      }
+    }
+  });
+
+  it('topRungForBet gives the reference top rung for every reveal', () => {
+    const { reveals } = vectors();
+    for (const [i, v] of reveals.entries()) {
+      const top = orThrown(() => topRungForBet(v.ladder, v.betCents, v.maxPayoutCents));
+      expect.soft(top, revealLabel(i, v)).toBe(v.topRung);
+    }
+  });
+
+  it('revealAfterCashOut gives the reference reveal for every cashed balloon', () => {
+    // Through revealDrawerFor, as the server does: it throws if the engine
+    // asks for any draw index but the next one from the balloon's draw count.
+    const { reveals } = vectors();
+    for (const [i, v] of reveals.entries()) {
+      const drawAt = revealDrawerFor({
+        serverSeed: v.serverSeed,
+        clientSeed: v.clientSeed,
+        nonce: v.nonce,
+        balloonIndex: v.balloonIndex,
+        drawIndex: v.drawIndex,
+      });
+      const got = orThrown(() => revealAfterCashOut(finishedRound(v), v.balloonIndex, drawAt));
+      const want = {
+        outcome: v.outcome,
+        reachedRung: v.reachedRung,
+        draws: v.draws,
+      };
+      expect.soft(got, revealLabel(i, v)).toEqual(want);
     }
   });
 });
@@ -274,12 +471,150 @@ describe('vectors.json covers the hard paths', () => {
     expect(draws.some((v) => v.den === 2 ** 32)).toBe(true);
   });
 
-  it('has a seed hash for every seed the HMAC blocks and draws use', () => {
-    const { seedHashes, hmacBlocks, draws } = vectors();
+  it('has a seed hash for every seed the HMAC blocks, draws and reveals use', () => {
+    const { seedHashes, hmacBlocks, draws, reveals } = vectors();
     const hashed = new Set(seedHashes.map((v) => v.serverSeed));
-    const used = [...hmacBlocks, ...draws].map((v) => v.serverSeed);
+    const used = [...hmacBlocks, ...draws, ...reveals].map((v) => v.serverSeed);
     expect(used.filter((seed) => !hashed.has(seed))).toEqual([]);
   });
+});
+
+/**
+ * The reveal cases most likely to hide a bug: starting at the rung instead of
+ * the draw count, running past a top the payout cap set, an off-by-one at the
+ * last rung, and letting the RTP leak in. The minimums match the Python
+ * script's own coverage check.
+ */
+describe('vectors.json covers the hard reveal cases', () => {
+  const DOCS_SEED = 'a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14';
+
+  it('starts with the two reveal examples from docs/fairness.md', () => {
+    const { reveals } = vectors();
+    // A reveal after a Patch save: rung 1, but two draws used, so it starts
+    // at draw index 2.
+    expect(reveals[0]).toEqual({
+      serverSeed: DOCS_SEED,
+      clientSeed: 'myseed',
+      nonce: 338,
+      balloonIndex: 0,
+      rtpBp: 9700,
+      ladder: fixedLadder('easy'),
+      betCents: 1000,
+      maxPayoutCents: 10_000_000,
+      topRung: 24,
+      rung: 1,
+      drawIndex: 2,
+      outcome: 'popped',
+      reachedRung: 3,
+      draws: [
+        { drawIndex: 2, den: 111, num: 101, roll: 57 },
+        { drawIndex: 3, den: 41, num: 37, roll: 36 },
+        { drawIndex: 4, den: 137, num: 123, roll: 134 },
+      ],
+    });
+    // A reveal stopped by the payout cap: $1,000 on Expert tops out at rung 6.
+    expect(reveals[1]).toEqual({
+      serverSeed: DOCS_SEED,
+      clientSeed: 'myseed',
+      nonce: 83,
+      balloonIndex: 0,
+      rtpBp: 9700,
+      ladder: fixedLadder('expert'),
+      betCents: 100_000,
+      maxPayoutCents: 10_000_000,
+      topRung: 6,
+      rung: 5,
+      drawIndex: 5,
+      outcome: 'top',
+      reachedRung: 6,
+      draws: [{ drawIndex: 5, den: 19, num: 8, roll: 6 }],
+    });
+  });
+
+  it('has reveals that reach the top after 2+ draws, pop after 3+, and pop at once', () => {
+    const { reveals } = vectors();
+    const top = reveals.filter((v) => v.outcome === 'top' && v.draws.length >= 2);
+    const longPop = reveals.filter((v) => v.outcome === 'popped' && v.draws.length >= 3);
+    const atOnce = reveals.filter((v) => v.outcome === 'popped' && v.draws.length === 1);
+    expect(top.length).toBeGreaterThanOrEqual(3);
+    expect(longPop.length).toBeGreaterThanOrEqual(5);
+    expect(atOnce.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('has Patch-saved balloons, whose draw count is above their rung', () => {
+    const { reveals } = vectors();
+    expect(reveals.filter((v) => v.drawIndex > v.rung).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('has balloons cashed one rung below their top, with both outcomes', () => {
+    const { reveals } = vectors();
+    const lastRung = reveals.filter((v) => v.rung === v.topRung - 1);
+    expect(lastRung.filter((v) => v.outcome === 'top').length).toBeGreaterThanOrEqual(2);
+    expect(lastRung.filter((v) => v.outcome === 'popped').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('has tops set by the payout cap, one exactly at the cap, and another cap', () => {
+    const { reveals } = vectors();
+    expect(reveals.filter((v) => v.topRung < v.ladder.length).length).toBeGreaterThanOrEqual(5);
+    const atCap = reveals.filter(
+      (v) => v.betCents * (v.ladder[v.topRung - 1] ?? 0) === v.maxPayoutCents * 100,
+    );
+    expect(atCap.length).toBeGreaterThanOrEqual(1);
+    expect(reveals.some((v) => v.maxPayoutCents !== 10_000_000)).toBe(true);
+  });
+
+  it('never draws past the top, and every draw but a last pop moves up a rung', () => {
+    const { reveals } = vectors();
+    for (const [i, v] of reveals.entries()) {
+      const label = revealLabel(i, v);
+      expect.soft(v.draws.length, label).toBeLessThanOrEqual(v.topRung - v.rung);
+      const indexes = v.draws.map((d) => d.drawIndex);
+      expect.soft(indexes, label).toEqual(indexes.map((_, k) => v.drawIndex + k));
+      const climbed = v.draws.length - (v.outcome === 'popped' ? 1 : 0);
+      expect.soft(v.reachedRung, label).toBe(v.rung + climbed);
+    }
+  });
+
+  it('has every balloon index, the largest safe nonce and a made-up ladder', () => {
+    const { reveals } = vectors();
+    expect([...new Set(reveals.map((v) => v.balloonIndex))].sort()).toEqual([0, 1, 2]);
+    expect(reveals.some((v) => v.nonce === Number.MAX_SAFE_INTEGER)).toBe(true);
+    const shipped = ['easy', 'medium', 'hard', 'expert'].map((id) =>
+      JSON.stringify(fixedLadder(id)),
+    );
+    expect(reveals.some((v) => !shipped.includes(JSON.stringify(v.ladder)))).toBe(true);
+  });
+
+  it.each(RTPS)(
+    'has reveals at RTP %i, each the same as its end state at the other RTPs',
+    (rtpBp) => {
+      // A cash-out needs rung 1, so a reveal's first pump is pump 2 or later and
+      // the RTP never enters: the same balloon gives the same reveal at any RTP.
+      const { reveals } = vectors();
+      const atRtp = reveals.filter((v) => v.rtpBp === rtpBp);
+      expect(atRtp.length).toBeGreaterThanOrEqual(5);
+      const others = reveals.filter((v) => v.rtpBp !== rtpBp);
+      let shared = 0;
+      for (const v of atRtp) {
+        for (const o of others.filter((x) => endState(x) === endState(v))) {
+          shared += 1;
+          expect
+            .soft({
+              outcome: o.outcome,
+              reachedRung: o.reachedRung,
+              draws: o.draws,
+            })
+            .toEqual({
+              outcome: v.outcome,
+              reachedRung: v.reachedRung,
+              draws: v.draws,
+            });
+        }
+      }
+      // Each RTP shares at least 5 end states with each of the other two.
+      expect(shared).toBeGreaterThanOrEqual(10);
+    },
+  );
 });
 
 // The reference script rebuilds the vectors in memory and, with --check,

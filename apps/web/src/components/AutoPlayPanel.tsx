@@ -107,40 +107,16 @@ export function AutoPlayPanel({
           {stopping ? 'Stopping…' : 'Stop'}
         </button>
       ) : (
-        <>
-          <div className="auto-grid">
-            {FIELDS.map((field) => (
-              <label key={field.name} className="field" title={field.full}>
-                <span className="field-label">{field.label}</span>
-                <input
-                  type="text"
-                  inputMode={field.money ? 'decimal' : 'numeric'}
-                  autoComplete="off"
-                  aria-label={field.full}
-                  value={form[field.name]}
-                  aria-invalid={check.errors[field.name] !== null}
-                  placeholder={field.money ? 'off' : undefined}
-                  onChange={(event) => setForm({ ...form, [field.name]: event.target.value })}
-                />
-              </label>
-            ))}
-          </div>
-          {firstWrong && (
-            <p className="note error">
-              {firstWrong.full}: {check.errors[firstWrong.name]}
-            </p>
-          )}
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={check.settings === null || !betsValid || roundActive || starting}
-            onClick={() => {
-              if (check.settings) onStart(check.settings);
-            }}
-          >
-            Start auto-play
-          </button>
-        </>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={check.settings === null || !betsValid || roundActive || starting}
+          onClick={() => {
+            if (check.settings) onStart(check.settings);
+          }}
+        >
+          Start auto-play
+        </button>
       )}
 
       {/* One status line that stays on the page in both views, so screen
@@ -164,6 +140,35 @@ export function AutoPlayPanel({
           </>
         ) : null}
       </p>
+
+      {/* The fields come after the button and the result line: the same
+          top-to-bottom order as the bet panel, most used first. */}
+      {!running && (
+        <>
+          {firstWrong && (
+            <p className="note error">
+              {firstWrong.full}: {check.errors[firstWrong.name]}
+            </p>
+          )}
+          <div className="auto-grid">
+            {FIELDS.map((field) => (
+              <label key={field.name} className="field" title={field.full}>
+                <span className="field-label">{field.label}</span>
+                <input
+                  type="text"
+                  inputMode={field.money ? 'decimal' : 'numeric'}
+                  autoComplete="off"
+                  aria-label={field.full}
+                  value={form[field.name]}
+                  aria-invalid={check.errors[field.name] !== null}
+                  placeholder={field.money ? 'off' : undefined}
+                  onChange={(event) => setForm({ ...form, [field.name]: event.target.value })}
+                />
+              </label>
+            ))}
+          </div>
+        </>
+      )}
     </section>
   );
 }
