@@ -2636,3 +2636,26 @@ the same boxes for Bet, Pump, Start and Stop and the same stage.
 Not checked: the live game, real phones, Safari (ResizeObserver timing
 there), and that `useShownGuard` really calls watchShown (only the
 harness shows that; there is no DOM in the tests).
+
+## 2026-11-21: d35abe8 deployed to the live site
+
+The compile chat called main final at d35abe8 (without the public-wins
+screen, on the user's word). Checks were kept light at the user's request
+("Do minimal testing"): `npm run typecheck` and `npm run build` here, then
+GitHub's own check on the push (green, 1m 5s) before any deploy.
+
+- Render: Manual Deploy > Deploy latest commit. Live 40 seconds after the
+  click. The log said `opened the existing file, 6 players`, so no wallet was
+  lost, and `public wins: OFF` as `render.yaml` intends.
+- This deploy ran database steps 2 and 3 on the live database. They are
+  one-way: nothing older than d35abe8 may be deployed there again. The user
+  was told this before the deploy.
+- On the live site: the page's script and style files have the same names as
+  the local build of d35abe8; `/api/wins` and `/api/settings` now answer
+  (before: 404). A new test player set a client seed, bet 10 cents on Easy,
+  pumped once (survived), cashed out 10 cents and got the after-round reveal;
+  the balance came back to 1,000,000 cents.
+
+Turned out wrong: my first test round reused an idempotency key, because
+`$RANDOM` inside a zsh `$(...)` gives the same number each time. The server
+rightly refused it as `key_reused`. Fixed by using `uuidgen` for keys.
