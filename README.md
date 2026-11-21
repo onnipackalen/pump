@@ -3,11 +3,33 @@
 A provably fair balloon game: a pure game engine, a server with a SQLite
 wallet around it, and a React frontend.
 
-Work in progress. Built so far: the engine (game rules and math), the exact RTP
-check and the simulator, the provably fair draw code, the server (wallet, game
-routes and the hammer test), and the game screen with its verify page, which
-play against the real server. The verify page checks every pump and every
-reveal. It is live at <https://pump-wysj.onrender.com> (see "The live site").
+- Play it: <https://pump-wysj.onrender.com> (see "The live site")
+- Code: <https://github.com/onnipackalen/pump>
+
+Everything the brief asks for is built: four difficulties, one to three
+balloons, Patch, auto-play, keyboard play, sound, a phone layout, the exact
+RTP check (`npm run rtp`), the simulator (`npm run sim`), the hammer
+(`npm run hammer`) and the verify page. Extras: a stats page, live stats,
+public wins, and the after-round reveal below.
+
+Also in the repo: [PLAYTEST.md](PLAYTEST.md), [AI_USAGE.md](AI_USAGE.md), and
+the hours I spent (the last section of this file).
+
+## The fun part: where it would have popped
+
+After a round, every balloon you cashed out early plays on by itself and
+shows where it would have popped: "Next pump would have popped", "Would have
+reached 1.37×, then popped", or "Would have reached the top (25.00×)".
+
+Why: the hardest moment in Pump is deciding when to stop, and normally you
+never find out if you were right. The reveal tells you, and it goes both
+ways. Often you got out just in time; sometimes you left money behind. That
+is the moment players talk about, and the reason to play one more round. It
+was my first idea for the game.
+
+It can't be used to cheat. It is worked out only once the whole round is
+over, from the same draws the next pumps would have used. It moves no money,
+and the verify page checks it like every other pump (see "Provably fair").
 
 ## Run it locally
 
@@ -569,3 +591,17 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
   device.
 - A database server, so more than one copy of the server can run.
 - Deploy each green push to the live site automatically, instead of by hand.
+
+## Hours I spent
+
+About 16½ hours of my own time. I counted it from when I was sending
+messages to the AI chats, not from the commits:
+
+- **Friday 20 November:** about 9½ hours, from 1:30 pm to 6 pm and from
+  7:15 pm to midnight.
+- **Saturday 21 November:** about 2 hours in the morning. I had an
+  engineering competition for the rest of the day, then spent about 5 hours
+  in the evening on the write-ups and final checks.
+
+The AI chats kept working while I was away (overnight and during the
+competition), so the project ran for longer than my hours.
