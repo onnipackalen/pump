@@ -1,5 +1,5 @@
 import type { GameConfig } from '@pump/engine';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { ApiFailure, type GameClient } from '../api/client';
 import type { BestWin, DifficultyStats, PlayerStats } from '../api/contract';
 import { formatCents, formatMultiplier, formatSignedCents } from '../money';
@@ -78,6 +78,23 @@ export function StatsPage({ client, config, latestRoundId, onVerify, onBack }: S
   );
 }
 
+/**
+ * An amount that may wrap only after a thousands comma, so a very large
+ * number on a narrow phone breaks as "$1,234," / "567.89", never mid-digit.
+ */
+function breakable(amount: string): ReactNode {
+  return amount.split(',').map((part, i, parts) => (
+    <Fragment key={i}>
+      {part}
+      {i < parts.length - 1 && (
+        <>
+          ,<wbr />
+        </>
+      )}
+    </Fragment>
+  ));
+}
+
 interface StatsBodyProps {
   readonly stats: PlayerStats;
   readonly config: GameConfig;
@@ -99,7 +116,7 @@ function StatsBody({ stats, config, label, onVerify }: StatsBodyProps) {
         <div className="card">
           <dt>Net</dt>
           <dd className={stats.netCents > 0 ? 'win' : undefined}>
-            {formatSignedCents(stats.netCents)}
+            {breakable(formatSignedCents(stats.netCents))}
           </dd>
         </div>
         <div className="card">
@@ -108,11 +125,11 @@ function StatsBody({ stats, config, label, onVerify }: StatsBodyProps) {
         </div>
         <div className="card">
           <dt>Wagered</dt>
-          <dd>{formatCents(stats.wageredCents)}</dd>
+          <dd>{breakable(formatCents(stats.wageredCents))}</dd>
         </div>
         <div className="card">
           <dt>Paid out</dt>
-          <dd>{formatCents(stats.paidOutCents)}</dd>
+          <dd>{breakable(formatCents(stats.paidOutCents))}</dd>
         </div>
       </dl>
 

@@ -68,14 +68,13 @@
   font-size: 12px;
 }
 
+/* An amount is never cut short: it shrinks on a narrow phone and, past
+   that, wraps after a thousands comma (StatsPage marks those spots). */
 .stats-tiles dd {
   margin: 2px 0 0;
-  overflow: hidden;
-  font-size: 20px;
+  font-size: clamp(15px, 4.8vw, 20px);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ---------------------------------------------------------------- Profit */
