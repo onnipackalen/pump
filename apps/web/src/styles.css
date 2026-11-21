@@ -208,6 +208,23 @@ body {
 }
 
 /*
+ * On a computer the top bar stays at the top while the page is scrolled
+ * down to the wins, so the balance and the settings button (with "Keep my
+ * wins private") are always there, as on an upright phone. Its background
+ * is the page's own sky, fixed to the screen, so at the top of the page it
+ * looks exactly as it does without the wins. Only with a mouse: a phone on
+ * its side does not draw fixed backgrounds the same way.
+ */
+@media (orientation: landscape) and (pointer: fine) {
+  .app:has(> .public-wins:not([hidden])) > .topbar {
+    position: sticky;
+    z-index: 5;
+    top: 0;
+    background: var(--sky-glow) fixed, var(--stage);
+  }
+}
+
+/*
  * Upright phones and tablets: the stage on top, the panel underneath, and
  * the page may scroll down.
  *

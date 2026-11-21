@@ -24,10 +24,14 @@
  * or the result.
  */
 
+:root {
+  /* The page's sky: lighter at the top. Also behind the top bar on a
+     computer while the page scrolls (styles.css). */
+  --sky-glow: radial-gradient(120% 70% at 50% -10%, #17203c 0%, rgba(23, 32, 60, 0) 70%);
+}
+
 body {
-  background:
-    radial-gradient(120% 70% at 50% -10%, #17203c 0%, rgba(23, 32, 60, 0) 70%),
-    var(--stage);
+  background: var(--sky-glow), var(--stage);
 }
 
 /*
