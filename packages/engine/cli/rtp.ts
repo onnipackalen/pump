@@ -105,7 +105,12 @@ function proveDifficulty(difficulty: Difficulty, rtp: Fr): void {
   check(`No payout is above the ${dollars(maxPayoutCents)} cap`, scan.underCap);
   check(`No cash-out returns more than ${percent(rtp)}`, scan.cashOutsWithinRtp);
   check(`No Patch returns more than ${percent(rtp)}`, scan.patchesWithinRtp);
-  console.log('  What cent rounding costs at worst (it only shows on tiny bets):');
+  // Rounding moves an amount by under a cent, so it costs most where the
+  // amount is small: cash-outs on tiny bets, and any Patch that costs only a
+  // few cents, which early pumps offer even at an ordinary bet like $1.
+  console.log(
+    '  What cent rounding costs at worst (most on small amounts: tiny bets, and cheap Patches at any bet):',
+  );
   const nothingLost = 'no payout loses anything to rounding';
   worstLine('lowest cash-out return:', scan.worstCashOut, 'rung', nothingLost);
   worstLine('lowest Patch return:   ', scan.worstPatch, 'pump', nothingLost);
