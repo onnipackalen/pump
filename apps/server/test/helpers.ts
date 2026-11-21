@@ -117,9 +117,19 @@ export function insertActiveRound(
   );
   db.prepare(
     `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder,
-                         server_seed_id, client_seed, nonce, started_at, last_action_at)
-     VALUES (?, ?, 'active', 'easy', ?, '[101,111]', ?, 'seed', ?, ?, ?)`,
-  ).run(roundId, playerId, GAME_CONFIG.rtpBp, int(seed, 'id'), int(seed, 'next_nonce'), at, at);
+                         server_seed_id, client_seed, nonce, started_at, last_action_at,
+                         max_payout_cents)
+     VALUES (?, ?, 'active', 'easy', ?, '[101,111]', ?, 'seed', ?, ?, ?, ?)`,
+  ).run(
+    roundId,
+    playerId,
+    GAME_CONFIG.rtpBp,
+    int(seed, 'id'),
+    int(seed, 'next_nonce'),
+    at,
+    at,
+    GAME_CONFIG.limits.maxPayoutCents,
+  );
   betsCents.forEach((betCents, balloonIndex) => {
     db.prepare(
       `INSERT INTO balloons (round_id, balloon_index, bet_cents, status, rung, draw_index, top_rung)
@@ -128,11 +138,23 @@ export function insertActiveRound(
   });
 }
 
-/** Ends a round by hand: any balloon still in play is popped, then the round is closed. */
+/**
+ * Ends a round by hand: any balloon still in play is popped, each balloon
+ * cashed out below its top rung gets a made-up reveal, then the round is
+ * closed.
+ */
 export function finishRound(db: Db, roundId = 'round-1'): void {
   db.prepare("UPDATE balloons SET status = 'popped' WHERE round_id = ? AND status = 'active'").run(
     roundId,
   );
+  // The database closes a round only with these reveals in place. A made-up
+  // one: the very next pump pops (roll 1 is not below num 1).
+  db.prepare(
+    `INSERT INTO balloon_reveals (round_id, balloon_index, outcome, reached_rung, draws_json, created_at)
+     SELECT round_id, balloon_index, 'popped', rung,
+            json_array(json_object('drawIndex', draw_index, 'den', 2, 'num', 1, 'roll', 1)), ?
+     FROM balloons WHERE round_id = ? AND status = 'cashed' AND rung < top_rung`,
+  ).run('2026-01-01T00:05:00.000Z', roundId);
   db.prepare("UPDATE rounds SET status = 'finished', finished_at = ? WHERE id = ?").run(
     '2026-01-01T00:05:00.000Z',
     roundId,

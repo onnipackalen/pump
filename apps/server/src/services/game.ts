@@ -1,5 +1,6 @@
 import type {
   ActionResult,
+  AfterRoundView,
   BalloonView,
   CashOutBody,
   PumpBody,
@@ -10,16 +11,21 @@ import type {
   WalletView,
 } from '@pump/contract';
 import {
+  canReveal,
   cashOut,
   EngineError,
   isRoundOver,
+  multiplierAt,
   pump,
   quoteBalloon,
+  revealAfterCashOut,
   settleAbandoned,
   startRound,
+  type CashOutReveal,
   type PumpDraw,
+  type Round,
 } from '@pump/engine';
-import { drawerFor } from '@pump/engine/fair';
+import { drawerFor, revealDrawerFor } from '@pump/engine/fair';
 import { assertInTransaction, immediate } from '../db/transaction';
 import { ApiError } from '../errors';
 import type { PlayersRepository } from '../repositories/players';
@@ -28,6 +34,21 @@ import type { SeedsRepository } from '../repositories/seeds';
 import type { Runtime } from '../runtime';
 import { ABANDONED_AFTER_MS } from '../settings';
 import type { WalletService } from './wallet';
+
+/**
+ * Where a balloon would have popped, as the screen shows it. Only on a
+ * finished round: while a round is in progress there is no reveal to show.
+ * No rolls and no money, just how it ends and the multiplier it reached.
+ */
+function afterRoundView(stored: StoredRound, balloonIndex: number): AfterRoundView | null {
+  const reveal = stored.status === 'finished' ? (stored.reveals[balloonIndex] ?? null) : null;
+  if (reveal === null) return null;
+  return {
+    outcome: reveal.outcome,
+    reachedRung: reveal.reachedRung,
+    reachedMultiplierHundredths: multiplierAt(stored.round.ladder, reveal.reachedRung),
+  };
+}
 
 /**
  * A stored round as the screen sees it. Every game number here (multiplier,
@@ -58,6 +79,7 @@ export function toRoundView(stored: StoredRound): RoundView {
         next: quote.next,
         patchesCents: balloon.patchesCents,
         payoutCents: balloon.payoutCents,
+        afterRound: afterRoundView(stored, index),
       };
     }),
     startedAt: stored.startedAt,
@@ -138,13 +160,89 @@ export function gameService(
     }
   }
 
-  /** Marks the round finished if every balloon is done; otherwise restarts its 24-hour clock. */
-  function finishOrTouch(stored: StoredRound, over: boolean, at: string): void {
-    if (over) rounds.finish(stored.id, at);
+  /**
+   * Ends a round, as the last step of the action that ended it, in the same
+   * transaction. `over` is the round as the engine left it, every balloon
+   * done.
+   *
+   * First the reveals: each balloon cashed out below its top rung is played
+   * on by the engine (revealAfterCashOut) with plain pumps until one pops or
+   * it reaches its top, using the draws that come after its last real pump
+   * (revealDrawerFor). They use the round's own seeds, nonce, RTP and
+   * ladder. Then they are stored, and only then is the round closed.
+   *
+   * This is the only place a reveal is made and stored. (The one other
+   * reveal sum is lateReveal, for rounds that ended before reveals were
+   * stored, and only once their seed is public.) The seed is still secret
+   * here (it cannot be revealed while the round is open); it is read inside
+   * the transaction, only if some balloon has a reveal, and never leaves
+   * this function.
+   */
+  function finish(stored: StoredRound, over: Round, at: string): void {
+    let serverSeed: string | null = null;
+    for (const [balloonIndex, balloon] of over.balloons.entries()) {
+      if (!canReveal(balloon)) continue;
+      serverSeed ??= seeds.secretForDrawing(stored.serverSeedId);
+      const drawAt = revealDrawerFor({
+        serverSeed,
+        clientSeed: stored.clientSeed,
+        nonce: stored.nonce,
+        balloonIndex,
+        drawIndex: balloon.drawIndex,
+      });
+      rounds.saveReveal(stored.id, balloonIndex, revealAfterCashOut(over, balloonIndex, drawAt), at);
+    }
+    rounds.finish(stored.id, at);
+  }
+
+  /**
+   * After an action the engine accepted: ends the round if every balloon is
+   * now done; otherwise restarts its 24-hour clock.
+   */
+  function finishOrTouch(stored: StoredRound, after: Round, at: string): void {
+    if (isRoundOver(after)) finish(stored, after, at);
     else rounds.touch(stored.id, at);
   }
 
-  /** Settles one idle round: cash out what was pumped, refund what was not. */
+  /**
+   * The reveal of a balloon in a round that ended before reveals were
+   * stored, worked out now, for the verify page.
+   *
+   * Those rounds are the ones with no stored cap (they started before the
+   * cap was kept with each round). Some ended with no reveal written. Their
+   * seed is public by now (the verify page asks only then), so this is the
+   * same sum anyone can do from the seeds, made the same way finish makes
+   * it: it shows nothing new and stores nothing. Without it the verify page
+   * would say an honest old round is missing its reveal.
+   *
+   * Every other round got its reveals as it ended, and the database will
+   * not close a round without them. So for those this gives null, and a
+   * missing reveal stays missing for the verify page to report.
+   */
+  function lateReveal(
+    stored: StoredRound,
+    serverSeed: string,
+    balloonIndex: number,
+  ): CashOutReveal | null {
+    const balloon = stored.round.balloons[balloonIndex];
+    if (stored.maxPayoutCents !== null || balloon === undefined || !canReveal(balloon)) {
+      return null;
+    }
+    const drawAt = revealDrawerFor({
+      serverSeed,
+      clientSeed: stored.clientSeed,
+      nonce: stored.nonce,
+      balloonIndex,
+      drawIndex: balloon.drawIndex,
+    });
+    return revealAfterCashOut(stored.round, balloonIndex, drawAt);
+  }
+
+  /**
+   * Settles one idle round: cash out what was pumped, refund what was not.
+   * That ends the round, so its reveals are made last (see finish), in this
+   * same transaction.
+   */
   function settle(roundId: string): void {
     assertInTransaction(runtime.db);
     const stored = rounds.find(roundId);
@@ -174,7 +272,7 @@ export function gameService(
         wallet.credit(stored.playerId, 'refund', settled.cents, ref, at);
       }
     }
-    rounds.finish(roundId, at);
+    finish(stored, result.round, at);
   }
 
   function idleCutoff(): string {
@@ -228,6 +326,8 @@ export function gameService(
         serverSeedId: seed.id,
         clientSeed: player.clientSeed,
         nonce: seeds.takeNonce(seed.id),
+        // The cap startRound just used for each balloon's top rung.
+        maxPayoutCents: runtime.config.limits.maxPayoutCents,
         round: started.round,
         at,
       });
@@ -243,7 +343,8 @@ export function gameService(
      * The engine checks the request first (the balloon is in the state the
      * player saw, a Patch is allowed and affordable) and only then asks for
      * the draw. So the draw is computed for a pump that will happen, and for
-     * nothing else: a refused request never reads the server seed.
+     * nothing else: a refused request never reads the server seed. If this
+     * pump ends the round, the round's reveals are made last (see finish).
      */
     pump(playerId: string, roundId: string, body: PumpBody): PumpResult {
       assertInTransaction(runtime.db);
@@ -300,7 +401,7 @@ export function gameService(
       if (result.payoutCents > 0) {
         wallet.credit(playerId, 'payout', result.payoutCents, ref, at);
       }
-      finishOrTouch(stored, isRoundOver(result.round), at);
+      finishOrTouch(stored, result.round, at);
 
       return {
         round: toRoundView(reload(roundId)),
@@ -309,7 +410,11 @@ export function gameService(
       };
     },
 
-    /** Cashes out one balloon. Conditional on the state the player saw, and paid once. */
+    /**
+     * Cashes out one balloon. Conditional on the state the player saw, and
+     * paid once. If this was the last balloon in play, the round's reveals
+     * are made last (see finish).
+     */
     cashOut(playerId: string, roundId: string, body: CashOutBody): ActionResult {
       assertInTransaction(runtime.db);
       const stored = load(playerId, roundId);
@@ -339,15 +444,22 @@ export function gameService(
         at,
       );
       wallet.credit(playerId, 'payout', result.payoutCents, ref, at);
-      finishOrTouch(stored, isRoundOver(result.round), at);
+      finishOrTouch(stored, result.round, at);
 
       return { round: toRoundView(reload(roundId)), wallet: walletOf(playerId) };
     },
 
     /**
-     * Everything needed to play a finished round again in the browser. Only
-     * once the round is over AND its server seed has been rotated out: before
-     * that the seed is still deciding rounds and stays secret.
+     * Everything needed to play a finished round again in the browser, in the
+     * shape verifyRound takes: the seeds, the round's own RTP, ladder and
+     * cap, and for each balloon its actions, the draws of its pumps, its end
+     * state and its reveal with the reveal's draws. Only once the round is
+     * over AND its server seed has been rotated out: before that the seed is
+     * still deciding rounds and stays secret.
+     *
+     * The reveal is the stored one. A round that ended before reveals were
+     * stored has none, so its reveal is worked out here from the now public
+     * seed (see lateReveal).
      */
     verifiable(playerId: string, roundId: string): VerifiableRound {
       const stored = load(playerId, roundId);
@@ -365,23 +477,31 @@ export function gameService(
         difficultyId: stored.round.difficultyId,
         rtpBp: stored.round.rtpBp,
         ladder: stored.round.ladder,
+        // A round started before the cap was stored with each round has
+        // none; the server's own cap stands in. If they ever differed, the
+        // verify page's top-rung check would say so in the open.
+        maxPayoutCents: stored.maxPayoutCents ?? runtime.config.limits.maxPayoutCents,
         serverSeed,
         serverSeedHash: stored.serverSeedHash,
         clientSeed: stored.clientSeed,
         nonce: stored.nonce,
         finishedAt: stored.finishedAt,
-        balloons: stored.round.balloons.map((balloon, balloonIndex) => ({
-          betCents: balloon.betCents,
-          topRung: balloon.topRung,
-          actions: actions
-            .filter((entry) => entry.balloonIndex === balloonIndex)
-            .map((entry) => entry.action),
-          status: balloon.status,
-          rung: balloon.rung,
-          drawIndex: balloon.drawIndex,
-          patchesCents: balloon.patchesCents,
-          payoutCents: balloon.payoutCents,
-        })),
+        balloons: stored.round.balloons.map((balloon, balloonIndex) => {
+          const own = actions.filter((entry) => entry.balloonIndex === balloonIndex);
+          return {
+            betCents: balloon.betCents,
+            topRung: balloon.topRung,
+            actions: own.map((entry) => entry.action),
+            status: balloon.status,
+            rung: balloon.rung,
+            drawIndex: balloon.drawIndex,
+            patchesCents: balloon.patchesCents,
+            payoutCents: balloon.payoutCents,
+            draws: own.flatMap((entry) => (entry.draw === null ? [] : [entry.draw])),
+            afterRound:
+              stored.reveals[balloonIndex] ?? lateReveal(stored, serverSeed, balloonIndex),
+          };
+        }),
       };
     },
 

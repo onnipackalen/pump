@@ -22,9 +22,13 @@
  *     Cash Out, or two Pumps: exactly one may succeed, the other gets a 409;
  *   - several "start a round" requests at once: one round, one set of bets.
  *
+ * Every round in every answer is also checked: no balloon shows a reveal
+ * ("where it would have popped") while its round is still in progress.
+ *
  * Then it reads the database and runs the full reconcile: every balance
- * equals the sum of its ledger rows, the ledger chain is unbroken, and every
- * balloon was charged and paid exactly what its round says.
+ * equals the sum of its ledger rows, the ledger chain is unbroken, every
+ * balloon was charged and paid exactly what its round says, and every
+ * finished round holds exactly the reveals it should.
  *
  * It exits with an error if anything is wrong.
  */
@@ -50,6 +54,13 @@ const roundShape = z.object({
       status: z.enum(['active', 'popped', 'cashed', 'refunded']),
       rung: z.int(),
       drawIndex: z.int(),
+      afterRound: z
+        .object({
+          outcome: z.enum(['popped', 'top']),
+          reachedRung: z.int(),
+          reachedMultiplierHundredths: z.int(),
+        })
+        .nullable(),
     }),
   ),
 });
@@ -83,7 +94,7 @@ let inFlight = 0;
 let peakInFlight = 0;
 const statusCounts = new Map<number, number>();
 const failures: string[] = [];
-const checks = { pairs: 0, repeats: 0, starts: 0, refusedSeedChanges: 0 };
+const checks = { pairs: 0, repeats: 0, starts: 0, refusedSeedChanges: 0, rounds: 0, reveals: 0 };
 
 function fail(message: string): void {
   if (failures.length < 25) failures.push(message);
@@ -132,8 +143,20 @@ async function send(
 
 /** The round carried by an answer: a success holds it, and so does a 409. */
 function roundIn(answer: Answer): RoundView | null {
-  if (answer.status === 200) return successShape.parse(answer.json).round;
-  return refusalShape.parse(answer.json).error.round ?? null;
+  const round =
+    answer.status === 200
+      ? successShape.parse(answer.json).round
+      : (refusalShape.parse(answer.json).error.round ?? null);
+  if (round !== null) {
+    // A reveal exists only once the round is over.
+    checks.rounds += 1;
+    const shown = round.balloons.filter((balloon) => balloon.afterRound !== null).length;
+    if (round.status === 'active' && shown > 0) {
+      fail(`round ${round.id}: a reveal was shown while the round was in progress`);
+    }
+    if (round.status === 'finished') checks.reveals += shown;
+  }
+  return round;
 }
 
 // --- one player -----------------------------------------------------------
@@ -229,6 +252,10 @@ class Player {
       if (loser && ![200, 402, 409].includes(loser.status)) {
         fail(`${label}: a losing request got ${String(loser.status)}: ${loser.raw}`);
       }
+    }
+    // Every answer that carries a round is checked, the losers' too.
+    for (const answer of answers) {
+      if (answer !== winners[0] && (answer.status === 200 || answer.status === 409)) roundIn(answer);
     }
     const winner = winners[0];
     return winner ? roundIn(winner) : null;
@@ -436,6 +463,11 @@ async function run(): Promise<number> {
     'Seeds could not be rotated mid-round',
     !failures.some((f) => f.includes('rotating mid-round')),
     `${checks.refusedSeedChanges.toLocaleString('en-US')} tries`,
+  );
+  line(
+    'No reveal was shown while its round was in progress',
+    !failures.some((f) => f.includes('reveal was shown')),
+    `${checks.rounds.toLocaleString('en-US')} rounds seen, ${checks.reveals.toLocaleString('en-US')} reveals on finished ones`,
   );
   line('No balance is below zero', negative !== undefined && int(negative, 'n') === 0, '');
   line(

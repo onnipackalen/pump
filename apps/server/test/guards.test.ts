@@ -253,6 +253,29 @@ describe('rounds', () => {
     ).toThrow('its own player');
   });
 
+  it('must store the payout cap it is played under, and keeps it', () => {
+    db.exec("UPDATE server_seeds SET next_nonce = 1 WHERE player_id = 'p1'");
+    const insert = (cap: string): void => {
+      db.exec(
+        `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder,
+                             server_seed_id, client_seed, nonce, started_at, last_action_at,
+                             max_payout_cents)
+         SELECT 'round-x', 'p1', 'active', 'easy', ${String(GAME_CONFIG.rtpBp)}, '[101]',
+                id, 'seed', 0, '${AT}', '${AT}', ${cap}
+         FROM server_seeds WHERE player_id = 'p1'`,
+      );
+    };
+    expect(() => {
+      insert('NULL');
+    }).toThrow('stores the payout cap');
+    expect(() => {
+      insert('0');
+    }).toThrow('CHECK constraint failed');
+    insert('1000');
+    expect(() => db.exec('UPDATE rounds SET max_payout_cents = 2000')).toThrow('keeps the payout cap');
+    expect(() => db.exec('UPDATE rounds SET max_payout_cents = NULL')).toThrow('keeps the payout cap');
+  });
+
   it('cannot finish while a balloon is in play, and never changes once finished', () => {
     insertActiveRound(db, 'p1', 'round-1', [100]);
     const finish = "UPDATE rounds SET status = 'finished', finished_at = '2026-01-01T00:01:00.000Z'";
@@ -380,5 +403,109 @@ describe('stored answers', () => {
     }).toThrow('never replaced');
     expect(() => db.exec("UPDATE idempotency_keys SET body = '[]'")).toThrow('never changes');
     expect(() => db.exec('DELETE FROM idempotency_keys')).toThrow('never deleted');
+  });
+});
+
+describe('reveals', () => {
+  // A round of two $1 balloons with top rung 2. Balloon 0 is cashed out on
+  // rung 1 after one draw; balloon 1 is still in play.
+  beforeEach(() => {
+    insertActiveRound(db, 'p1', 'round-1', [100, 100]);
+    cashOutByHand(db, 'round-1', 0, 101);
+  });
+
+  /** One draw of pump 2 on [101, 111]: it survives when roll < 101. */
+  const draw = (drawIndex: number, roll: number): string =>
+    `{"drawIndex":${String(drawIndex)},"den":111,"num":101,"roll":${String(roll)}}`;
+
+  function reveal(balloonIndex: number, outcome: string, reached: number, draws: string, extra = ''): void {
+    db.exec(
+      `INSERT ${extra} INTO balloon_reveals (round_id, balloon_index, outcome, reached_rung, draws_json, created_at)
+       VALUES ('round-1', ${String(balloonIndex)}, '${outcome}', ${String(reached)}, '${draws}', '${AT}')`,
+    );
+  }
+
+  const popBalloon1 = (): void => {
+    db.exec("UPDATE balloons SET status = 'popped' WHERE balloon_index = 1");
+  };
+  const finish = "UPDATE rounds SET status = 'finished', finished_at = '2026-01-01T00:01:00.000Z'";
+
+  it('are written only as the round ends: not while a balloon is in play, not once it is closed', () => {
+    expect(() => {
+      reveal(0, 'popped', 1, `[${draw(1, 105)}]`);
+    }).toThrow('as its round ends');
+    popBalloon1();
+    // Close the round without its reveal, as only a removed guard would allow.
+    db.exec('DROP TRIGGER rounds_finish_with_their_reveals');
+    db.exec(finish);
+    expect(() => {
+      reveal(0, 'popped', 1, `[${draw(1, 105)}]`);
+    }).toThrow('as its round ends');
+    expect(count(db, 'balloon_reveals')).toBe(0);
+  });
+
+  it('fit their balloon: cashed out below its top, from its draw count, stopping in range', () => {
+    popBalloon1();
+    const refusal = 'cashed out below its top rung';
+    // A popped balloon has no reveal.
+    expect(() => {
+      reveal(1, 'popped', 1, `[${draw(0, 105)}]`);
+    }).toThrow(refusal);
+    // The first draw is the balloon's draw count (1), not its rung or 0.
+    expect(() => {
+      reveal(0, 'popped', 1, `[${draw(0, 105)}]`);
+    }).toThrow(refusal);
+    // 'popped' stops below the top rung (2); 'top' stops on it.
+    expect(() => {
+      reveal(0, 'popped', 2, `[${draw(1, 5)},${draw(2, 105)}]`);
+    }).toThrow(refusal);
+    expect(() => {
+      reveal(0, 'top', 1, `[${draw(1, 5)}]`);
+    }).toThrow(refusal);
+    // The number of draws follows from where it stops.
+    expect(() => {
+      reveal(0, 'popped', 1, `[${draw(1, 105)},${draw(2, 105)}]`);
+    }).toThrow(refusal);
+    expect(() => {
+      reveal(0, 'top', 2, '[]');
+    }).toThrow(refusal);
+    // Not a list of draws at all.
+    expect(() => {
+      reveal(0, 'top', 2, 'not json');
+    }).toThrow();
+    expect(() => {
+      reveal(0, 'sideways', 2, `[${draw(1, 5)}]`);
+    }).toThrow();
+    expect(count(db, 'balloon_reveals')).toBe(0);
+
+    reveal(0, 'top', 2, `[${draw(1, 5)}]`);
+    expect(count(db, 'balloon_reveals')).toBe(1);
+  });
+
+  it('are append-only and never replaced', () => {
+    popBalloon1();
+    reveal(0, 'popped', 1, `[${draw(1, 105)}]`);
+
+    expect(() => db.exec("UPDATE balloon_reveals SET outcome = 'top', reached_rung = 2")).toThrow('append-only');
+    expect(() => db.exec('DELETE FROM balloon_reveals')).toThrow('append-only');
+    expect(() => {
+      reveal(0, 'top', 2, `[${draw(1, 5)}]`);
+    }).toThrow('never replaced');
+    expect(() => {
+      reveal(0, 'top', 2, `[${draw(1, 5)}]`, 'OR REPLACE');
+    }).toThrow('never replaced');
+    db.exec('PRAGMA recursive_triggers = OFF');
+    expect(() => {
+      reveal(0, 'top', 2, `[${draw(1, 5)}]`, 'OR REPLACE');
+    }).toThrow('never replaced');
+    expect(db.prepare('SELECT outcome FROM balloon_reveals').get()?.outcome).toBe('popped');
+  });
+
+  it('must all be in place before the round closes', () => {
+    popBalloon1();
+    expect(() => db.exec(finish)).toThrow('closes with the reveal of each balloon');
+    reveal(0, 'popped', 1, `[${draw(1, 105)}]`);
+    db.exec(finish);
+    expect(() => db.exec('DELETE FROM balloon_reveals')).toThrow('append-only');
   });
 });

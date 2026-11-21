@@ -451,6 +451,106 @@ const MIGRATIONS: readonly Migration[] = [
       BEGIN SELECT RAISE(ABORT, 'a stored answer is never deleted'); END;
     `,
   },
+  {
+    id: 2,
+    name: 'reveals at round end, and the payout cap per round',
+    sql: `
+      ------------------------------------------------------------------
+      -- The payout cap a round is played under, kept with the round like
+      -- its RTP and ladder, so the round still checks if the cap changes.
+      -- Rounds started before this step have none (NULL).
+      ------------------------------------------------------------------
+      ALTER TABLE rounds ADD COLUMN max_payout_cents INTEGER CHECK (max_payout_cents >= 1);
+
+      -- AFTER, not BEFORE, so the older guards on a new round speak first.
+      CREATE TRIGGER rounds_start_with_their_cap AFTER INSERT ON rounds
+      WHEN NEW.max_payout_cents IS NULL
+      BEGIN SELECT RAISE(ABORT, 'a new round stores the payout cap it is played under'); END;
+
+      CREATE TRIGGER rounds_keep_their_cap BEFORE UPDATE OF max_payout_cents ON rounds
+      WHEN NEW.max_payout_cents IS NOT OLD.max_payout_cents
+      BEGIN SELECT RAISE(ABORT, 'a round keeps the payout cap it started with'); END;
+
+      ------------------------------------------------------------------
+      -- Reveals: where a balloon cashed out below its top rung would have
+      -- popped. One row per such balloon, worked out and written in the
+      -- transaction that ends its round, just before the round is closed.
+      -- A reveal decides nothing and moves no money.
+      --
+      -- Its draws are kept here and never in balloon_actions: those are
+      -- the draws that decided real pumps, and a balloon's draw_index
+      -- counts only them. draws_json lists the reveal's draws in order,
+      -- each {"drawIndex", "den", "num", "roll"}.
+      -- outcome: popped (a later pump would have popped it, on
+      -- reached_rung) or top (it would have reached its top rung).
+      ------------------------------------------------------------------
+      CREATE TABLE balloon_reveals (
+        round_id      TEXT NOT NULL,
+        balloon_index INTEGER NOT NULL,
+        outcome       TEXT NOT NULL CHECK (outcome IN ('popped', 'top')),
+        reached_rung  INTEGER NOT NULL CHECK (reached_rung >= 1),
+        draws_json    TEXT NOT NULL
+                      CHECK (json_valid(draws_json) AND json_type(draws_json) = 'array'),
+        created_at    TEXT NOT NULL,
+        PRIMARY KEY (round_id, balloon_index),
+        FOREIGN KEY (round_id, balloon_index) REFERENCES balloons(round_id, balloon_index)
+      ) STRICT, WITHOUT ROWID;
+
+      CREATE TRIGGER balloon_reveals_no_replace BEFORE INSERT ON balloon_reveals
+      WHEN EXISTS (
+        SELECT 1 FROM balloon_reveals
+        WHERE round_id = NEW.round_id AND balloon_index = NEW.balloon_index
+      )
+      BEGIN SELECT RAISE(ABORT, 'a reveal is never replaced'); END;
+
+      -- Only as the round ends: every balloon is done, and the round is not
+      -- closed yet. So no reveal exists while a pump can still be made.
+      CREATE TRIGGER balloon_reveals_at_round_end BEFORE INSERT ON balloon_reveals
+      WHEN NOT EXISTS (SELECT 1 FROM rounds WHERE id = NEW.round_id AND status = 'active')
+        OR EXISTS (SELECT 1 FROM balloons WHERE round_id = NEW.round_id AND status = 'active')
+      BEGIN SELECT RAISE(ABORT, 'a reveal is written as its round ends: after its last balloon, before the round closes'); END;
+
+      -- Only for a balloon cashed out below its top rung T, starting at its
+      -- draw count (not its rung, which a Patch save leaves behind). From
+      -- its rung r it either pops on a rung from r to T - 1, after
+      -- (that rung - r + 1) draws, or reaches T after T - r draws.
+      CREATE TRIGGER balloon_reveals_fit_their_balloon BEFORE INSERT ON balloon_reveals
+      WHEN NOT EXISTS (
+        SELECT 1 FROM balloons b
+        WHERE b.round_id = NEW.round_id AND b.balloon_index = NEW.balloon_index
+          AND b.status = 'cashed' AND b.rung < b.top_rung
+          AND json_extract(NEW.draws_json, '$[0].drawIndex') = b.draw_index
+          AND ((NEW.outcome = 'popped'
+                AND NEW.reached_rung >= b.rung AND NEW.reached_rung < b.top_rung
+                AND json_array_length(NEW.draws_json) = NEW.reached_rung - b.rung + 1)
+            OR (NEW.outcome = 'top'
+                AND NEW.reached_rung = b.top_rung
+                AND json_array_length(NEW.draws_json) = b.top_rung - b.rung))
+      )
+      BEGIN SELECT RAISE(ABORT, 'a reveal is for a balloon cashed out below its top rung: it starts at its draw count and stops between its rung and its top'); END;
+
+      CREATE TRIGGER balloon_reveals_no_update BEFORE UPDATE ON balloon_reveals
+      BEGIN SELECT RAISE(ABORT, 'reveals are append-only'); END;
+
+      CREATE TRIGGER balloon_reveals_no_delete BEFORE DELETE ON balloon_reveals
+      BEGIN SELECT RAISE(ABORT, 'reveals are append-only'); END;
+
+      -- A round closes with the reveal of every balloon cashed out below
+      -- its top rung, written just before. AFTER, so the older guards on
+      -- closing a round speak first.
+      CREATE TRIGGER rounds_finish_with_their_reveals AFTER UPDATE OF status ON rounds
+      WHEN NEW.status = 'finished' AND OLD.status = 'active'
+        AND EXISTS (
+          SELECT 1 FROM balloons b
+          WHERE b.round_id = NEW.id AND b.status = 'cashed' AND b.rung < b.top_rung
+            AND NOT EXISTS (
+              SELECT 1 FROM balloon_reveals v
+              WHERE v.round_id = b.round_id AND v.balloon_index = b.balloon_index
+            )
+        )
+      BEGIN SELECT RAISE(ABORT, 'a round closes with the reveal of each balloon cashed out below its top rung'); END;
+    `,
+  },
 ];
 
 /**
@@ -458,8 +558,11 @@ const MIGRATIONS: readonly Migration[] = [
  * two processes start on a fresh file at once: each step is checked and
  * applied inside one write transaction, so the second process finds the work
  * already done.
+ *
+ * `upTo` stops after that step. Only tests pass it, to build a database as
+ * an older server left it and then bring it up to date.
  */
-export function migrate(db: Db): void {
+export function migrate(db: Db, upTo = Number.POSITIVE_INFINITY): void {
   immediate(db, () => {
     db.exec(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -474,6 +577,7 @@ export function migrate(db: Db): void {
     'INSERT INTO schema_migrations (id, name, applied_at) VALUES (:id, :name, :at)',
   );
   for (const migration of MIGRATIONS) {
+    if (migration.id > upTo) break;
     immediate(db, () => {
       const row = isApplied.get({ id: migration.id });
       if (row !== undefined && int(row, 'n') > 0) return;
