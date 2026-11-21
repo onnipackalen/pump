@@ -665,13 +665,147 @@
 }
 
 /* ---------------------------------------------------------------------
+ * Set-up
+ *
+ * On a fresh balloon of a new round, your code sets data-setup to how the
+ * balloon before it in the same place ended (game/setUp.ts):
+ *   "popped"  the hose is picked up off the floor and swings back up to
+ *             the neck; the torn neck on its end and the bits on the
+ *             floor fade away.
+ *   "cashed"  the hose stretches back out from the pump to the neck.
+ * Then the new balloon fills in at the end of the hose. Each starts from
+ * exactly the end picture the round before left (the "popped" and
+ * "cashed" rules below), so nothing jumps. After a pop that picture is
+ * the lying hose; in the first 80 ms it hands back to the standing hose,
+ * which starts turned down exactly over it and then lifts. A balloon with
+ * nothing before it in its place gets no data-setup and no set-up.
+ *
+ * Display only: the round is already live and nothing waits for this. A
+ * pump during it is fine: the air pocket is in the hose layer, so it rides
+ * the moving hose. Keep data-setup while the balloon is in play (taking it
+ * away early would cut the set-up short) and remove it in the same update
+ * as the pop or cash-out, so it never plays again: when that motion ends,
+ * the hose would otherwise fall back to the set-up rule and replay it.
+ *
+ * This section comes before Pop and Cash-out on purpose. Their rules
+ * weigh the same as these, and the later rule wins, so a pop or a
+ * cash-out always takes the hose over.
+ * ------------------------------------------------------------------- */
+
+.pump-balloon {
+  --pb-setup-hose-ms: 300ms;
+  --pb-setup-fill-ms: 240ms;
+  /* The balloon fills in once the hose is most of the way there. */
+  --pb-setup-fill-delay: 150ms;
+}
+.pump-balloon[data-setup="popped"] .pb-hose {
+  animation: pb-hose-up var(--pb-setup-hose-ms) linear backwards;
+}
+.pump-balloon[data-setup="cashed"] .pb-hose {
+  animation: pb-hose-out var(--pb-setup-hose-ms) cubic-bezier(0.25, 0.8, 0.35, 1.15) backwards;
+}
+/* Picked up: the lying hose hands back to the standing one. */
+.pump-balloon[data-setup="popped"] .pb-hose-flat {
+  animation: pb-hose-put-away 80ms linear backwards;
+}
+.pump-balloon[data-setup="popped"] .pb-hose-stand {
+  animation: pb-hose-pick-up var(--pb-setup-hose-ms) linear backwards;
+}
+/* The torn neck and the bits on the floor go as the hose starts to lift. */
+.pump-balloon[data-setup="popped"] :is(.pb-remnant, .pb-floor-bits) {
+  animation: pb-scrap-off 140ms ease-in backwards;
+}
+/* The new balloon fills in from nothing at the end of the hose. */
+.pump-balloon[data-setup] .pb-float {
+  animation: pb-fill-in var(--pb-setup-fill-ms) cubic-bezier(0.2, 0.8, 0.3, 1.25)
+    var(--pb-setup-fill-delay) backwards;
+}
+/* With motion off the hose is simply there (see Reduced motion), and the
+ * new balloon fades in instead of growing. */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .pump-balloon[data-setup] .pb-float {
+    animation-name: pb-fade-in;
+  }
+}
+:root[data-motion="reduce"] .pump-balloon[data-setup] .pb-float {
+  animation-name: pb-fade-in;
+}
+
+/* Lifted, not thrown: quick at first, a small swing past upright, still. */
+@keyframes pb-hose-up {
+  0% {
+    transform: var(--pb-hose-down);
+    animation-timing-function: cubic-bezier(0.3, 0.6, 0.4, 1);
+  }
+  72% {
+    transform: rotate(4deg);
+    animation-timing-function: ease-in-out;
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+/* The cash-out's hose-back, played the other way. */
+@keyframes pb-hose-out {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes pb-scrap-off {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes pb-hose-put-away {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* The standing hose shows over the first 80 ms of the set-up (the same
+ * 80 ms the lying one goes in), then stays. */
+@keyframes pb-hose-pick-up {
+  0% {
+    opacity: 0;
+  }
+  26.7%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes pb-fill-in {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ---------------------------------------------------------------------
  * Pop
  *
  * After the same press and hold, your code sets data-beat to:
- *   "pop"     when the pump popped. The body and its neck vanish at
- *             once, 8 grey pieces fly out and fall, and the hose, with
- *             nothing left to hold it up, drops to the floor with a
- *             torn scrap of rubber still on its end.
+ *   "pop"     when the pump popped. The body vanishes at once, 8 grey
+ *             pieces fly out and fall (three small ones stay on the
+ *             floor), and the hose, with nothing left to hold it up,
+ *             drops to the floor and lies there loose, the balloon's
+ *             torn neck still on its end.
  *   "popped"  the same end picture with no movement. Use it when a
  *             round is restored after a page refresh, so the pop does
  *             not play again.
@@ -680,19 +814,36 @@
 
 .pump-balloon {
   --pb-popped: #6f7789; /* neutral grey for what is left after a pop */
-  /* The torn scrap is a paler grey: it lies on the hose, which is close
-   * to --pb-popped, and has to stand out from it (3.1 to 1) and from the
-   * dark floor (9.4 to 1). */
-  --pb-scrap: #b4bac6;
+  /* The torn neck left on the hose: rubber in a dull, darker shade of the
+   * balloon's own colour (its deep shade lifted a third of the way to its
+   * base, a fifth grey), with a pale edge (its base, halfway to white).
+   * The edge stands out from the hose it lies on (3.1 to 1 or more) and
+   * from the dark floor (9.4 to 1 or more), on every balloon colour; the
+   * flying pieces stay grey, so a loss never looks like confetti. These
+   * are slot 1 (pearl); slots 2 and 3 are below. */
+  --pb-torn: #b8b1a7;
+  --pb-torn-edge: #f6f4ee;
   --pb-shard-ms: 480ms;
   --pb-ghost-ms: 300ms;
   --pb-hose-drop-ms: 440ms;
-  /* The hose lying on the floor, to the left of its pump. */
-  --pb-hose-down: rotate(-82deg);
+  /* The standing hose turned down to the floor, to the left of its pump.
+   * At this angle its end lands on the floor, exactly where the lying
+   * hose (FLAT_HOSE_PATH in Balloon.tsx) ends. */
+  --pb-hose-down: rotate(-87deg);
+}
+.pump-balloon[data-slot="2"] {
+  /* azure */
+  --pb-torn: #4680bf;
+  --pb-torn-edge: #b3d7f8;
+}
+.pump-balloon[data-slot="3"] {
+  /* violet */
+  --pb-torn: #6849af;
+  --pb-torn-edge: #c4b0ed;
 }
 
 /* Hidden until a pop. */
-.pump-balloon :is(.pb-ghost, .pb-remnant, .pb-shard) {
+.pump-balloon :is(.pb-ghost, .pb-remnant, .pb-shard, .pb-hose-flat, .pb-floor-bits) {
   opacity: 0;
 }
 .pump-balloon .pb-ghost {
@@ -702,14 +853,19 @@
   stroke-width: 2;
   stroke-dasharray: 6 7;
 }
-/* The pop mark: a torn scrap of rubber still stuck on the end of the
- * hose. It is drawn inside the hose layer, so it falls to the floor with
- * the hose and lies there. A cashed-out balloon never has it. */
+/* The pop mark: the balloon's torn neck, still on the end of the hose.
+ * It is drawn inside the hose layer, so it falls to the floor with the
+ * hose and lies there. A cashed-out balloon never has it. */
 .pump-balloon .pb-remnant {
-  fill: var(--pb-scrap);
-  stroke: var(--pb-popped);
+  fill: var(--pb-torn);
+  stroke: var(--pb-torn-edge);
   stroke-width: 0.8;
   stroke-linejoin: round;
+}
+/* Three small pieces that stay on the floor: the same quiet grey as the
+ * pieces that fly (4.2 to 1 on the floor), lying still. */
+.pump-balloon .pb-floor-bit {
+  fill: var(--pb-popped);
 }
 /* The pieces are the quiet grey, not the balloon's colour: coloured
  * pieces flying out read as confetti, and a loss is never a party. */
@@ -742,18 +898,26 @@
 .pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-neck {
   opacity: 0;
 }
-/* The hose lies on the floor with the torn scrap on its end: clearly a
- * pop, clearly not a cash-out (there the hose curls back to the pump,
- * clean). This is the end picture; the fall below only plays into it,
- * so "Animations off" gets the same picture. */
+/* The hose lies loose on the floor with the torn neck on its end:
+ * clearly a pop, clearly not a cash-out (there the hose curls back to the
+ * pump, clean). The lying hose is its own shape, not the standing one
+ * turned over (that made a stiff hook at the nozzle with its end in the
+ * air). The standing hose is still turned down, out of sight, because it
+ * carries the fitting and the torn neck, and they land on the lying
+ * hose's end. This is the end picture; the fall below only plays into it,
+ * so "Animations off" gets the same picture. The number plate stays at
+ * full strength: the number is how players tell balloons apart. */
 .pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-hose {
   transform: var(--pb-hose-down);
 }
+.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-hose-stand {
+  opacity: 0;
+}
+.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) :is(.pb-hose-flat, .pb-floor-bits) {
+  opacity: 1;
+}
 .pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-knot {
   fill: var(--pb-popped);
-}
-.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-tag {
-  opacity: 0.6;
 }
 .pump-balloon[data-beat="popped"] .pb-ghost {
   opacity: 1;
@@ -768,6 +932,46 @@
 }
 .pump-balloon[data-beat="pop"] .pb-hose {
   animation: pb-hose-drop var(--pb-hose-drop-ms) linear;
+}
+/* The standing hose falls; as it settles, the lying hose takes over. */
+.pump-balloon[data-beat="pop"] .pb-hose-stand {
+  animation: pb-hose-hand-over var(--pb-hose-drop-ms) linear;
+}
+.pump-balloon[data-beat="pop"] .pb-hose-flat {
+  animation: pb-hose-take-over var(--pb-hose-drop-ms) linear;
+}
+/* Three of the pieces come down and stay. */
+.pump-balloon[data-beat="pop"] .pb-floor-bits {
+  animation: pb-bits-land 200ms ease-in 280ms backwards;
+}
+
+@keyframes pb-hose-hand-over {
+  0%,
+  86% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes pb-hose-take-over {
+  0%,
+  86% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes pb-bits-land {
+  from {
+    opacity: 0;
+    translate: 0 -10px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
 }
 
 /* The hose falls like a rope let go: slow at first, fast into the floor,
@@ -833,7 +1037,7 @@
  * ------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion="full"]) .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-shard, .pb-neck, .pb-tie, .pb-value) {
+  :root:not([data-motion="full"]) .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-hose-stand, .pb-hose-flat, .pb-floor-bits, .pb-remnant, .pb-shard, .pb-neck, .pb-tie, .pb-value) {
     animation: none !important;
   }
   :root:not([data-motion="full"]) .pump-balloon .pb-grow {
@@ -844,7 +1048,7 @@
   }
 }
 
-:root[data-motion="reduce"] .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-shard, .pb-neck, .pb-tie, .pb-value) {
+:root[data-motion="reduce"] .pump-balloon :is(.pb-squash, .pb-handle, .pb-air, .pb-hose, .pb-hose-stand, .pb-hose-flat, .pb-floor-bits, .pb-remnant, .pb-shard, .pb-neck, .pb-tie, .pb-value) {
   animation: none !important;
 }
 :root[data-motion="reduce"] .pump-balloon[data-beat="pop"] :is(.pb-wobble, .pb-neck) {

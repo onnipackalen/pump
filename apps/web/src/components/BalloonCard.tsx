@@ -4,6 +4,7 @@ import { Balloon, balloonSize, type BalloonBeat } from '../balloon/Balloon';
 import { afterRoundLine, twoLineChars } from '../game/afterRound';
 import type { Beat } from '../game/useGame';
 import { balloonTension } from '../game/risk';
+import { balloonSetUp, type SetUpFrom } from '../game/setUp';
 import { HoldButton } from './HoldButton';
 import type { WinTier } from '../game/winTier';
 import { formatCents, formatMultiplier } from '../money';
@@ -14,6 +15,8 @@ interface BalloonCardProps {
   readonly rtpBp: number;
   readonly ladder: readonly number[];
   readonly beat: Beat;
+  /** How the balloon in this slot of the round before ended (game/setUp.ts). */
+  readonly setUp?: SetUpFrom | undefined;
   /** Its last pump was bought with a Patch. */
   readonly patched: boolean;
   /** What its last pump did, kept until the next press. */
@@ -244,6 +247,7 @@ export function BalloonCard({
   rtpBp,
   ladder,
   beat,
+  setUp,
   patched,
   outcome,
   held,
@@ -283,6 +287,7 @@ export function BalloonCard({
           slot={slot}
           scale={cardScale(balloon)}
           beat={balloonBeat(balloon, beat, pending)}
+          setUp={balloonSetUp(balloon, setUp)}
           // How tense its next pump is within this balloon's own range of
           // pop chances; the game's press length reads the same number.
           strain={balloonTension({ rtpBp, ladder }, balloon)}

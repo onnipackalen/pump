@@ -18,6 +18,7 @@ import { controlTarget, panelActivity, showOwnPump, SWITCH_PAUSE_MS } from './ga
 import { useAutoPlay } from './game/useAutoPlay';
 import { useGame, type GameEvent } from './game/useGame';
 import { useHoldPump } from './game/useHoldPump';
+import { useSetUpFrom } from './game/setUp';
 import { useSessionClock } from './game/useSessionClock';
 import {
   roundPayoutCents,
@@ -122,6 +123,9 @@ export function App() {
   const sessionMs = useSessionClock(state.session?.startedAt ?? null);
 
   const round = state.round;
+  // How the balloons before this round ended, so each new pump sets up
+  // from the picture that was in its place (game/setUp.ts).
+  const setUp = useSetUpFrom(round);
   const roundActive = round?.status === 'active';
   const roundWin = round ? roundWinTier(round) : null;
   // Where each cashed-out balloon would have popped: only once the round is
@@ -476,6 +480,7 @@ export function App() {
                       rtpBp={round.rtpBp}
                       ladder={round.ladder}
                       beat={state.beats[balloon.index] ?? 'idle'}
+                      setUp={setUp[balloon.index]}
                       patched={state.patched[balloon.index] ?? false}
                       outcome={state.outcomes[balloon.index] ?? null}
                       held={state.held[balloon.index] ?? false}
