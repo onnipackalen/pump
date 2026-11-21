@@ -1872,6 +1872,30 @@ What went wrong, and how it was caught:
   the user was playing in the same server's tab. The trial build is now
   served beside it, under /wip/, from the same server.
 
+- Found before the merge, after the user's yes, on reading the check
+  itself: its three-balloon round had every balloon one pump in, so no
+  row had slid, and "the next step is in view" only asked that it was
+  inside the row. With three balloons in a 1024 px wide window a slot is
+  213 px and its row 193 px. Kept as "one passed, current, next", the next
+  step sat at 160 to 222 px: cut off at the row's edge once a balloon was
+  three pumps up. Measured both ways in the game at 1024x768 (balloon 1 at
+  1.28×): before, next at 160 to 222 of 193; now, current at 24 to 86 and
+  next at 92 to 154. The fix: a row under 246 px gives up the passed step,
+  one under 178 px also has smaller steps and fades, and a slot under
+  158 px (a window about 800 px wide with three balloons) has no row; the
+  panel's "Next" still names the step. The check now has a round with one
+  balloon four pumps up, asks that the current and the next step are clear
+  of the faded edges, and has two smaller windows (900x700, 800x600):
+  34 sizes, thirteen states, 33 pass, the row checks all pass.
+- One test run just before the merge showed 13 failed tests in 7 files.
+  Nothing had been changed that a test reads, and the same run passed
+  three times straight after (1474 tests). Two things were going on at
+  that moment: the machine was very busy (load average 17, several chats
+  running their own tests), and another chat's reviewer had just put a
+  throwaway test file into this worktree. Which of the two it was is not
+  known; the failing names were not kept. That file is not part of this
+  work and was neither committed nor deleted here.
+
 Not built, not checked:
 
 - "The balloon needs to grow more." The picture already has the stage's
