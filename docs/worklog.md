@@ -1090,3 +1090,58 @@ Turned out wrong, and how it was caught:
 - The first rule ("closed when no balloon has a button") described a side
   effect, not the reason. It broke as soon as another change gave the
   button a second reason to be absent. The new rule names the cases.
+## 2026-11-20: the game is made ready for a live site on Render
+
+Built:
+
+- `render.yaml`: Render sets the whole site up from this file. One web
+  service, one 1 GB disk at `/var/data`, Node 26, one copy of the server,
+  the database at `/var/data/pump.db`, and a deploy only after the checks
+  on GitHub pass. Each setting was read against Render's own pages today.
+- `apps/server/src/db/location.ts`: on a host the server will not start
+  unless `DATABASE_PATH` is set and its folder is already there, and the
+  server no longer makes that folder itself. Every wallet is in that one
+  file, and a host keeps only its attached disk across deploys.
+- The server's start line in the log now says whether it opened an
+  existing database file (and how many players are in it) or made a new,
+  empty one.
+- `tsx` is now a dependency of the server: it is the start command.
+
+How the host was chosen: five options were researched at today's prices
+(Fly.io, Render, Railway, a rented server, Northflank), each by one reader
+and then checked by a second against the official pages. Render costs
+about $7.25 a month and was picked because it never sleeps, the disk is
+set up from a file in the repo, and it deploys from GitHub.
+
+Turned out wrong, and how it was caught (four reviewers, each finding then
+attacked by a second reader; one reviewer ran everything Render will run,
+in a clean copy):
+
+- The old `openDatabase` made the database folder if it was missing. With
+  a mistyped path or a disk that was not attached, the server would have
+  started happily on the throwaway disk and lost every wallet at the next
+  deploy. Seen while writing the guard; now a refusal with the reason.
+- Started through `npm run start`, the server was three processes deep.
+  The tsx launcher waits about 30 ms for the server to answer a stop
+  signal and then kills it, so under load the clean close of the database
+  did not always run. No money was lost in any of 26 trials (SQLite
+  recovers), but `render.yaml` now starts the server directly, the way the
+  hammer test already does, and the stop handler ignores a second signal
+  instead of dying on it.
+- A `DATABASE_PATH` that named a folder died with SQLite's bare "unable
+  to open database file". The error now names the path and says why.
+- The README told the owner to look for "a disk named pump-data". Render
+  does not show a disk's name. It also read as if the daily disk snapshot
+  were a backup; Render itself warns against restoring a database that
+  way. Both reworded, and the steps now say what to check after the
+  first deploy.
+
+Known and left as it is: the guard proves that the folder exists, not
+that it is the disk. With `render.yaml` unchanged that cannot go wrong. A
+check for "is a mount point" was turned down for now, because it cannot
+be tried on Render before going live and a wrong refusal would take the
+site down. The log line and the "deploy again and see the same balance"
+step in the README cover it.
+
+Not done by anyone yet: the deploy itself. Nothing here has run on
+Render; the dry run was on a Mac. The first deploy is the real test.
