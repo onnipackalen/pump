@@ -14,6 +14,9 @@
  *                would have popped the balloon, the balloon stays where it is
  *   cash out     pays bet x the multiplier of the balloon's rung
  *   top          a balloon that reaches its top rung cashes out by itself
+ *   reveal       once the whole round is over, each balloon cashed out below
+ *                its top shows where it would have popped (see the end of
+ *                this file); it moves no money
  *
  * The math in short. R is the RTP and m_k the multiplier on rung k. The one
  * rule: wherever a player cashes out, the game pays back exactly R on average.
@@ -38,9 +41,20 @@
  *
  * Randomness. Each pump is decided by one draw: one whole number, uniformly
  * from 0 to den - 1, where num / den is that pump's chance to survive. The
- * engine asks for it through a PumpDraw and never sees seeds. Nothing else in
- * the game is random. Each balloon counts its own draws: `drawIndex` is how
- * many pumps have been drawn on it, and the next pump uses that index.
+ * engine asks for it through a PumpDraw and never sees seeds. Each balloon
+ * counts its own draws: `drawIndex` is how many pumps have been drawn on it,
+ * and the next pump uses that index. Pumps are the only draws that decide
+ * anything.
+ *
+ * After the round. Once every balloon is over, a balloon cashed out below its
+ * top rung is played on with plain pumps (no Patch), at the next draw indexes,
+ * until one pops or it reaches its top rung. That is the reveal: "where it
+ * would have popped". It is the same pump rule as live play, but on a copy;
+ * it decides nothing, moves no money and changes no balloon (not even its
+ * drawIndex, which counts real pumps only). While a round is in progress no
+ * reveal exists, so nothing tells the player the outcome of a pump they could
+ * still make. A cash-out needs rung 1 or more, so the first reveal pump is
+ * pump 2 or later, with chance m_(k-1) / m_k: the RTP never enters a reveal.
  *
  * Refusals. A request the rules do not allow is refused with an EngineError
  * before any draw is made, and changes nothing.
@@ -101,7 +115,11 @@ export interface Round {
  */
 export type PumpDraw = (den: number) => number;
 
-/** The draw that decided one pump, with everything needed to check it again later. */
+/**
+ * The draw that decided one pump, with everything needed to check it again
+ * later. A reveal's draws (see revealAfterCashOut) have the same shape, but
+ * they decide nothing.
+ */
 export interface DrawRecord {
   /** The balloon's draw index this pump used. */
   readonly drawIndex: number;
@@ -376,6 +394,9 @@ export interface CashOutResult {
  *
  * Not allowed before the first pump: every cash-out point must return the
  * RTP, and a balloon that has not been pumped has no multiplier yet.
+ *
+ * Where it would have popped is a separate step, revealAfterCashOut, made
+ * only once the whole round is over.
  */
 export function cashOut(round: Round, request: CashOutRequest): CashOutResult {
   const balloon = balloonAt(round, request.balloonIndex);
@@ -411,6 +432,9 @@ export interface AbandonedResult {
  * the player had pressed Cash Out. A balloon never pumped has its bet
  * refunded: no draw was made on it, so it is a cancelled bet, not a result.
  * Neither changes the RTP.
+ *
+ * The round is over afterwards, so each balloon cashed out here gets its
+ * reveal like any other cash-out (revealAfterCashOut on the returned round).
  */
 export function settleAbandoned(round: Round): AbandonedResult {
   const settled: AbandonedBalloon[] = [];
@@ -479,8 +503,9 @@ export function quoteBalloon(round: Round, balloonIndex: number): BalloonQuote {
 }
 
 /**
- * Where draws come from when a balloon is played again. Unlike PumpDraw it is
- * told which draw index to use, so one function can serve every pump of the
+ * Where draws come from when a balloon is played again (replayBalloon) or
+ * played on after the round (revealAfterCashOut). Unlike PumpDraw it is told
+ * which draw index to use, so one function can serve every pump of the
  * balloon: given a draw index and den, the roll that index gives, from 0 to
  * den - 1.
  */
@@ -535,4 +560,112 @@ export function replayBalloon(
     }
   }
   return { balloon, draws };
+}
+
+// ---------------------------------------------------------------------------
+// After the round: where a cashed-out balloon would have popped
+// ---------------------------------------------------------------------------
+
+/**
+ * How a reveal ends:
+ *   popped  a later plain pump would have popped it
+ *   top     it would have reached its top rung
+ */
+export type RevealOutcome = 'popped' | 'top';
+
+/** Where a balloon cashed out below its top would have ended with more plain pumps. */
+export interface CashOutReveal {
+  readonly outcome: RevealOutcome;
+  /**
+   * The highest rung it would have reached. With 'popped', the rung it was on
+   * when a pump popped it: the cash-out rung itself if the very next pump
+   * pops. With 'top', its top rung.
+   */
+  readonly reachedRung: number;
+  /**
+   * Every draw, in order. The first uses the balloon's draw count at cash-out
+   * (not its rung: a Patch save uses a draw without moving up), and each next
+   * one the index after. Every draw survives except a final pop.
+   */
+  readonly draws: readonly DrawRecord[];
+}
+
+/**
+ * True for a balloon that gets a reveal once its round is over: one cashed
+ * out below its top rung, by the player or by the 24-hour rule.
+ *
+ * No reveal for a popped balloon (its pop is the answer), a refunded one
+ * (never pumped), one cashed out at its top rung (nothing left to pump), or
+ * one still in play.
+ */
+export function canReveal(balloon: Balloon): boolean {
+  return balloon.status === 'cashed' && balloon.rung >= 1 && balloon.rung < balloon.topRung;
+}
+
+/**
+ * Where a cashed-out balloon would have popped: the reveal.
+ *
+ * Call it once the whole round is over, for each balloon where canReveal is
+ * true, with draws from the round's seeds for that balloon. It plays the
+ * balloon on from where it stopped, with plain pumps and no Patch. With r the
+ * cash-out rung and d the draws already made on the balloon:
+ *
+ *   the pump to rung j = r + 1, r + 2, ...
+ *   uses draw index      d + (j - r - 1)
+ *   and survives with    m_(j-1) / m_j, from the round's own ladder
+ *
+ * It stops at the first pump that pops, or when it reaches its top rung T
+ * (after the payout cap): at most T - r draws. Since r >= 1, every pump here
+ * is pump 2 or later, so the RTP never enters.
+ *
+ * The pumps are the live pump itself (`pumped`), run on a private copy of the
+ * balloon put back in play. So the chance, the draw index and the top-rung
+ * check are the same code as a real pump. The copy is never returned: the
+ * answer holds no balloon and no cents, so nothing can be saved or paid from
+ * it by mistake.
+ *
+ * Refused with invalid_request, before any draw, for a balloon that has no
+ * reveal (see canReveal), and while any balloon of the round is still in
+ * play.
+ */
+export function revealAfterCashOut(
+  round: Round,
+  balloonIndex: number,
+  drawAt: ReplayDraw,
+): CashOutReveal {
+  const cashed = balloonAt(round, balloonIndex);
+  if (!canReveal(cashed)) {
+    throw new EngineError(
+      'invalid_request',
+      'Only a balloon cashed out below its top rung has a reveal',
+    );
+  }
+  if (!isRoundOver(round)) {
+    throw new EngineError('invalid_request', 'A reveal is made only once the whole round is over');
+  }
+
+  // Back in play, on a copy that never leaves this function.
+  let balloon: Balloon = { ...cashed, status: 'active', payoutCents: 0 };
+  const draws: DrawRecord[] = [];
+  // Each pump that survives moves up one rung, and the pump to the top rung
+  // ends it, so there are at most topRung - rung pumps.
+  const mostPumps = cashed.topRung - cashed.rung;
+  for (let pumps = 0; pumps < mostPumps; pumps += 1) {
+    const drawIndex = balloon.drawIndex;
+    const step = pumped(round, balloon, false, (den) => drawAt(drawIndex, den));
+    draws.push(step.draw);
+    switch (step.outcome) {
+      case 'survived':
+        balloon = step.balloon;
+        break;
+      case 'popped':
+        // A popped balloon stays on the rung it was on.
+        return { outcome: 'popped', reachedRung: step.balloon.rung, draws };
+      case 'top':
+        return { outcome: 'top', reachedRung: step.balloon.rung, draws };
+      case 'saved':
+        throw new Error('A pump with no Patch is never saved');
+    }
+  }
+  throw new Error('The pump to the top rung always ends the reveal');
 }

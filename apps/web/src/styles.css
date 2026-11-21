@@ -194,7 +194,10 @@ body {
  * The button row under the balloons depends on one thing only, the number
  * of balloons on the stage: closed with one (the panel's big button is its
  * Pump), open with two or three. So the pictures and the floor don't move
- * between rounds either.
+ * between rounds either. After a round, the line saying where a cashed-out
+ * balloon would have popped sits in that row; with one balloon, where the
+ * row is closed, it floats in the empty sky where the balloon was instead,
+ * so it takes no room and still nothing moves.
  */
 @media (orientation: portrait) {
   html {
@@ -256,6 +259,15 @@ body {
   .stage:has(.slot:only-child) .slot-action {
     padding: 0;
     overflow: hidden;
+  }
+  /* One balloon: the row is closed, so the after-round line floats in the
+     sky where the balloon was. Its box is the slot (positioned), not the
+     closed row, so the row's overflow doesn't hide it, and it takes no room. */
+  .stage:has(.slot:only-child) .slot-after {
+    position: absolute;
+    top: 28%;
+    right: 12%;
+    left: 12%;
   }
   /*
    * The sheet: docked at the bottom, as wide as the phone, rounded at the
@@ -477,6 +489,25 @@ body {
 
 .slot-pump:hover:not(:disabled) {
   background: rgba(244, 242, 238, 0.26);
+}
+
+/*
+ * After the round: where a cashed-out balloon would have popped, in the
+ * empty Pump row. Small and grey, never a win colour. It wraps to two short
+ * lines, sized by the longer one (--after-chars) so it fits a ~110 px slot
+ * on a phone; at the 9px floor it may take a third line, which still fits
+ * the row (3 x 9px x 1.2 < the smallest --tap, 36px).
+ */
+.slot-after {
+  align-self: center;
+  max-width: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: max(9px, min(var(--sub-max), 165cqw / max(var(--after-chars, 18), 1)));
+  line-height: 1.2;
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
 }
 
 .slot-label {

@@ -1013,6 +1013,41 @@ the stage or the panel needs the size check run on small upright phones.
 Left open: an upright tablet (768x1024) still gets the side-by-side
 layout, so half its stage is empty sky.
 
+## 2026-11-20: merging main into `cashout-reveal`
+
+Main had connected the screen to the real server while this branch added
+the after-round reveal. Main's contract, web contract and verify fields won;
+the branch kept only its reveal additions.
+
+Turned out wrong, and how it was caught:
+
+- Both sides stored the payout cap per round: main in the first migration
+  (`rounds.max_payout_cents NOT NULL`), the branch again in its migration 2.
+  Git merged both without a conflict, so the merged schema added the column
+  twice. Caught by reading `migrations.ts` after the merge. Migration 2 now
+  holds only the reveals.
+- The branch used "no stored cap" to spot rounds that ended before reveals
+  were stored. Under main every round has a cap, so that test no longer
+  meant anything. Replaced by `rounds.reveals_recorded`: 0 for rounds
+  already in the database when migration 2 runs (set by the column default,
+  no UPDATE), 1 for every round started after (a trigger refuses anything
+  else, and another keeps it fixed). The verify answer works out a missing
+  reveal from the public seed only for rounds marked 0, and reconcile
+  forgives a missing reveal only for those.
+- On upright phones main closes the row under the balloons when no balloon
+  has a Pump button. That is exactly when the reveal line is shown, so the
+  line would have been hidden. Caught by reading main's new phone rule next
+  to the branch's `.slot-after`. A finished round with a reveal line now
+  keeps the row open (`.stage-after-round`). Checked at 375x812 and 320x568
+  with three balloons: the lines fit at the 9 px floor on two lines, nothing
+  scrolls. The cost: on the bet screen after such a round the pictures are
+  46 to 54 px smaller than main had them.
+
+Checked: typecheck, lint, all tests, the hammer against a server started by
+hand, and an upgrade: a database made by main's own code (hammer rounds plus
+a round left in play) opened by the merged server. The open round finished
+with its reveals stored, all 55 old rounds pass `verifyRound`, and reconcile
+is clean.
 ## 2026-11-20: upright tablets get the stacked layout
 
 The user's call: "Yes, fix tablets". One CSS change in `styles.css`.
@@ -1198,6 +1233,52 @@ step in the README cover it.
 Not done by anyone yet: the deploy itself. Nothing here has run on
 Render; the dry run was on a Mac. The first deploy is the real test.
 
+## 2026-11-20: `cashout-reveal` merged with main again, and the review's fixes
+
+Main had moved on (stats page, database location rule, Render, new balloon
+look, saved seed hashes, new Pump row rules), so main was merged into the
+branch again, up to f7eedde. Five files clashed; both sides were kept. The
+verify page now checks both things this browser saved: the seed hash shown
+before the round (main) and the reveal lines shown after it (this branch).
+Main's new Pump row rule closes the row after every round and in one-balloon
+rounds; a finished round with a reveal line keeps it open, except while
+auto-play runs.
+
+Turned out wrong, and how it was caught (a review that ran everything):
+
+- From the repo root, `npm run hammer -- --url=... --db=...` never reached
+  the hammer. The inner `npm run` kept the options as its own settings, and
+  the hammer quietly started its own server and said PASS. Caught by
+  pointing it at a port with nothing on it. The root script now ends in
+  `--` (like `sim`), and the hammer stops with a clear message when npm
+  kept an option, an option is unknown, or `--db` comes without `--url`.
+- A database made by this branch before the first merge has a step 2 with
+  another name and another shape. The server counted steps by number only,
+  skipped the new step 2 and died at start on a missing column. Caught by
+  building such a database from the old commit. `migrate()` now checks every
+  recorded step's name first and refuses, before changing anything, with a
+  message that says to delete the file.
+- `verifyRound` takes a balloon's top rung from the record's own payout cap.
+  A record with a lower cap, the top that gives and a reveal worked out
+  against it checked out against itself, and the saved reveal line could not
+  tell either. Caught by a review test that built such a record. The screen
+  now also keeps each balloon's top rung as it first saw the round, and the
+  verify page says when the record gives another one ("does not match what
+  this device showed"). `verifyRound` is unchanged: the cap stays per-round
+  config, like the RTP.
+- The worktree's own `node_modules` lacked `@fastify/static`, so its server
+  and tests used the main checkout's copy. `npm ci` in the worktree fixed it.
+
+Checked: typecheck, lint, all 1,447 tests, the hammer against a server
+started by hand (from the repo root, with the options) and on its own, a
+database from the old branch code refused at start, and the built screen at
+375x812: three balloons and one balloon, reveal lines in the row after the
+round, no scrolling. On the verify page an honest round checks out, and one
+whose saved top was changed by hand is flagged.
+
+Not done: main moved again during this work (to 297760c: the balloon art and
+the air pocket in the hose). It merges with this branch with no conflict but
+was not merged here.
 ## 2026-11-20: the air pocket is the hose swelling, and it no longer flashes
 
 The user could not see the air pocket in play and asked for one. It was
@@ -1489,3 +1570,87 @@ Known limits:
   control into view) or by any scroll.
 - With the sheet up the lower part of the balloons is covered (up to 341
   of 558 px on the Auto form with three bets). That is what a sheet does.
+## 2026-11-21: the after-round reveal lands on main
+
+From the "Agents finishing and game compilation" chat, which coordinates
+merges. The user approved changing the locked Provably fair rule ("yes", then
+"Keep building it") and said "merge it when the builder says ok".
+
+Built: after a round is over, each balloon that was cashed out below its top
+shows where further plain pumps would have taken it ("Next pump would have
+popped", "Would have reached 1.37×, then popped", "Would have reached the top
+(25.00×)"). The draws are made only in the transaction that finishes the
+round, stored in their own append-only table (migration 2), never sent while
+the round is in progress, and checked by the verify page and the independent
+Python reference. With one balloon on an upright phone the line floats in the
+empty sky where the balloon was, so nothing on the stage moves.
+
+Review: the build had its own adversarial review and fixer; then the server
+chat ran four independent reviewers (leaks, database and upgrade, engine and
+fairness, wallet and load). All passed, including an upgrade of a database
+made by the live version with rounds in progress.
+
+Turned out wrong, and how it was caught:
+- The upgrade is one-way, and going back is exploitable. On a database that
+  has step 2, an older server can't close a round that is due a reveal (the
+  triggers refuse), so a pump that would end the round answers 500 and is
+  rolled back with its draw still waiting: the player resends it with a Patch
+  and dodges the pop. A reviewer turned $1 into $1,000 that way on a test
+  copy. Caught by the server chat's reviewers. Fix (6f5e3ff, by the server
+  chat): a server refuses to start on a database with a step it doesn't know,
+  and the README says never to put an older version back on the live site.
+- Design note so nobody "fixes" it the wrong way: a reveal that throws rolls
+  back the action that ends the round, payout included. That is right (no
+  round may close without its reveals), but any future bug that throws only
+  when a round ends would be the same kind of oracle. Never swallow such an
+  error; fix the cause.
+- My first refusal for a renamed migration step told the reader to delete the
+  database file; on the host that file holds every wallet. Reworded: delete
+  it only if it is a test database on your own computer.
+- The fairness recipe worked out the top rung with a fixed $100,000 cap; it
+  now says the cap saved with the round. The hammer counted the same reveal
+  several times (winner, repeat, late 409s); it now counts each once.
+## 2026-11-20: review of the after-round reveal, and a guard against going back
+
+The newest version (297760c) was put live by hand after its checks passed.
+It changes no database step; the same player kept their balance and history.
+
+Then the cashout-reveal branch (09319e2) was checked before its merge, as
+agreed with the chat that built it:
+
+- Its own checks in a clean copy: lint, typecheck, 1,448 tests, the build,
+  the RTP check and the hammer all pass.
+- An upgrade shaped like the live site: a database made by the live
+  version's server, with three rounds left in progress, then the branch's
+  server started on the same file. Balances and open rounds came back as
+  left; the old rounds were finished by cash-out and by the 24-hour rule;
+  every round, old and new, passed `verifyRound`; reconcile was clean,
+  also after the hammer had been run against the upgraded database.
+- Four reviewers (leaks, database, engine and fairness, wallet), each
+  finding attacked by a second reader. All four passed the code.
+
+Turned out wrong, and how it was caught:
+
+- All four reviewers ran the opposite direction, which nobody had tried:
+  the OLD server started again on the upgraded database. It starts without
+  complaint, cannot start or close rounds, and, worse, a pump that would end
+  the round answers 500 and is rolled back, so the same draw is still
+  waiting. A player can then send it again with a Patch. One reader took a
+  $1 balloon from rung 1 to rung 14 that way. The ledger stayed exact; the
+  money was real. Nothing in the branch is wrong: old code on a new
+  database is.
+- So `migrate()` now refuses to start on a database that holds a step the
+  code does not know (6f5e3ff), with words that say not to delete the file.
+  It was run on the very database the branch had upgraded and refuses it.
+  The README says never to put an older version back on the live site.
+  This guard version has to be live before the reveal version is, so that
+  the version just behind the reveal refuses instead of running.
+- My first upgrade run "failed" for a reason of my own making: I had given
+  the reviewers the same port range I then used, and my script talked to a
+  reviewer's server. Seen from "address already in use" in the log; rerun
+  on a free port.
+
+A note for whoever touches the round-ending code: a reveal that throws
+rolls back the action that ends the round. That is right, but it means any
+bug that throws only when a round ends tells the player the outcome, the
+same way. Never swallow such an error to "fix" it.

@@ -4909,5 +4909,5863 @@
       "wordIndex": 7,
       "word": 1311757791
     }
+  ],
+  "reveals": [
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "myseed",
+      "nonce": 338,
+      "balloonIndex": 0,
+      "rtpBp": 9700,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 1000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 111,
+          "num": 101,
+          "roll": 57
+        },
+        {
+          "drawIndex": 3,
+          "den": 41,
+          "num": 37,
+          "roll": 36
+        },
+        {
+          "drawIndex": 4,
+          "den": 137,
+          "num": 123,
+          "roll": 134
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "myseed",
+      "nonce": 83,
+      "balloonIndex": 0,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 5,
+      "drawIndex": 5,
+      "outcome": "top",
+      "reachedRung": 6,
+      "draws": [
+        {
+          "drawIndex": 5,
+          "den": 19,
+          "num": 8,
+          "roll": 6
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "myseed",
+      "nonce": 338,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 1000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 111,
+          "num": 101,
+          "roll": 57
+        },
+        {
+          "drawIndex": 3,
+          "den": 41,
+          "num": 37,
+          "roll": 36
+        },
+        {
+          "drawIndex": 4,
+          "den": 137,
+          "num": 123,
+          "roll": 134
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "myseed",
+      "nonce": 83,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 5,
+      "drawIndex": 5,
+      "outcome": "top",
+      "reachedRung": 6,
+      "draws": [
+        {
+          "drawIndex": 5,
+          "den": 19,
+          "num": 8,
+          "roll": 6
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "myseed",
+      "nonce": 338,
+      "balloonIndex": 0,
+      "rtpBp": 9900,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 1000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 111,
+          "num": 101,
+          "roll": 57
+        },
+        {
+          "drawIndex": 3,
+          "den": 41,
+          "num": 37,
+          "roll": 36
+        },
+        {
+          "drawIndex": 4,
+          "den": 137,
+          "num": 123,
+          "roll": 134
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "myseed",
+      "nonce": 83,
+      "balloonIndex": 0,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 5,
+      "drawIndex": 5,
+      "outcome": "top",
+      "reachedRung": 6,
+      "draws": [
+        {
+          "drawIndex": 5,
+          "den": 19,
+          "num": 8,
+          "roll": 6
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "myseed",
+      "nonce": 0,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 7,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 111,
+          "num": 101,
+          "roll": 9
+        },
+        {
+          "drawIndex": 2,
+          "den": 41,
+          "num": 37,
+          "roll": 14
+        },
+        {
+          "drawIndex": 3,
+          "den": 137,
+          "num": 123,
+          "roll": 100
+        },
+        {
+          "drawIndex": 4,
+          "den": 153,
+          "num": 137,
+          "roll": 32
+        },
+        {
+          "drawIndex": 5,
+          "den": 19,
+          "num": 17,
+          "roll": 14
+        },
+        {
+          "drawIndex": 6,
+          "den": 64,
+          "num": 57,
+          "roll": 46
+        },
+        {
+          "drawIndex": 7,
+          "den": 9,
+          "num": 8,
+          "roll": 8
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "myseed",
+      "nonce": 0,
+      "balloonIndex": 0,
+      "rtpBp": 9700,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 7,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 111,
+          "num": 101,
+          "roll": 9
+        },
+        {
+          "drawIndex": 2,
+          "den": 41,
+          "num": 37,
+          "roll": 14
+        },
+        {
+          "drawIndex": 3,
+          "den": 137,
+          "num": 123,
+          "roll": 100
+        },
+        {
+          "drawIndex": 4,
+          "den": 153,
+          "num": 137,
+          "roll": 32
+        },
+        {
+          "drawIndex": 5,
+          "den": 19,
+          "num": 17,
+          "roll": 14
+        },
+        {
+          "drawIndex": 6,
+          "den": 64,
+          "num": 57,
+          "roll": 46
+        },
+        {
+          "drawIndex": 7,
+          "den": 9,
+          "num": 8,
+          "roll": 8
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "myseed",
+      "nonce": 0,
+      "balloonIndex": 0,
+      "rtpBp": 9900,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 7,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 111,
+          "num": 101,
+          "roll": 9
+        },
+        {
+          "drawIndex": 2,
+          "den": 41,
+          "num": 37,
+          "roll": 14
+        },
+        {
+          "drawIndex": 3,
+          "den": 137,
+          "num": 123,
+          "roll": 100
+        },
+        {
+          "drawIndex": 4,
+          "den": 153,
+          "num": 137,
+          "roll": 32
+        },
+        {
+          "drawIndex": 5,
+          "den": 19,
+          "num": 17,
+          "roll": 14
+        },
+        {
+          "drawIndex": 6,
+          "den": 64,
+          "num": 57,
+          "roll": 46
+        },
+        {
+          "drawIndex": 7,
+          "den": 9,
+          "num": 8,
+          "roll": 8
+        }
+      ]
+    },
+    {
+      "serverSeed": "d4ecff996b6be10ceab16df4f5370120965e30d5429da7bd3fab0a5d63c1ea73",
+      "clientSeed": "a",
+      "nonce": 1,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 12,
+      "drawIndex": 13,
+      "outcome": "popped",
+      "reachedRung": 20,
+      "draws": [
+        {
+          "drawIndex": 13,
+          "den": 208,
+          "num": 181,
+          "roll": 120
+        },
+        {
+          "drawIndex": 14,
+          "den": 15,
+          "num": 13,
+          "roll": 0
+        },
+        {
+          "drawIndex": 15,
+          "den": 37,
+          "num": 32,
+          "roll": 30
+        },
+        {
+          "drawIndex": 16,
+          "den": 43,
+          "num": 37,
+          "roll": 31
+        },
+        {
+          "drawIndex": 17,
+          "den": 752,
+          "num": 645,
+          "roll": 4
+        },
+        {
+          "drawIndex": 18,
+          "den": 881,
+          "num": 752,
+          "roll": 665
+        },
+        {
+          "drawIndex": 19,
+          "den": 1040,
+          "num": 881,
+          "roll": 827
+        },
+        {
+          "drawIndex": 20,
+          "den": 123,
+          "num": 104,
+          "roll": 70
+        },
+        {
+          "drawIndex": 21,
+          "den": 146,
+          "num": 123,
+          "roll": 137
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "0",
+      "nonce": 9,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 22,
+      "drawIndex": 24,
+      "outcome": "popped",
+      "reachedRung": 22,
+      "draws": [
+        {
+          "drawIndex": 24,
+          "den": 104,
+          "num": 87,
+          "roll": 89
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 10,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 23,
+      "drawIndex": 23,
+      "outcome": "top",
+      "reachedRung": 24,
+      "draws": [
+        {
+          "drawIndex": 23,
+          "den": 125,
+          "num": 104,
+          "roll": 44
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 99,
+      "balloonIndex": 1,
+      "rtpBp": 9400,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 111,
+          "num": 101,
+          "roll": 10
+        },
+        {
+          "drawIndex": 3,
+          "den": 41,
+          "num": 37,
+          "roll": 37
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 99,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 111,
+          "num": 101,
+          "roll": 10
+        },
+        {
+          "drawIndex": 3,
+          "den": 41,
+          "num": 37,
+          "roll": 37
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 99,
+      "balloonIndex": 1,
+      "rtpBp": 9900,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 111,
+          "num": 101,
+          "roll": 10
+        },
+        {
+          "drawIndex": 3,
+          "den": 41,
+          "num": 37,
+          "roll": 37
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "-",
+      "nonce": 100,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 12,
+      "drawIndex": 14,
+      "outcome": "popped",
+      "reachedRung": 20,
+      "draws": [
+        {
+          "drawIndex": 14,
+          "den": 208,
+          "num": 181,
+          "roll": 9
+        },
+        {
+          "drawIndex": 15,
+          "den": 15,
+          "num": 13,
+          "roll": 11
+        },
+        {
+          "drawIndex": 16,
+          "den": 37,
+          "num": 32,
+          "roll": 29
+        },
+        {
+          "drawIndex": 17,
+          "den": 43,
+          "num": 37,
+          "roll": 15
+        },
+        {
+          "drawIndex": 18,
+          "den": 752,
+          "num": 645,
+          "roll": 59
+        },
+        {
+          "drawIndex": 19,
+          "den": 881,
+          "num": 752,
+          "roll": 178
+        },
+        {
+          "drawIndex": 20,
+          "den": 1040,
+          "num": 881,
+          "roll": 847
+        },
+        {
+          "drawIndex": 21,
+          "den": 123,
+          "num": 104,
+          "roll": 23
+        },
+        {
+          "drawIndex": 22,
+          "den": 146,
+          "num": 123,
+          "roll": 141
+        }
+      ]
+    },
+    {
+      "serverSeed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "clientSeed": "myseed",
+      "nonce": 123456789,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 22,
+      "drawIndex": 22,
+      "outcome": "top",
+      "reachedRung": 24,
+      "draws": [
+        {
+          "drawIndex": 22,
+          "den": 104,
+          "num": 87,
+          "roll": 41
+        },
+        {
+          "drawIndex": 23,
+          "den": 125,
+          "num": 104,
+          "roll": 52
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "a",
+      "nonce": 9007199254740991,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 23,
+      "drawIndex": 24,
+      "outcome": "top",
+      "reachedRung": 24,
+      "draws": [
+        {
+          "drawIndex": 24,
+          "den": 125,
+          "num": 104,
+          "roll": 68
+        }
+      ]
+    },
+    {
+      "serverSeed": "d4ecff996b6be10ceab16df4f5370120965e30d5429da7bd3fab0a5d63c1ea73",
+      "clientSeed": "0",
+      "nonce": 0,
+      "balloonIndex": 2,
+      "rtpBp": 9400,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 9,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 111,
+          "num": 101,
+          "roll": 6
+        },
+        {
+          "drawIndex": 4,
+          "den": 41,
+          "num": 37,
+          "roll": 32
+        },
+        {
+          "drawIndex": 5,
+          "den": 137,
+          "num": 123,
+          "roll": 18
+        },
+        {
+          "drawIndex": 6,
+          "den": 153,
+          "num": 137,
+          "roll": 58
+        },
+        {
+          "drawIndex": 7,
+          "den": 19,
+          "num": 17,
+          "roll": 5
+        },
+        {
+          "drawIndex": 8,
+          "den": 64,
+          "num": 57,
+          "roll": 20
+        },
+        {
+          "drawIndex": 9,
+          "den": 9,
+          "num": 8,
+          "roll": 4
+        },
+        {
+          "drawIndex": 10,
+          "den": 61,
+          "num": 54,
+          "roll": 15
+        },
+        {
+          "drawIndex": 11,
+          "den": 277,
+          "num": 244,
+          "roll": 276
+        }
+      ]
+    },
+    {
+      "serverSeed": "d4ecff996b6be10ceab16df4f5370120965e30d5429da7bd3fab0a5d63c1ea73",
+      "clientSeed": "0",
+      "nonce": 0,
+      "balloonIndex": 2,
+      "rtpBp": 9700,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 9,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 111,
+          "num": 101,
+          "roll": 6
+        },
+        {
+          "drawIndex": 4,
+          "den": 41,
+          "num": 37,
+          "roll": 32
+        },
+        {
+          "drawIndex": 5,
+          "den": 137,
+          "num": 123,
+          "roll": 18
+        },
+        {
+          "drawIndex": 6,
+          "den": 153,
+          "num": 137,
+          "roll": 58
+        },
+        {
+          "drawIndex": 7,
+          "den": 19,
+          "num": 17,
+          "roll": 5
+        },
+        {
+          "drawIndex": 8,
+          "den": 64,
+          "num": 57,
+          "roll": 20
+        },
+        {
+          "drawIndex": 9,
+          "den": 9,
+          "num": 8,
+          "roll": 4
+        },
+        {
+          "drawIndex": 10,
+          "den": 61,
+          "num": 54,
+          "roll": 15
+        },
+        {
+          "drawIndex": 11,
+          "den": 277,
+          "num": 244,
+          "roll": 276
+        }
+      ]
+    },
+    {
+      "serverSeed": "d4ecff996b6be10ceab16df4f5370120965e30d5429da7bd3fab0a5d63c1ea73",
+      "clientSeed": "0",
+      "nonce": 0,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 9,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 111,
+          "num": 101,
+          "roll": 6
+        },
+        {
+          "drawIndex": 4,
+          "den": 41,
+          "num": 37,
+          "roll": 32
+        },
+        {
+          "drawIndex": 5,
+          "den": 137,
+          "num": 123,
+          "roll": 18
+        },
+        {
+          "drawIndex": 6,
+          "den": 153,
+          "num": 137,
+          "roll": 58
+        },
+        {
+          "drawIndex": 7,
+          "den": 19,
+          "num": 17,
+          "roll": 5
+        },
+        {
+          "drawIndex": 8,
+          "den": 64,
+          "num": 57,
+          "roll": 20
+        },
+        {
+          "drawIndex": 9,
+          "den": 9,
+          "num": 8,
+          "roll": 4
+        },
+        {
+          "drawIndex": 10,
+          "den": 61,
+          "num": 54,
+          "roll": 15
+        },
+        {
+          "drawIndex": 11,
+          "den": 277,
+          "num": 244,
+          "roll": 276
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "_-_",
+      "nonce": 1,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 12,
+      "drawIndex": 12,
+      "outcome": "popped",
+      "reachedRung": 13,
+      "draws": [
+        {
+          "drawIndex": 12,
+          "den": 208,
+          "num": 181,
+          "roll": 16
+        },
+        {
+          "drawIndex": 13,
+          "den": 15,
+          "num": 13,
+          "roll": 14
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 9,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 22,
+      "drawIndex": 23,
+      "outcome": "top",
+      "reachedRung": 24,
+      "draws": [
+        {
+          "drawIndex": 23,
+          "den": 104,
+          "num": 87,
+          "roll": 33
+        },
+        {
+          "drawIndex": 24,
+          "den": 125,
+          "num": 104,
+          "roll": 3
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "-",
+      "nonce": 10,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 23,
+      "drawIndex": 25,
+      "outcome": "top",
+      "reachedRung": 24,
+      "draws": [
+        {
+          "drawIndex": 25,
+          "den": 125,
+          "num": 104,
+          "roll": 26
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "myseed",
+      "nonce": 99,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 18,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 9,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 125,
+          "num": 106,
+          "roll": 29
+        },
+        {
+          "drawIndex": 2,
+          "den": 148,
+          "num": 125,
+          "roll": 3
+        },
+        {
+          "drawIndex": 3,
+          "den": 89,
+          "num": 74,
+          "roll": 3
+        },
+        {
+          "drawIndex": 4,
+          "den": 109,
+          "num": 89,
+          "roll": 72
+        },
+        {
+          "drawIndex": 5,
+          "den": 271,
+          "num": 218,
+          "roll": 110
+        },
+        {
+          "drawIndex": 6,
+          "den": 342,
+          "num": 271,
+          "roll": 65
+        },
+        {
+          "drawIndex": 7,
+          "den": 220,
+          "num": 171,
+          "roll": 81
+        },
+        {
+          "drawIndex": 8,
+          "den": 115,
+          "num": 88,
+          "roll": 70
+        },
+        {
+          "drawIndex": 9,
+          "den": 153,
+          "num": 115,
+          "roll": 118
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "myseed",
+      "nonce": 99,
+      "balloonIndex": 0,
+      "rtpBp": 9700,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 18,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 9,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 125,
+          "num": 106,
+          "roll": 29
+        },
+        {
+          "drawIndex": 2,
+          "den": 148,
+          "num": 125,
+          "roll": 3
+        },
+        {
+          "drawIndex": 3,
+          "den": 89,
+          "num": 74,
+          "roll": 3
+        },
+        {
+          "drawIndex": 4,
+          "den": 109,
+          "num": 89,
+          "roll": 72
+        },
+        {
+          "drawIndex": 5,
+          "den": 271,
+          "num": 218,
+          "roll": 110
+        },
+        {
+          "drawIndex": 6,
+          "den": 342,
+          "num": 271,
+          "roll": 65
+        },
+        {
+          "drawIndex": 7,
+          "den": 220,
+          "num": 171,
+          "roll": 81
+        },
+        {
+          "drawIndex": 8,
+          "den": 115,
+          "num": 88,
+          "roll": 70
+        },
+        {
+          "drawIndex": 9,
+          "den": 153,
+          "num": 115,
+          "roll": 118
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "myseed",
+      "nonce": 99,
+      "balloonIndex": 0,
+      "rtpBp": 9900,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 18,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 9,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 125,
+          "num": 106,
+          "roll": 29
+        },
+        {
+          "drawIndex": 2,
+          "den": 148,
+          "num": 125,
+          "roll": 3
+        },
+        {
+          "drawIndex": 3,
+          "den": 89,
+          "num": 74,
+          "roll": 3
+        },
+        {
+          "drawIndex": 4,
+          "den": 109,
+          "num": 89,
+          "roll": 72
+        },
+        {
+          "drawIndex": 5,
+          "den": 271,
+          "num": 218,
+          "roll": 110
+        },
+        {
+          "drawIndex": 6,
+          "den": 342,
+          "num": 271,
+          "roll": 65
+        },
+        {
+          "drawIndex": 7,
+          "den": 220,
+          "num": 171,
+          "roll": 81
+        },
+        {
+          "drawIndex": 8,
+          "den": 115,
+          "num": 88,
+          "roll": 70
+        },
+        {
+          "drawIndex": 9,
+          "den": 153,
+          "num": 115,
+          "roll": 118
+        }
+      ]
+    },
+    {
+      "serverSeed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "clientSeed": "a",
+      "nonce": 100,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 18,
+      "rung": 9,
+      "drawIndex": 10,
+      "outcome": "popped",
+      "reachedRung": 10,
+      "draws": [
+        {
+          "drawIndex": 10,
+          "den": 153,
+          "num": 115,
+          "roll": 23
+        },
+        {
+          "drawIndex": 11,
+          "den": 208,
+          "num": 153,
+          "roll": 207
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "0",
+      "nonce": 123456789,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 18,
+      "rung": 16,
+      "drawIndex": 18,
+      "outcome": "top",
+      "reachedRung": 18,
+      "draws": [
+        {
+          "drawIndex": 18,
+          "den": 194,
+          "num": 127,
+          "roll": 5
+        },
+        {
+          "drawIndex": 19,
+          "den": 150,
+          "num": 97,
+          "roll": 73
+        }
+      ]
+    },
+    {
+      "serverSeed": "d4ecff996b6be10ceab16df4f5370120965e30d5429da7bd3fab0a5d63c1ea73",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 18,
+      "rung": 17,
+      "drawIndex": 17,
+      "outcome": "popped",
+      "reachedRung": 17,
+      "draws": [
+        {
+          "drawIndex": 17,
+          "den": 150,
+          "num": 97,
+          "roll": 129
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 0,
+      "balloonIndex": 1,
+      "rtpBp": 9400,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 18,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 12,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 125,
+          "num": 106,
+          "roll": 43
+        },
+        {
+          "drawIndex": 3,
+          "den": 148,
+          "num": 125,
+          "roll": 123
+        },
+        {
+          "drawIndex": 4,
+          "den": 89,
+          "num": 74,
+          "roll": 66
+        },
+        {
+          "drawIndex": 5,
+          "den": 109,
+          "num": 89,
+          "roll": 13
+        },
+        {
+          "drawIndex": 6,
+          "den": 271,
+          "num": 218,
+          "roll": 66
+        },
+        {
+          "drawIndex": 7,
+          "den": 342,
+          "num": 271,
+          "roll": 190
+        },
+        {
+          "drawIndex": 8,
+          "den": 220,
+          "num": 171,
+          "roll": 144
+        },
+        {
+          "drawIndex": 9,
+          "den": 115,
+          "num": 88,
+          "roll": 44
+        },
+        {
+          "drawIndex": 10,
+          "den": 153,
+          "num": 115,
+          "roll": 56
+        },
+        {
+          "drawIndex": 11,
+          "den": 208,
+          "num": 153,
+          "roll": 20
+        },
+        {
+          "drawIndex": 12,
+          "den": 287,
+          "num": 208,
+          "roll": 11
+        },
+        {
+          "drawIndex": 13,
+          "den": 404,
+          "num": 287,
+          "roll": 366
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 0,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 18,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 12,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 125,
+          "num": 106,
+          "roll": 43
+        },
+        {
+          "drawIndex": 3,
+          "den": 148,
+          "num": 125,
+          "roll": 123
+        },
+        {
+          "drawIndex": 4,
+          "den": 89,
+          "num": 74,
+          "roll": 66
+        },
+        {
+          "drawIndex": 5,
+          "den": 109,
+          "num": 89,
+          "roll": 13
+        },
+        {
+          "drawIndex": 6,
+          "den": 271,
+          "num": 218,
+          "roll": 66
+        },
+        {
+          "drawIndex": 7,
+          "den": 342,
+          "num": 271,
+          "roll": 190
+        },
+        {
+          "drawIndex": 8,
+          "den": 220,
+          "num": 171,
+          "roll": 144
+        },
+        {
+          "drawIndex": 9,
+          "den": 115,
+          "num": 88,
+          "roll": 44
+        },
+        {
+          "drawIndex": 10,
+          "den": 153,
+          "num": 115,
+          "roll": 56
+        },
+        {
+          "drawIndex": 11,
+          "den": 208,
+          "num": 153,
+          "roll": 20
+        },
+        {
+          "drawIndex": 12,
+          "den": 287,
+          "num": 208,
+          "roll": 11
+        },
+        {
+          "drawIndex": 13,
+          "den": 404,
+          "num": 287,
+          "roll": 366
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 0,
+      "balloonIndex": 1,
+      "rtpBp": 9900,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 18,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 12,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 125,
+          "num": 106,
+          "roll": 43
+        },
+        {
+          "drawIndex": 3,
+          "den": 148,
+          "num": 125,
+          "roll": 123
+        },
+        {
+          "drawIndex": 4,
+          "den": 89,
+          "num": 74,
+          "roll": 66
+        },
+        {
+          "drawIndex": 5,
+          "den": 109,
+          "num": 89,
+          "roll": 13
+        },
+        {
+          "drawIndex": 6,
+          "den": 271,
+          "num": 218,
+          "roll": 66
+        },
+        {
+          "drawIndex": 7,
+          "den": 342,
+          "num": 271,
+          "roll": 190
+        },
+        {
+          "drawIndex": 8,
+          "den": 220,
+          "num": 171,
+          "roll": 144
+        },
+        {
+          "drawIndex": 9,
+          "den": 115,
+          "num": 88,
+          "roll": 44
+        },
+        {
+          "drawIndex": 10,
+          "den": 153,
+          "num": 115,
+          "roll": 56
+        },
+        {
+          "drawIndex": 11,
+          "den": 208,
+          "num": 153,
+          "roll": 20
+        },
+        {
+          "drawIndex": 12,
+          "den": 287,
+          "num": 208,
+          "roll": 11
+        },
+        {
+          "drawIndex": 13,
+          "den": 404,
+          "num": 287,
+          "roll": 366
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "-",
+      "nonce": 1,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 18,
+      "rung": 9,
+      "drawIndex": 11,
+      "outcome": "popped",
+      "reachedRung": 9,
+      "draws": [
+        {
+          "drawIndex": 11,
+          "den": 153,
+          "num": 115,
+          "roll": 136
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "myseed",
+      "nonce": 9,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 18,
+      "rung": 16,
+      "drawIndex": 16,
+      "outcome": "popped",
+      "reachedRung": 16,
+      "draws": [
+        {
+          "drawIndex": 16,
+          "den": 194,
+          "num": 127,
+          "roll": 170
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "a",
+      "nonce": 10,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 18,
+      "rung": 17,
+      "drawIndex": 18,
+      "outcome": "top",
+      "reachedRung": 18,
+      "draws": [
+        {
+          "drawIndex": 18,
+          "den": 150,
+          "num": 97,
+          "roll": 27
+        }
+      ]
+    },
+    {
+      "serverSeed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "clientSeed": "0",
+      "nonce": 99,
+      "balloonIndex": 2,
+      "rtpBp": 9400,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 17,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 1,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 125,
+          "num": 106,
+          "roll": 115
+        }
+      ]
+    },
+    {
+      "serverSeed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "clientSeed": "0",
+      "nonce": 99,
+      "balloonIndex": 2,
+      "rtpBp": 9700,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 17,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 1,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 125,
+          "num": 106,
+          "roll": 115
+        }
+      ]
+    },
+    {
+      "serverSeed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "clientSeed": "0",
+      "nonce": 99,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 17,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 1,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 125,
+          "num": 106,
+          "roll": 115
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "_-_",
+      "nonce": 100,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 17,
+      "rung": 8,
+      "drawIndex": 8,
+      "outcome": "popped",
+      "reachedRung": 12,
+      "draws": [
+        {
+          "drawIndex": 8,
+          "den": 115,
+          "num": 88,
+          "roll": 26
+        },
+        {
+          "drawIndex": 9,
+          "den": 153,
+          "num": 115,
+          "roll": 45
+        },
+        {
+          "drawIndex": 10,
+          "den": 208,
+          "num": 153,
+          "roll": 103
+        },
+        {
+          "drawIndex": 11,
+          "den": 287,
+          "num": 208,
+          "roll": 16
+        },
+        {
+          "drawIndex": 12,
+          "den": 404,
+          "num": 287,
+          "roll": 353
+        }
+      ]
+    },
+    {
+      "serverSeed": "d4ecff996b6be10ceab16df4f5370120965e30d5429da7bd3fab0a5d63c1ea73",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 123456789,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 17,
+      "rung": 15,
+      "drawIndex": 16,
+      "outcome": "top",
+      "reachedRung": 17,
+      "draws": [
+        {
+          "drawIndex": 16,
+          "den": 127,
+          "num": 85,
+          "roll": 52
+        },
+        {
+          "drawIndex": 17,
+          "den": 194,
+          "num": 127,
+          "roll": 57
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "-",
+      "nonce": 9007199254740991,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        106,
+        125,
+        148,
+        178,
+        218,
+        271,
+        342,
+        440,
+        575,
+        765,
+        1040,
+        1435,
+        2020,
+        2900,
+        4250,
+        6350,
+        9700,
+        15000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 17,
+      "rung": 16,
+      "drawIndex": 18,
+      "outcome": "popped",
+      "reachedRung": 16,
+      "draws": [
+        {
+          "drawIndex": 18,
+          "den": 194,
+          "num": 127,
+          "roll": 177
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "myseed",
+      "nonce": 0,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 14,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 1,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 163,
+          "num": 120,
+          "roll": 142
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "myseed",
+      "nonce": 0,
+      "balloonIndex": 0,
+      "rtpBp": 9700,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 14,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 1,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 163,
+          "num": 120,
+          "roll": 142
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "myseed",
+      "nonce": 0,
+      "balloonIndex": 0,
+      "rtpBp": 9900,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 14,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 1,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 163,
+          "num": 120,
+          "roll": 142
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "a",
+      "nonce": 1,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 14,
+      "rung": 7,
+      "drawIndex": 8,
+      "outcome": "popped",
+      "reachedRung": 7,
+      "draws": [
+        {
+          "drawIndex": 8,
+          "den": 200,
+          "num": 121,
+          "roll": 184
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "0",
+      "nonce": 9,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 14,
+      "rung": 12,
+      "drawIndex": 14,
+      "outcome": "popped",
+      "reachedRung": 12,
+      "draws": [
+        {
+          "drawIndex": 14,
+          "den": 235,
+          "num": 114,
+          "roll": 197
+        }
+      ]
+    },
+    {
+      "serverSeed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "clientSeed": "_-_",
+      "nonce": 10,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 14,
+      "rung": 13,
+      "drawIndex": 13,
+      "outcome": "top",
+      "reachedRung": 14,
+      "draws": [
+        {
+          "drawIndex": 13,
+          "den": 100,
+          "num": 47,
+          "roll": 42
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 99,
+      "balloonIndex": 1,
+      "rtpBp": 9400,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 14,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 163,
+          "num": 120,
+          "roll": 23
+        },
+        {
+          "drawIndex": 3,
+          "den": 228,
+          "num": 163,
+          "roll": 115
+        },
+        {
+          "drawIndex": 4,
+          "den": 55,
+          "num": 38,
+          "roll": 48
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 99,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 14,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 163,
+          "num": 120,
+          "roll": 23
+        },
+        {
+          "drawIndex": 3,
+          "den": 228,
+          "num": 163,
+          "roll": 115
+        },
+        {
+          "drawIndex": 4,
+          "den": 55,
+          "num": 38,
+          "roll": 48
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 99,
+      "balloonIndex": 1,
+      "rtpBp": 9900,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 14,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 163,
+          "num": 120,
+          "roll": 23
+        },
+        {
+          "drawIndex": 3,
+          "den": 228,
+          "num": 163,
+          "roll": 115
+        },
+        {
+          "drawIndex": 4,
+          "den": 55,
+          "num": 38,
+          "roll": 48
+        }
+      ]
+    },
+    {
+      "serverSeed": "d4ecff996b6be10ceab16df4f5370120965e30d5429da7bd3fab0a5d63c1ea73",
+      "clientSeed": "-",
+      "nonce": 100,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 14,
+      "rung": 7,
+      "drawIndex": 9,
+      "outcome": "popped",
+      "reachedRung": 8,
+      "draws": [
+        {
+          "drawIndex": 9,
+          "den": 200,
+          "num": 121,
+          "roll": 100
+        },
+        {
+          "drawIndex": 10,
+          "den": 69,
+          "num": 40,
+          "roll": 40
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "myseed",
+      "nonce": 123456789,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 14,
+      "rung": 12,
+      "drawIndex": 12,
+      "outcome": "popped",
+      "reachedRung": 12,
+      "draws": [
+        {
+          "drawIndex": 12,
+          "den": 235,
+          "num": 114,
+          "roll": 234
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "a",
+      "nonce": 9007199254740991,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 14,
+      "rung": 13,
+      "drawIndex": 14,
+      "outcome": "popped",
+      "reachedRung": 13,
+      "draws": [
+        {
+          "drawIndex": 14,
+          "den": 100,
+          "num": 47,
+          "roll": 87
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "0",
+      "nonce": 0,
+      "balloonIndex": 2,
+      "rtpBp": 9400,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 163,
+          "num": 120,
+          "roll": 21
+        },
+        {
+          "drawIndex": 4,
+          "den": 228,
+          "num": 163,
+          "roll": 151
+        },
+        {
+          "drawIndex": 5,
+          "den": 55,
+          "num": 38,
+          "roll": 48
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "0",
+      "nonce": 0,
+      "balloonIndex": 2,
+      "rtpBp": 9700,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 163,
+          "num": 120,
+          "roll": 21
+        },
+        {
+          "drawIndex": 4,
+          "den": 228,
+          "num": 163,
+          "roll": 151
+        },
+        {
+          "drawIndex": 5,
+          "den": 55,
+          "num": 38,
+          "roll": 48
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "0",
+      "nonce": 0,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 163,
+          "num": 120,
+          "roll": 21
+        },
+        {
+          "drawIndex": 4,
+          "den": 228,
+          "num": 163,
+          "roll": 151
+        },
+        {
+          "drawIndex": 5,
+          "den": 55,
+          "num": 38,
+          "roll": 48
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "_-_",
+      "nonce": 1,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 5,
+      "drawIndex": 5,
+      "outcome": "popped",
+      "reachedRung": 6,
+      "draws": [
+        {
+          "drawIndex": 5,
+          "den": 151,
+          "num": 98,
+          "roll": 94
+        },
+        {
+          "drawIndex": 6,
+          "den": 242,
+          "num": 151,
+          "roll": 163
+        }
+      ]
+    },
+    {
+      "serverSeed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 9,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 8,
+      "drawIndex": 9,
+      "outcome": "popped",
+      "reachedRung": 8,
+      "draws": [
+        {
+          "drawIndex": 9,
+          "den": 69,
+          "num": 40,
+          "roll": 68
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "-",
+      "nonce": 10,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        120,
+        163,
+        228,
+        330,
+        490,
+        755,
+        1210,
+        2000,
+        3450,
+        6200,
+        11600,
+        22800,
+        47000,
+        100000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 9,
+      "drawIndex": 11,
+      "outcome": "top",
+      "reachedRung": 10,
+      "draws": [
+        {
+          "drawIndex": 11,
+          "den": 124,
+          "num": 69,
+          "roll": 54
+        }
+      ]
+    },
+    {
+      "serverSeed": "d4ecff996b6be10ceab16df4f5370120965e30d5429da7bd3fab0a5d63c1ea73",
+      "clientSeed": "myseed",
+      "nonce": 99,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 4,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 17,
+          "num": 10,
+          "roll": 6
+        },
+        {
+          "drawIndex": 2,
+          "den": 31,
+          "num": 17,
+          "roll": 11
+        },
+        {
+          "drawIndex": 3,
+          "den": 184,
+          "num": 93,
+          "roll": 40
+        },
+        {
+          "drawIndex": 4,
+          "den": 50,
+          "num": 23,
+          "roll": 25
+        }
+      ]
+    },
+    {
+      "serverSeed": "d4ecff996b6be10ceab16df4f5370120965e30d5429da7bd3fab0a5d63c1ea73",
+      "clientSeed": "myseed",
+      "nonce": 99,
+      "balloonIndex": 0,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 4,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 17,
+          "num": 10,
+          "roll": 6
+        },
+        {
+          "drawIndex": 2,
+          "den": 31,
+          "num": 17,
+          "roll": 11
+        },
+        {
+          "drawIndex": 3,
+          "den": 184,
+          "num": 93,
+          "roll": 40
+        },
+        {
+          "drawIndex": 4,
+          "den": 50,
+          "num": 23,
+          "roll": 25
+        }
+      ]
+    },
+    {
+      "serverSeed": "d4ecff996b6be10ceab16df4f5370120965e30d5429da7bd3fab0a5d63c1ea73",
+      "clientSeed": "myseed",
+      "nonce": 99,
+      "balloonIndex": 0,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 4,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 17,
+          "num": 10,
+          "roll": 6
+        },
+        {
+          "drawIndex": 2,
+          "den": 31,
+          "num": 17,
+          "roll": 11
+        },
+        {
+          "drawIndex": 3,
+          "den": 184,
+          "num": 93,
+          "roll": 40
+        },
+        {
+          "drawIndex": 4,
+          "den": 50,
+          "num": 23,
+          "roll": 25
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "a",
+      "nonce": 100,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 5,
+      "drawIndex": 6,
+      "outcome": "popped",
+      "reachedRung": 8,
+      "draws": [
+        {
+          "drawIndex": 6,
+          "den": 19,
+          "num": 8,
+          "roll": 7
+        },
+        {
+          "drawIndex": 7,
+          "den": 50,
+          "num": 19,
+          "roll": 6
+        },
+        {
+          "drawIndex": 8,
+          "den": 3,
+          "num": 1,
+          "roll": 0
+        },
+        {
+          "drawIndex": 9,
+          "den": 10,
+          "num": 3,
+          "roll": 8
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "0",
+      "nonce": 123456789,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 8,
+      "drawIndex": 10,
+      "outcome": "popped",
+      "reachedRung": 8,
+      "draws": [
+        {
+          "drawIndex": 10,
+          "den": 10,
+          "num": 3,
+          "roll": 4
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 9,
+      "drawIndex": 9,
+      "outcome": "popped",
+      "reachedRung": 9,
+      "draws": [
+        {
+          "drawIndex": 9,
+          "den": 4,
+          "num": 1,
+          "roll": 1
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 0,
+      "balloonIndex": 1,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 17,
+          "num": 10,
+          "roll": 8
+        },
+        {
+          "drawIndex": 3,
+          "den": 31,
+          "num": 17,
+          "roll": 29
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 0,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 17,
+          "num": 10,
+          "roll": 8
+        },
+        {
+          "drawIndex": 3,
+          "den": 31,
+          "num": 17,
+          "roll": 29
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 0,
+      "balloonIndex": 1,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 17,
+          "num": 10,
+          "roll": 8
+        },
+        {
+          "drawIndex": 3,
+          "den": 31,
+          "num": 17,
+          "roll": 29
+        }
+      ]
+    },
+    {
+      "serverSeed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "clientSeed": "-",
+      "nonce": 1,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 5,
+      "drawIndex": 7,
+      "outcome": "popped",
+      "reachedRung": 5,
+      "draws": [
+        {
+          "drawIndex": 7,
+          "den": 19,
+          "num": 8,
+          "roll": 11
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "myseed",
+      "nonce": 9,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 8,
+      "drawIndex": 8,
+      "outcome": "popped",
+      "reachedRung": 9,
+      "draws": [
+        {
+          "drawIndex": 8,
+          "den": 10,
+          "num": 3,
+          "roll": 0
+        },
+        {
+          "drawIndex": 9,
+          "den": 4,
+          "num": 1,
+          "roll": 3
+        }
+      ]
+    },
+    {
+      "serverSeed": "d4ecff996b6be10ceab16df4f5370120965e30d5429da7bd3fab0a5d63c1ea73",
+      "clientSeed": "a",
+      "nonce": 10,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 10,
+      "rung": 9,
+      "drawIndex": 10,
+      "outcome": "popped",
+      "reachedRung": 9,
+      "draws": [
+        {
+          "drawIndex": 10,
+          "den": 4,
+          "num": 1,
+          "roll": 2
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "0",
+      "nonce": 99,
+      "balloonIndex": 2,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 17,
+          "num": 10,
+          "roll": 8
+        },
+        {
+          "drawIndex": 4,
+          "den": 31,
+          "num": 17,
+          "roll": 24
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "0",
+      "nonce": 99,
+      "balloonIndex": 2,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 17,
+          "num": 10,
+          "roll": 8
+        },
+        {
+          "drawIndex": 4,
+          "den": 31,
+          "num": 17,
+          "roll": 24
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "0",
+      "nonce": 99,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 17,
+          "num": 10,
+          "roll": 8
+        },
+        {
+          "drawIndex": 4,
+          "den": 31,
+          "num": 17,
+          "roll": 24
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 100,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 3,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 4,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 184,
+          "num": 93,
+          "roll": 43
+        },
+        {
+          "drawIndex": 4,
+          "den": 50,
+          "num": 23,
+          "roll": 39
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 123456789,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 4,
+      "drawIndex": 5,
+      "outcome": "popped",
+      "reachedRung": 5,
+      "draws": [
+        {
+          "drawIndex": 5,
+          "den": 50,
+          "num": 23,
+          "roll": 13
+        },
+        {
+          "drawIndex": 6,
+          "den": 19,
+          "num": 8,
+          "roll": 15
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "-",
+      "nonce": 9007199254740991,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 5,
+      "drawIndex": 7,
+      "outcome": "popped",
+      "reachedRung": 5,
+      "draws": [
+        {
+          "drawIndex": 7,
+          "den": 19,
+          "num": 8,
+          "roll": 16
+        }
+      ]
+    },
+    {
+      "serverSeed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "clientSeed": "myseed",
+      "nonce": 0,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 2,
+          "num": 1,
+          "roll": 0
+        },
+        {
+          "drawIndex": 2,
+          "den": 7,
+          "num": 3,
+          "roll": 1
+        },
+        {
+          "drawIndex": 3,
+          "den": 20,
+          "num": 7,
+          "roll": 11
+        }
+      ]
+    },
+    {
+      "serverSeed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "clientSeed": "myseed",
+      "nonce": 0,
+      "balloonIndex": 0,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 2,
+          "num": 1,
+          "roll": 0
+        },
+        {
+          "drawIndex": 2,
+          "den": 7,
+          "num": 3,
+          "roll": 1
+        },
+        {
+          "drawIndex": 3,
+          "den": 20,
+          "num": 7,
+          "roll": 11
+        }
+      ]
+    },
+    {
+      "serverSeed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "clientSeed": "myseed",
+      "nonce": 0,
+      "balloonIndex": 0,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 2,
+          "num": 1,
+          "roll": 0
+        },
+        {
+          "drawIndex": 2,
+          "den": 7,
+          "num": 3,
+          "roll": 1
+        },
+        {
+          "drawIndex": 3,
+          "den": 20,
+          "num": 7,
+          "roll": 11
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "a",
+      "nonce": 1,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 2,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 7,
+          "num": 3,
+          "roll": 5
+        }
+      ]
+    },
+    {
+      "serverSeed": "d4ecff996b6be10ceab16df4f5370120965e30d5429da7bd3fab0a5d63c1ea73",
+      "clientSeed": "0",
+      "nonce": 9,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 3,
+      "drawIndex": 5,
+      "outcome": "top",
+      "reachedRung": 4,
+      "draws": [
+        {
+          "drawIndex": 5,
+          "den": 20,
+          "num": 7,
+          "roll": 0
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "_-_",
+      "nonce": 10,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 2,
+          "num": 1,
+          "roll": 0
+        },
+        {
+          "drawIndex": 2,
+          "den": 7,
+          "num": 3,
+          "roll": 6
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "_-_",
+      "nonce": 10,
+      "balloonIndex": 0,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 2,
+          "num": 1,
+          "roll": 0
+        },
+        {
+          "drawIndex": 2,
+          "den": 7,
+          "num": 3,
+          "roll": 6
+        }
+      ]
+    },
+    {
+      "serverSeed": "b9d86820f9ca4cc251c18bd331b06fd7edc019f67ccac08d5b473ca37be8fc41",
+      "clientSeed": "_-_",
+      "nonce": 10,
+      "balloonIndex": 0,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 2,
+          "num": 1,
+          "roll": 0
+        },
+        {
+          "drawIndex": 2,
+          "den": 7,
+          "num": 3,
+          "roll": 6
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+      "nonce": 99,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 2,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 7,
+          "num": 3,
+          "roll": 5
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "-",
+      "nonce": 100,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 3,
+      "drawIndex": 5,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 5,
+          "den": 20,
+          "num": 7,
+          "roll": 9
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "myseed",
+      "nonce": 123456789,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 2,
+          "num": 1,
+          "roll": 0
+        },
+        {
+          "drawIndex": 2,
+          "den": 7,
+          "num": 3,
+          "roll": 2
+        },
+        {
+          "drawIndex": 3,
+          "den": 20,
+          "num": 7,
+          "roll": 16
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "myseed",
+      "nonce": 123456789,
+      "balloonIndex": 0,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 2,
+          "num": 1,
+          "roll": 0
+        },
+        {
+          "drawIndex": 2,
+          "den": 7,
+          "num": 3,
+          "roll": 2
+        },
+        {
+          "drawIndex": 3,
+          "den": 20,
+          "num": 7,
+          "roll": 16
+        }
+      ]
+    },
+    {
+      "serverSeed": "0000000000000000000000000000000000000000000000000000000000000000",
+      "clientSeed": "myseed",
+      "nonce": 123456789,
+      "balloonIndex": 0,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 2,
+          "num": 1,
+          "roll": 0
+        },
+        {
+          "drawIndex": 2,
+          "den": 7,
+          "num": 3,
+          "roll": 2
+        },
+        {
+          "drawIndex": 3,
+          "den": 20,
+          "num": 7,
+          "roll": 16
+        }
+      ]
+    },
+    {
+      "serverSeed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "clientSeed": "a",
+      "nonce": 9007199254740991,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 2,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 7,
+          "num": 3,
+          "roll": 5
+        }
+      ]
+    },
+    {
+      "serverSeed": "a4d93ce3d9f9e3f860e6275882ff4ecdfdb3adc0e87e99e1bc07b8ab1beeff14",
+      "clientSeed": "0",
+      "nonce": 0,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 4,
+      "rung": 3,
+      "drawIndex": 5,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 5,
+          "den": 20,
+          "num": 7,
+          "roll": 19
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 1000,
+      "maxPayoutCents": 7000,
+      "topRung": 3,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "top",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 2,
+          "num": 1,
+          "roll": 0
+        },
+        {
+          "drawIndex": 3,
+          "den": 7,
+          "num": 3,
+          "roll": 2
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 1000,
+      "maxPayoutCents": 7000,
+      "topRung": 3,
+      "rung": 2,
+      "drawIndex": 4,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 4,
+          "den": 7,
+          "num": 3,
+          "roll": 3
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        300,
+        700,
+        2000
+      ],
+      "betCents": 1001,
+      "maxPayoutCents": 7000,
+      "topRung": 2,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 1,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 2,
+          "num": 1,
+          "roll": 1
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2001,
+      "maxPayoutCents": 10000000,
+      "topRung": 9,
+      "rung": 1,
+      "drawIndex": 1,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 1,
+          "den": 17,
+          "num": 10,
+          "roll": 0
+        },
+        {
+          "drawIndex": 2,
+          "den": 31,
+          "num": 17,
+          "roll": 16
+        },
+        {
+          "drawIndex": 3,
+          "den": 184,
+          "num": 93,
+          "roll": 137
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2001,
+      "maxPayoutCents": 10000000,
+      "topRung": 9,
+      "rung": 2,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 2,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 31,
+          "num": 17,
+          "roll": 20
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2001,
+      "maxPayoutCents": 10000000,
+      "topRung": 9,
+      "rung": 3,
+      "drawIndex": 5,
+      "outcome": "popped",
+      "reachedRung": 3,
+      "draws": [
+        {
+          "drawIndex": 5,
+          "den": 184,
+          "num": 93,
+          "roll": 93
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2001,
+      "maxPayoutCents": 10000000,
+      "topRung": 9,
+      "rung": 4,
+      "drawIndex": 4,
+      "outcome": "popped",
+      "reachedRung": 5,
+      "draws": [
+        {
+          "drawIndex": 4,
+          "den": 50,
+          "num": 23,
+          "roll": 3
+        },
+        {
+          "drawIndex": 5,
+          "den": 19,
+          "num": 8,
+          "roll": 15
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2001,
+      "maxPayoutCents": 10000000,
+      "topRung": 9,
+      "rung": 5,
+      "drawIndex": 6,
+      "outcome": "popped",
+      "reachedRung": 6,
+      "draws": [
+        {
+          "drawIndex": 6,
+          "den": 19,
+          "num": 8,
+          "roll": 3
+        },
+        {
+          "drawIndex": 7,
+          "den": 50,
+          "num": 19,
+          "roll": 27
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2001,
+      "maxPayoutCents": 10000000,
+      "topRung": 9,
+      "rung": 6,
+      "drawIndex": 8,
+      "outcome": "popped",
+      "reachedRung": 7,
+      "draws": [
+        {
+          "drawIndex": 8,
+          "den": 50,
+          "num": 19,
+          "roll": 18
+        },
+        {
+          "drawIndex": 9,
+          "den": 3,
+          "num": 1,
+          "roll": 1
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2001,
+      "maxPayoutCents": 10000000,
+      "topRung": 9,
+      "rung": 7,
+      "drawIndex": 7,
+      "outcome": "popped",
+      "reachedRung": 8,
+      "draws": [
+        {
+          "drawIndex": 7,
+          "den": 3,
+          "num": 1,
+          "roll": 0
+        },
+        {
+          "drawIndex": 8,
+          "den": 10,
+          "num": 3,
+          "roll": 8
+        }
+      ]
+    },
+    {
+      "serverSeed": "e832cdc22c0660b484bc8aa078dc53a38e72d1ddb80d2da4ef66d5f257866963",
+      "clientSeed": "_-_",
+      "nonce": 9007199254740991,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 2001,
+      "maxPayoutCents": 10000000,
+      "topRung": 9,
+      "rung": 8,
+      "drawIndex": 9,
+      "outcome": "popped",
+      "reachedRung": 8,
+      "draws": [
+        {
+          "drawIndex": 9,
+          "den": 10,
+          "num": 3,
+          "roll": 6
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "a",
+      "nonce": 0,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 20,
+      "drawIndex": 20,
+      "outcome": "top",
+      "reachedRung": 24,
+      "draws": [
+        {
+          "drawIndex": 20,
+          "den": 146,
+          "num": 123,
+          "roll": 32
+        },
+        {
+          "drawIndex": 21,
+          "den": 87,
+          "num": 73,
+          "roll": 63
+        },
+        {
+          "drawIndex": 22,
+          "den": 104,
+          "num": 87,
+          "roll": 7
+        },
+        {
+          "drawIndex": 23,
+          "den": 125,
+          "num": 104,
+          "roll": 30
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "a",
+      "nonce": 0,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 20,
+      "drawIndex": 20,
+      "outcome": "top",
+      "reachedRung": 24,
+      "draws": [
+        {
+          "drawIndex": 20,
+          "den": 146,
+          "num": 123,
+          "roll": 45
+        },
+        {
+          "drawIndex": 21,
+          "den": 87,
+          "num": 73,
+          "roll": 28
+        },
+        {
+          "drawIndex": 22,
+          "den": 104,
+          "num": 87,
+          "roll": 41
+        },
+        {
+          "drawIndex": 23,
+          "den": 125,
+          "num": 104,
+          "roll": 43
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "a",
+      "nonce": 0,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 2000,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 20,
+      "drawIndex": 20,
+      "outcome": "top",
+      "reachedRung": 24,
+      "draws": [
+        {
+          "drawIndex": 20,
+          "den": 146,
+          "num": 123,
+          "roll": 113
+        },
+        {
+          "drawIndex": 21,
+          "den": 87,
+          "num": 73,
+          "roll": 35
+        },
+        {
+          "drawIndex": 22,
+          "den": 104,
+          "num": 87,
+          "roll": 73
+        },
+        {
+          "drawIndex": 23,
+          "den": 125,
+          "num": 104,
+          "roll": 60
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "a",
+      "nonce": 1,
+      "balloonIndex": 0,
+      "rtpBp": 9700,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 17,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 111,
+          "num": 101,
+          "roll": 2
+        },
+        {
+          "drawIndex": 3,
+          "den": 41,
+          "num": 37,
+          "roll": 27
+        },
+        {
+          "drawIndex": 4,
+          "den": 137,
+          "num": 123,
+          "roll": 44
+        },
+        {
+          "drawIndex": 5,
+          "den": 153,
+          "num": 137,
+          "roll": 134
+        },
+        {
+          "drawIndex": 6,
+          "den": 19,
+          "num": 17,
+          "roll": 16
+        },
+        {
+          "drawIndex": 7,
+          "den": 64,
+          "num": 57,
+          "roll": 45
+        },
+        {
+          "drawIndex": 8,
+          "den": 9,
+          "num": 8,
+          "roll": 6
+        },
+        {
+          "drawIndex": 9,
+          "den": 61,
+          "num": 54,
+          "roll": 19
+        },
+        {
+          "drawIndex": 10,
+          "den": 277,
+          "num": 244,
+          "roll": 35
+        },
+        {
+          "drawIndex": 11,
+          "den": 316,
+          "num": 277,
+          "roll": 106
+        },
+        {
+          "drawIndex": 12,
+          "den": 181,
+          "num": 158,
+          "roll": 52
+        },
+        {
+          "drawIndex": 13,
+          "den": 208,
+          "num": 181,
+          "roll": 92
+        },
+        {
+          "drawIndex": 14,
+          "den": 15,
+          "num": 13,
+          "roll": 3
+        },
+        {
+          "drawIndex": 15,
+          "den": 37,
+          "num": 32,
+          "roll": 25
+        },
+        {
+          "drawIndex": 16,
+          "den": 43,
+          "num": 37,
+          "roll": 4
+        },
+        {
+          "drawIndex": 17,
+          "den": 752,
+          "num": 645,
+          "roll": 163
+        },
+        {
+          "drawIndex": 18,
+          "den": 881,
+          "num": 752,
+          "roll": 799
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "a",
+      "nonce": 1,
+      "balloonIndex": 1,
+      "rtpBp": 9900,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 2,
+      "outcome": "popped",
+      "reachedRung": 16,
+      "draws": [
+        {
+          "drawIndex": 2,
+          "den": 111,
+          "num": 101,
+          "roll": 78
+        },
+        {
+          "drawIndex": 3,
+          "den": 41,
+          "num": 37,
+          "roll": 34
+        },
+        {
+          "drawIndex": 4,
+          "den": 137,
+          "num": 123,
+          "roll": 54
+        },
+        {
+          "drawIndex": 5,
+          "den": 153,
+          "num": 137,
+          "roll": 9
+        },
+        {
+          "drawIndex": 6,
+          "den": 19,
+          "num": 17,
+          "roll": 14
+        },
+        {
+          "drawIndex": 7,
+          "den": 64,
+          "num": 57,
+          "roll": 47
+        },
+        {
+          "drawIndex": 8,
+          "den": 9,
+          "num": 8,
+          "roll": 5
+        },
+        {
+          "drawIndex": 9,
+          "den": 61,
+          "num": 54,
+          "roll": 20
+        },
+        {
+          "drawIndex": 10,
+          "den": 277,
+          "num": 244,
+          "roll": 83
+        },
+        {
+          "drawIndex": 11,
+          "den": 316,
+          "num": 277,
+          "roll": 253
+        },
+        {
+          "drawIndex": 12,
+          "den": 181,
+          "num": 158,
+          "roll": 25
+        },
+        {
+          "drawIndex": 13,
+          "den": 208,
+          "num": 181,
+          "roll": 70
+        },
+        {
+          "drawIndex": 14,
+          "den": 15,
+          "num": 13,
+          "roll": 6
+        },
+        {
+          "drawIndex": 15,
+          "den": 37,
+          "num": 32,
+          "roll": 12
+        },
+        {
+          "drawIndex": 16,
+          "den": 43,
+          "num": 37,
+          "roll": 10
+        },
+        {
+          "drawIndex": 17,
+          "den": 752,
+          "num": 645,
+          "roll": 677
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "a",
+      "nonce": 2,
+      "balloonIndex": 0,
+      "rtpBp": 9900,
+      "ladder": [
+        101,
+        111,
+        123,
+        137,
+        153,
+        171,
+        192,
+        216,
+        244,
+        277,
+        316,
+        362,
+        416,
+        480,
+        555,
+        645,
+        752,
+        881,
+        1040,
+        1230,
+        1460,
+        1740,
+        2080,
+        2500
+      ],
+      "betCents": 10,
+      "maxPayoutCents": 10000000,
+      "topRung": 24,
+      "rung": 1,
+      "drawIndex": 3,
+      "outcome": "popped",
+      "reachedRung": 19,
+      "draws": [
+        {
+          "drawIndex": 3,
+          "den": 111,
+          "num": 101,
+          "roll": 26
+        },
+        {
+          "drawIndex": 4,
+          "den": 41,
+          "num": 37,
+          "roll": 35
+        },
+        {
+          "drawIndex": 5,
+          "den": 137,
+          "num": 123,
+          "roll": 10
+        },
+        {
+          "drawIndex": 6,
+          "den": 153,
+          "num": 137,
+          "roll": 79
+        },
+        {
+          "drawIndex": 7,
+          "den": 19,
+          "num": 17,
+          "roll": 5
+        },
+        {
+          "drawIndex": 8,
+          "den": 64,
+          "num": 57,
+          "roll": 54
+        },
+        {
+          "drawIndex": 9,
+          "den": 9,
+          "num": 8,
+          "roll": 1
+        },
+        {
+          "drawIndex": 10,
+          "den": 61,
+          "num": 54,
+          "roll": 14
+        },
+        {
+          "drawIndex": 11,
+          "den": 277,
+          "num": 244,
+          "roll": 148
+        },
+        {
+          "drawIndex": 12,
+          "den": 316,
+          "num": 277,
+          "roll": 274
+        },
+        {
+          "drawIndex": 13,
+          "den": 181,
+          "num": 158,
+          "roll": 138
+        },
+        {
+          "drawIndex": 14,
+          "den": 208,
+          "num": 181,
+          "roll": 71
+        },
+        {
+          "drawIndex": 15,
+          "den": 15,
+          "num": 13,
+          "roll": 10
+        },
+        {
+          "drawIndex": 16,
+          "den": 37,
+          "num": 32,
+          "roll": 20
+        },
+        {
+          "drawIndex": 17,
+          "den": 43,
+          "num": 37,
+          "roll": 24
+        },
+        {
+          "drawIndex": 18,
+          "den": 752,
+          "num": 645,
+          "roll": 20
+        },
+        {
+          "drawIndex": 19,
+          "den": 881,
+          "num": 752,
+          "roll": 634
+        },
+        {
+          "drawIndex": 20,
+          "den": 1040,
+          "num": 881,
+          "roll": 354
+        },
+        {
+          "drawIndex": 21,
+          "den": 123,
+          "num": 104,
+          "roll": 122
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "a",
+      "nonce": 0,
+      "balloonIndex": 1,
+      "rtpBp": 9700,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 5,
+      "drawIndex": 5,
+      "outcome": "top",
+      "reachedRung": 6,
+      "draws": [
+        {
+          "drawIndex": 5,
+          "den": 19,
+          "num": 8,
+          "roll": 7
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "a",
+      "nonce": 1,
+      "balloonIndex": 2,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 5,
+      "drawIndex": 6,
+      "outcome": "top",
+      "reachedRung": 6,
+      "draws": [
+        {
+          "drawIndex": 6,
+          "den": 19,
+          "num": 8,
+          "roll": 4
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "a",
+      "nonce": 0,
+      "balloonIndex": 0,
+      "rtpBp": 9400,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 5,
+      "drawIndex": 5,
+      "outcome": "popped",
+      "reachedRung": 5,
+      "draws": [
+        {
+          "drawIndex": 5,
+          "den": 19,
+          "num": 8,
+          "roll": 16
+        }
+      ]
+    },
+    {
+      "serverSeed": "5fa690a564060d7e87d754110e20ac0cb290ebfbfe20df656e0507505977946f",
+      "clientSeed": "a",
+      "nonce": 0,
+      "balloonIndex": 2,
+      "rtpBp": 9900,
+      "ladder": [
+        150,
+        255,
+        465,
+        920,
+        2000,
+        4750,
+        12500,
+        37500,
+        125000,
+        500000
+      ],
+      "betCents": 100000,
+      "maxPayoutCents": 10000000,
+      "topRung": 6,
+      "rung": 5,
+      "drawIndex": 5,
+      "outcome": "popped",
+      "reachedRung": 5,
+      "draws": [
+        {
+          "drawIndex": 5,
+          "den": 19,
+          "num": 8,
+          "roll": 11
+        }
+      ]
+    }
   ]
 }

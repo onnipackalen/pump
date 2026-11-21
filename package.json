@@ -16,7 +16,7 @@
     "typecheck": "tsc -p . && npm run typecheck --workspaces --if-present",
     "rtp": "npm run rtp --workspace @pump/engine",
     "sim": "npm run sim --workspace @pump/engine --",
-    "hammer": "npm run hammer --workspace @pump/server",
+    "hammer": "npm run hammer --workspace @pump/server --",
     "dev": "tsx dev.ts",
     "start": "npm run build && npm run start --workspace @pump/server",
     "dev:server": "npm run dev --workspace @pump/server",

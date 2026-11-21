@@ -4,7 +4,12 @@ import { immediate } from './transaction';
 
 /**
  * The database schema, as a list of steps that only ever grows. Each step
- * runs once, in order, and is recorded in schema_migrations.
+ * runs once, in order, and is recorded in schema_migrations with its name.
+ * A step's name is part of that record: never rename one that has shipped.
+ * migrate() refuses a database whose recorded step has another name than
+ * the code's, because unreleased code (an earlier version of a branch) made
+ * that step differently, and skipping it by its number alone would leave
+ * the tables in a shape this code does not expect.
  *
  * The rules that keep money safe are written here as constraints and
  * triggers, so the database itself refuses a bad write even if the code
@@ -456,6 +461,113 @@ const MIGRATIONS: readonly Migration[] = [
       BEGIN SELECT RAISE(ABORT, 'a stored answer is never deleted'); END;
     `,
   },
+  {
+    id: 2,
+    name: 'reveals at round end',
+    sql: `
+      ------------------------------------------------------------------
+      -- Which rounds are sure to have their reveals stored. From this step
+      -- on, the database closes no round without the reveal of each
+      -- balloon cashed out below its top rung (rounds_finish_with_their_
+      -- reveals, below), and every round started from now on is marked 1.
+      -- A round already here is marked 0: it may have ended before this
+      -- step, with no reveal stored. Those rows take the default 0 as the
+      -- column is added, with no UPDATE, so no finished round is changed.
+      -- The mark is about reveals alone; the payout cap is kept with each
+      -- round since the first step.
+      ------------------------------------------------------------------
+      ALTER TABLE rounds ADD COLUMN reveals_recorded INTEGER NOT NULL DEFAULT 0
+        CHECK (reveals_recorded IN (0, 1));
+
+      -- AFTER, not BEFORE, so the older guards on a new round speak first.
+      CREATE TRIGGER rounds_start_recording_reveals AFTER INSERT ON rounds
+      WHEN NEW.reveals_recorded <> 1
+      BEGIN SELECT RAISE(ABORT, 'a new round is marked as storing its reveals'); END;
+
+      CREATE TRIGGER rounds_keep_reveals_recorded BEFORE UPDATE OF reveals_recorded ON rounds
+      WHEN NEW.reveals_recorded IS NOT OLD.reveals_recorded
+      BEGIN SELECT RAISE(ABORT, 'a round keeps its mark of whether it stores its reveals'); END;
+
+      ------------------------------------------------------------------
+      -- Reveals: where a balloon cashed out below its top rung would have
+      -- popped. One row per such balloon, worked out and written in the
+      -- transaction that ends its round, just before the round is closed.
+      -- A reveal decides nothing and moves no money.
+      --
+      -- Its draws are kept here and never in balloon_actions: those are
+      -- the draws that decided real pumps, and a balloon's draw_index
+      -- counts only them. draws_json lists the reveal's draws in order,
+      -- each {"drawIndex", "den", "num", "roll"}.
+      -- outcome: popped (a later pump would have popped it, on
+      -- reached_rung) or top (it would have reached its top rung).
+      ------------------------------------------------------------------
+      CREATE TABLE balloon_reveals (
+        round_id      TEXT NOT NULL,
+        balloon_index INTEGER NOT NULL,
+        outcome       TEXT NOT NULL CHECK (outcome IN ('popped', 'top')),
+        reached_rung  INTEGER NOT NULL CHECK (reached_rung >= 1),
+        draws_json    TEXT NOT NULL
+                      CHECK (json_valid(draws_json) AND json_type(draws_json) = 'array'),
+        created_at    TEXT NOT NULL,
+        PRIMARY KEY (round_id, balloon_index),
+        FOREIGN KEY (round_id, balloon_index) REFERENCES balloons(round_id, balloon_index)
+      ) STRICT, WITHOUT ROWID;
+
+      CREATE TRIGGER balloon_reveals_no_replace BEFORE INSERT ON balloon_reveals
+      WHEN EXISTS (
+        SELECT 1 FROM balloon_reveals
+        WHERE round_id = NEW.round_id AND balloon_index = NEW.balloon_index
+      )
+      BEGIN SELECT RAISE(ABORT, 'a reveal is never replaced'); END;
+
+      -- Only as the round ends: every balloon is done, and the round is not
+      -- closed yet. So no reveal exists while a pump can still be made.
+      CREATE TRIGGER balloon_reveals_at_round_end BEFORE INSERT ON balloon_reveals
+      WHEN NOT EXISTS (SELECT 1 FROM rounds WHERE id = NEW.round_id AND status = 'active')
+        OR EXISTS (SELECT 1 FROM balloons WHERE round_id = NEW.round_id AND status = 'active')
+      BEGIN SELECT RAISE(ABORT, 'a reveal is written as its round ends: after its last balloon, before the round closes'); END;
+
+      -- Only for a balloon cashed out below its top rung T, starting at its
+      -- draw count (not its rung, which a Patch save leaves behind). From
+      -- its rung r it either pops on a rung from r to T - 1, after
+      -- (that rung - r + 1) draws, or reaches T after T - r draws.
+      CREATE TRIGGER balloon_reveals_fit_their_balloon BEFORE INSERT ON balloon_reveals
+      WHEN NOT EXISTS (
+        SELECT 1 FROM balloons b
+        WHERE b.round_id = NEW.round_id AND b.balloon_index = NEW.balloon_index
+          AND b.status = 'cashed' AND b.rung < b.top_rung
+          AND json_extract(NEW.draws_json, '$[0].drawIndex') = b.draw_index
+          AND ((NEW.outcome = 'popped'
+                AND NEW.reached_rung >= b.rung AND NEW.reached_rung < b.top_rung
+                AND json_array_length(NEW.draws_json) = NEW.reached_rung - b.rung + 1)
+            OR (NEW.outcome = 'top'
+                AND NEW.reached_rung = b.top_rung
+                AND json_array_length(NEW.draws_json) = b.top_rung - b.rung))
+      )
+      BEGIN SELECT RAISE(ABORT, 'a reveal is for a balloon cashed out below its top rung: it starts at its draw count and stops between its rung and its top'); END;
+
+      CREATE TRIGGER balloon_reveals_no_update BEFORE UPDATE ON balloon_reveals
+      BEGIN SELECT RAISE(ABORT, 'reveals are append-only'); END;
+
+      CREATE TRIGGER balloon_reveals_no_delete BEFORE DELETE ON balloon_reveals
+      BEGIN SELECT RAISE(ABORT, 'reveals are append-only'); END;
+
+      -- A round closes with the reveal of every balloon cashed out below
+      -- its top rung, written just before. AFTER, so the older guards on
+      -- closing a round speak first.
+      CREATE TRIGGER rounds_finish_with_their_reveals AFTER UPDATE OF status ON rounds
+      WHEN NEW.status = 'finished' AND OLD.status = 'active'
+        AND EXISTS (
+          SELECT 1 FROM balloons b
+          WHERE b.round_id = NEW.id AND b.status = 'cashed' AND b.rung < b.top_rung
+            AND NOT EXISTS (
+              SELECT 1 FROM balloon_reveals v
+              WHERE v.round_id = b.round_id AND v.balloon_index = b.balloon_index
+            )
+        )
+      BEGIN SELECT RAISE(ABORT, 'a round closes with the reveal of each balloon cashed out below its top rung'); END;
+    `,
+  },
 ];
 
 /**
@@ -463,8 +575,11 @@ const MIGRATIONS: readonly Migration[] = [
  * two processes start on a fresh file at once: each step is checked and
  * applied inside one write transaction, so the second process finds the work
  * already done.
+ *
+ * `upTo` stops after that step. Only tests pass it, to build a database as
+ * an older server left it and then bring it up to date.
  */
-export function migrate(db: Db): void {
+export function migrate(db: Db, upTo = Number.POSITIVE_INFINITY): void {
   immediate(db, () => {
     db.exec(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -474,15 +589,34 @@ export function migrate(db: Db): void {
       ) STRICT
     `);
   });
+  // Two refusals, both before anything is changed: a step this code doesn't
+  // know (a newer server used this file, so this is a rollback), and a known
+  // step recorded under another name (other, unreleased code made the file).
   refuseANewerDatabase(db);
-  const isApplied = db.prepare('SELECT COUNT(*) AS n FROM schema_migrations WHERE id = :id');
+  const recordedName = db.prepare('SELECT name FROM schema_migrations WHERE id = :id');
   const record = db.prepare(
     'INSERT INTO schema_migrations (id, name, applied_at) VALUES (:id, :name, :at)',
   );
+  // Every step already recorded is checked first, so a database made by
+  // other code is refused before anything in it is changed.
   for (const migration of MIGRATIONS) {
+    const row = recordedName.get({ id: migration.id });
+    if (row === undefined) continue;
+    const name = text(row, 'name');
+    if (name !== migration.name) {
+      throw new Error(
+        `This database's step ${String(migration.id)} is "${name}", but this server's step ` +
+          `${String(migration.id)} is "${migration.name}". The database was made by other, ` +
+          'unreleased code, so its tables are not the ones this server expects. Nothing was ' +
+          'changed. If this is a test database on your own computer, delete it (and its -wal ' +
+          'and -shm files) to start afresh. If it holds real wallets, do NOT delete it.',
+      );
+    }
+  }
+  for (const migration of MIGRATIONS) {
+    if (migration.id > upTo) break;
     immediate(db, () => {
-      const row = isApplied.get({ id: migration.id });
-      if (row !== undefined && int(row, 'n') > 0) return;
+      if (recordedName.get({ id: migration.id }) !== undefined) return;
       db.exec(migration.sql);
       record.run({ id: migration.id, name: migration.name, at: new Date().toISOString() });
     });

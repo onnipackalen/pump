@@ -74,9 +74,9 @@ export function seedsRepository(db: Db) {
     },
 
     /**
-     * The active seed itself. For one purpose only: computing a pump's draw
-     * on the server. What this returns must never be sent, stored in an
-     * answer, or logged.
+     * The active seed itself. For two purposes only, both on the server:
+     * computing a pump's draw, and the reveal draws made as a round ends.
+     * What this returns must never be sent, stored in an answer, or logged.
      */
     secretForDrawing(id: number): string {
       const row = selectForDrawing.get({ id });

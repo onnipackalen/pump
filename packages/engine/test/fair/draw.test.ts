@@ -9,6 +9,7 @@ import {
   hashServerSeed,
   hmacSha256,
   readWords,
+  revealDrawerFor,
   type DrawInputs,
   type SampledRoll,
 } from '@pump/engine/fair';
@@ -304,6 +305,92 @@ describe('drawerFor', () => {
     inputs.nonce = 6;
     inputs.clientSeed = 'other';
     expect(draw(DOCS_DEN)).toBe(69);
+  });
+});
+
+describe('revealDrawerFor', () => {
+  // A balloon cashed out after 3 draws: its reveal starts at draw index 3.
+  const CASHED: DrawInputs = { ...DOCS, drawIndex: 3 };
+  const rollAt = (drawIndex: number, den = DOCS_DEN, inputs = CASHED): number =>
+    drawRoll({ ...inputs, drawIndex }, den).roll;
+  const wrongIndex = (next: number, asked: number): string =>
+    `The reveal must ask for draw index ${String(next)} next, not ${String(asked)}.`;
+
+  it('gives the roll drawRoll gives at each index, from the first index up', () => {
+    const draw = revealDrawerFor(CASHED);
+    const dens = [41, 137, DOCS_DEN, HALF_REJECTING_DEN, 19];
+    dens.forEach((den, i) => {
+      const drawIndex = 3 + i;
+      const roll = draw(drawIndex, den);
+      expect(roll).toBe(rollAt(drawIndex, den));
+      expect(roll).toBe(nodeDraw({ ...CASHED, drawIndex }, den).roll);
+    });
+  });
+
+  it('must start at the first index', () => {
+    expect(() => revealDrawerFor(CASHED)(0, DOCS_DEN)).toThrow(wrongIndex(3, 0));
+    expect(() => revealDrawerFor(CASHED)(2, DOCS_DEN)).toThrow(wrongIndex(3, 2));
+    expect(() => revealDrawerFor(CASHED)(4, DOCS_DEN)).toThrow(wrongIndex(3, 4));
+  });
+
+  it('refuses a repeat, a skip or an earlier index, and draws nothing for them', () => {
+    const draw = revealDrawerFor(CASHED);
+    expect(draw(3, DOCS_DEN)).toBe(rollAt(3));
+    expect(() => draw(3, DOCS_DEN)).toThrow(wrongIndex(4, 3));
+    expect(() => draw(5, DOCS_DEN)).toThrow(wrongIndex(4, 5));
+    expect(() => draw(1, DOCS_DEN)).toThrow(wrongIndex(4, 1));
+    expect(() => draw(Number.NaN, DOCS_DEN)).toThrow(wrongIndex(4, Number.NaN));
+    // The refused calls did not use index 4 up.
+    expect(draw(4, DOCS_DEN)).toBe(rollAt(4));
+  });
+
+  it('counts a call that threw on a bad den as used, so it cannot be retried', () => {
+    const draw = revealDrawerFor(CASHED);
+    expect(() => draw(3, 0)).toThrow(/^Denominator must be a whole number/);
+    expect(() => draw(3, DOCS_DEN)).toThrow(wrongIndex(4, 3));
+    expect(draw(4, DOCS_DEN)).toBe(rollAt(4));
+  });
+
+  it('draws only for the balloon it was made for', () => {
+    const other = { ...CASHED, balloonIndex: 1 };
+    expect(revealDrawerFor(other)(3, 2 ** 32)).toBe(rollAt(3, 2 ** 32, other));
+    expect(revealDrawerFor(other)(3, 2 ** 32)).not.toBe(rollAt(3, 2 ** 32));
+  });
+
+  it('checks the inputs when it is made, and keeps its own copy', () => {
+    expect(() => revealDrawerFor({ ...CASHED, serverSeed: 'nope' })).toThrow(/Server seed/);
+    expect(() => revealDrawerFor({ ...CASHED, clientSeed: 'my:seed' })).toThrow(/Client seed/);
+    expect(() => revealDrawerFor({ ...CASHED, drawIndex: -1 })).toThrow(/^drawIndex must be/);
+    const inputs = { ...CASHED };
+    const draw = revealDrawerFor(inputs);
+    inputs.nonce = 6;
+    inputs.balloonIndex = 2;
+    inputs.drawIndex = 0;
+    expect(draw(3, DOCS_DEN)).toBe(rollAt(3));
+  });
+
+  it('never puts the server seed in an error message', () => {
+    const messages: string[] = [];
+    const caught = (call: () => unknown): void => {
+      try {
+        call();
+        messages.push('no error');
+      } catch (error) {
+        messages.push(error instanceof Error ? error.message : String(error));
+      }
+    };
+    const secret = `${DOCS.serverSeed.slice(0, 63)}G`;
+    caught(() => revealDrawerFor({ ...CASHED, serverSeed: secret }));
+    const draw = revealDrawerFor(CASHED);
+    caught(() => draw(7, DOCS_DEN));
+    caught(() => draw(3, -1));
+    caught(() => draw(3, DOCS_DEN));
+    expect(messages).toHaveLength(4);
+    for (const message of messages) {
+      expect(message).not.toBe('no error');
+      expect(message).not.toContain(secret.slice(0, 16));
+      expect(message).not.toContain(DOCS.serverSeed.slice(0, 16));
+    }
   });
 });
 

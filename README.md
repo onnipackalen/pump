@@ -6,8 +6,8 @@ wallet around it, and a React frontend.
 Work in progress. Built so far: the engine (game rules and math), the exact RTP
 check and the simulator, the provably fair draw code, the server (wallet, game
 routes and the hammer test), and the game screen with its verify page, which
-play against the real server. It is live at <https://pump-wysj.onrender.com>
-(see "The live site").
+play against the real server. The verify page checks every pump and every
+reveal. It is live at <https://pump-wysj.onrender.com> (see "The live site").
 
 ## Run it locally
 
@@ -157,6 +157,43 @@ To follow the math, read `packages/engine/src/PumpEngine.ts` first (the order
 of play, with the math in short at the top), then `packages/engine/src/math.ts`
 (each formula with a worked example).
 
+## Provably fair
+
+Each pump is decided by one draw: HMAC-SHA256 keyed with the player's server
+seed, over `clientSeed:nonce:balloonIndex:drawIndex:block`, turned into an
+exact roll by rejection sampling. The server seed is shown only as its
+SHA-256 until the player rotates it. After that, every round played with it
+can be checked. `docs/fairness.md` is the recipe for players, with worked
+examples. `packages/engine/test/fair/reference/fair_reference.py` is a
+separate copy in Python, written from that page alone, and the engine tests
+must match its vectors.
+
+**After the round: where it would have popped.** Once a round is over, each
+balloon that was cashed out below its top rung shows where it would have
+popped. The server plays it on with plain pumps (no Patch), using the draws
+its next pumps would have used, starting at its draw count (not its rung),
+until a pump would pop or it reaches its top rung. These draws decide
+nothing and move no money. The verify page works them out again from the
+revealed seed and checks them against the reveal on record and, when this
+browser kept them, the line its screen showed and each balloon's top rung as
+the screen first showed the round. (A reveal stops at the top rung, and the
+record's top comes from the record's own payout cap, so a record with a lower
+cap could carry a shorter reveal that still checks out against itself.) A
+balloon that popped, reached its top or was refunded has no reveal. A round
+that ended before the server stored reveals gets its reveal worked out when
+it is checked, from its by-then public seed.
+
+**Why this keeps "no pop result before the player pumps".** Nothing about a
+pump the player did not make is worked out or sent until the whole round is
+over. The reveal is computed only in the transaction that finishes the round:
+the player's last pump or cash-out, or the 24-hour settle (on the player's
+next request or by the sweep). That is always after every balloon is done,
+and after the engine has accepted the action, so it cannot change any balloon.
+While any balloon is still in play, no answer holds a reveal, and a refused
+request (400 or 409) computes nothing. Once the round is over nothing is left
+to pump, and its server seed and nonce can never be played again, so the
+reveal tells the player nothing they can use.
+
 ## The API
 
 All JSON. The exact shapes are TypeScript types in `packages/contract`.
@@ -167,9 +204,9 @@ All JSON. The exact shapes are TypeScript types in `packages/contract`.
 | `GET /api/session` | Wallet, seeds and the round in progress, so a page refresh restores it. A first visit creates the player with $10,000 and sets the cookie. It is the only request that creates a player, so the screen loads it first. |
 | `GET /api/history?limit=10` | The player's latest finished rounds. |
 | `POST /api/rounds` | Starts a round: `{ difficultyId, betsCents }`, one bet per balloon. Charges the bets. |
-| `POST /api/rounds/:id/pump` | One pump: `{ balloonIndex, expectedDrawIndex, patch }`. With `patch: true` the Patch is bought and the pump made in one step. The answer says `survived`, `saved`, `popped` or `top`. |
-| `POST /api/rounds/:id/cash-out` | Cashes out one balloon: `{ balloonIndex, expectedDrawIndex }`. |
-| `GET /api/rounds/:id/verify` | A finished round with its revealed server seed and every action, to recompute it. 409 until the seed has been rotated. |
+| `POST /api/rounds/:id/pump` | One pump: `{ balloonIndex, expectedDrawIndex, patch }`. With `patch: true` the Patch is bought and the pump made in one step. The answer says `survived`, `saved`, `popped` or `top`. If it ends the round, each balloon cashed out below its top gets `afterRound`: where it would have popped. |
+| `POST /api/rounds/:id/cash-out` | Cashes out one balloon: `{ balloonIndex, expectedDrawIndex }`. If it ends the round, each balloon cashed out below its top gets `afterRound`, as with a pump. |
+| `GET /api/rounds/:id/verify` | A finished round with its revealed server seed, the RTP, ladder and payout cap it was played with, and each balloon's actions, draws and reveal, to recompute it. 409 until the seed has been rotated. |
 | `PUT /api/fairness/client-seed` | Sets the client seed. Never resets the nonce. |
 | `POST /api/fairness/rotate` | Retires the server seed, reveals it, and starts a new one. Refused during a round. |
 
@@ -197,10 +234,11 @@ saved by a Patch uses a draw without moving the rung.
 the player: balloons that were pumped cash out at their current multiplier,
 and bets that were never pumped are handed back. Cashing out at any rung
 returns the RTP, and a bet with no draw on it is simply void, so neither
-changes the RTP. The rule is applied before the player's next request and by a
-sweep every ten minutes. We chose this over forfeiting the bets (unfair to a
-player whose connection dropped) and over leaving rounds open for ever (the
-player could never start another).
+changes the RTP. A balloon cashed out this way gets a reveal like any other.
+The rule is applied before the player's next request and by a sweep every ten
+minutes. We chose this over forfeiting the bets (unfair to a player whose
+connection dropped) and over leaving rounds open for ever (the player could
+never start another).
 
 **The hammer.** `npm run hammer` starts its own server as a separate process
 on a fresh database, has 20 players play at once, and makes every step a burst

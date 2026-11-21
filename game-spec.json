@@ -32,18 +32,19 @@
 
   "rules": {
     "rung": "A balloon at rung k (k = times it has moved up) shows multiplier ladder[k-1] / 100. Rung 0 has no cash-out. A pump saved by a Patch uses a draw but does not change the rung.",
-    "pump": "Pump k (taking the balloon from rung k-1 to rung k) survives with probability V[k-1] / V[k], where V[0] = rtpBp and V[k] = ladder[k-1] * 100. Reduce the fraction to num/den, draw an integer roll uniformly from [0, den), survive if roll < num. One draw per pump; nothing else in the game is random.",
+    "pump": "Pump k (taking the balloon from rung k-1 to rung k) survives with probability V[k-1] / V[k], where V[0] = rtpBp and V[k] = ladder[k-1] * 100. Reduce the fraction to num/den, draw an integer roll uniformly from [0, den), survive if roll < num. One draw per pump. The only other draws are the after-round reveal's (rules.afterRoundReveal), which decide nothing and move no money.",
     "popChanceShown": "1 - V[k] / V[k+1] for the next pump from rung k (display only; the engine compares integers).",
-    "cashOut": "Allowed at rung >= 1. payoutCents = floor(betCents * ladder[k-1] / 100). No draw.",
+    "cashOut": "Allowed at rung >= 1. payoutCents = floor(betCents * ladder[k-1] / 100). The cash-out itself makes no draw.",
+    "afterRoundReveal": "Display only, made once the whole round is over. A balloon that ended cashed on rung r below its top rung T (by the player or by rules.abandon) is played on with plain pumps, no Patch. Let d be its drawIndex at cash-out (Patch saves count, so d >= r). The pump to rung j = r+1, r+2, ... uses drawIndex d + (j - r - 1) and survives with V[j-1] / V[j] reduced, from the round's stored rtpBp and ladder. j >= 2, so rtpBp never enters. Stop at the first roll >= num (outcome popped, reachedRung = j - 1), or when the pump to T survives (outcome top, reachedRung = T). At most T - r draws, never one past T. No reveal for popped, refunded or top-cashed balloons, and none while any balloon of the round is still active. It changes no balloon, moves no money, and is left out of RTP, turnover and pop figures. docs/fairness.md has the player's recipe and two worked examples.",
     "patch": "Available before any pump from rung k >= 1, bought together with that pump as one atomic action (charge and draw in the same request; there is no armed state). It covers exactly that one pump and is spent whether or not the pump pops. priceCents = ceil(betCents * L[k] * (L[k+1] - L[k]) * 100 / (L[k+1] * rtpBp)) with L[k] = ladder[k-1]. BigInt: the numerator can pass 2^53. The balance must cover the price, checked before the draw. If the pump would have popped, the balloon stays at rung k and the next pump is a fresh draw; a new patch for it costs the same.",
     "top": "Reaching the last reachable rung cashes out automatically in the same request.",
     "payoutCap": "A rung is reachable for a bet if and only if betCents * ladder[k-1] <= maxPayoutCents * 100 (exact integer comparison, as CLAUDE.md: rungs where bet * m_k exceeds the cap are locked). The highest reachable rung is that balloon's top. No RTP change because every rung returns RTP by itself. Show the player their top rung before they bet.",
-    "abandon": "As locked in CLAUDE.md: after 24h idle, pumped balloons cash out at their current multiplier and unpumped bets are refunded. Both are RTP-neutral: every cash-out point returns RTP, and a refund involves no draw."
+    "abandon": "As locked in CLAUDE.md: after 24h idle, pumped balloons cash out at their current multiplier and unpumped bets are refunded. Both are RTP-neutral: every cash-out point returns RTP, and a refund involves no draw. A balloon cashed out this way gets an after-round reveal like any other cash-out."
   },
 
   "rng": {
     "bytes": "The seed, nonce and block format is locked in CLAUDE.md (Provably fair) and owned by the fair package. This file only fixes how a roll decides a pump.",
-    "perDraw": "One draw per pump attempt on a balloon; drawIndex counts pumps drawn on that balloon. A patched save consumes a draw, so the retry gets a fresh one.",
+    "perDraw": "One draw per pump attempt on a balloon; drawIndex counts pumps drawn on that balloon. A patched save consumes a draw, so the retry gets a fresh one. After the round, a reveal goes on with the next drawIndex values of the same balloon, starting at its drawIndex (not its rung).",
     "uniformInt": "As in CLAUDE.md: big-endian uint32 words, limit = 2^32 - (2^32 mod den), skip words >= limit, roll = word mod den. Exactly uniform; no float thresholds anywhere.",
     "constraint": "den < 2^32 for every pump (true for any ladder up to 42,949,672x)."
   },
@@ -102,6 +103,11 @@
       { "difficulty": "expert", "rung": 9, "betCents": 2000, "priceCents": 1932990 },
       { "difficulty": "easy", "rung": 1, "betCents": 10000, "rtpBp": 9400, "priceCents": 968 },
       { "difficulty": "easy", "rung": 1, "betCents": 10000, "rtpBp": 9900, "priceCents": 920 }
+    ],
+    "afterRoundReveal": [
+      { "difficulty": "easy", "cashedRung": 1, "drawIndex": 2, "topRung": 24, "firstRevealDrawIndex": 2, "firstRevealChance": { "num": 101, "den": 111 }, "note": "One Patch save, so the reveal starts at draw index 2, not 1." },
+      { "difficulty": "expert", "betCents": 100000, "cashedRung": 5, "drawIndex": 5, "topRung": 6, "maxRevealDraws": 1, "firstRevealChance": { "num": 8, "den": 19 }, "note": "The payout cap locks rung 7 and up, so the reveal stops at rung 6." },
+      { "note": "The same end state gives the same reveal at 9400, 9700 and 9900. Seeded reveals with their rolls are in packages/engine/test/fair/reference/vectors.json." }
     ],
     "topRungForBet": [
       { "difficulty": "medium", "betCents": 100000, "rung": 17, "payoutCents": 9700000 },
