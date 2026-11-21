@@ -147,21 +147,54 @@ body {
 }
 
 /* Upright phones: the stage on top, the panel under the thumb. */
+/*
+ * Upright phones may scroll. When everything fits, the page is still exactly
+ * one screen. When the panel is taller than the room left (three bets on a
+ * small phone), the page grows and scrolls down to it. Before, the panel was
+ * squeezed into a box that scrolled on its own with no scrollbar, and a
+ * swipe on the page did nothing, so Bet looked out of reach after a round.
+ * Sideways scrolling stays off.
+ */
 @media (max-width: 760px) and (orientation: portrait) {
+  html {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  body {
+    overflow: visible;
+  }
+  body,
+  #root {
+    height: auto;
+    min-height: 100%;
+  }
+  .app {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    /* The scene is drawn wider than the screen: clip it sideways only, so
+       the page can't be dragged left and right. */
+    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: visible;
+  }
   .layout {
+    flex: 1 0 auto;
     flex-direction: column;
     padding: 0 8px 8px;
   }
   .stage {
-    min-height: 104px;
+    flex: 1 0 auto;
+    min-height: 240px;
   }
   .controls {
     order: 0;
-    flex: 0 1 auto;
+    flex: none;
     align-self: stretch;
     width: auto;
     min-height: 0;
     max-height: none;
+    overflow: visible;
   }
 }
 
