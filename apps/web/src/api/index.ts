@@ -1,8 +1,10 @@
-import { DemoClient } from '../demo/DemoClient';
 import type { GameClient } from './client';
+import { HttpClient } from './httpClient';
 
 /**
- * The client the app uses. For now that is the in-browser demo, because the
- * server is not built yet. When it is, replace this with the HTTP client.
+ * The client the app uses: the real server.
+ *
+ * (An in-browser stand-in still exists in ../demo for tests of the screen's
+ * own logic. It is not imported here, so it is not part of the built app.)
  */
-export const gameClient: GameClient = new DemoClient();
+export const gameClient: GameClient = new HttpClient();
