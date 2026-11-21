@@ -97,6 +97,17 @@ quietly lose the wallets, the server will not start on a host unless
 other folder that exists, so `DATABASE_PATH` and the disk's mount path are
 changed only in `render.yaml`, both together, never on Render's pages.
 
+Never put an older version of the server back on the live site: not with
+Render's Rollback button, not with "Deploy a specific commit", and not by
+undoing a change on `main` and deploying that. A newer version may have added
+a step to the database that older code cannot follow. On such a database an
+older server fails half way through some actions, and a pump that fails only
+when it would end the round tells the player what that pump would do. From
+this version on the server refuses to start on a database that a newer
+version has changed (`migrate` in `apps/server/src/db/migrations.ts`), so the
+mistake is loud instead of quiet. If something is wrong after a deploy, fix it
+with a new commit and deploy that.
+
 Never delete the service while the site is in use: the wallets are on its
 disk. Render takes a snapshot of the disk once a day and keeps it for a week,
 but that is a last resort, not a backup: restoring one puts the whole disk
