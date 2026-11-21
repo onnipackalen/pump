@@ -1080,9 +1080,11 @@ by difficulty. It opens from settings ("Your results" → Stats) at `#stats`.
   for a real gain. Like the verify page it scrolls inside its own box; the
   game screen still never scrolls.
 
-Checked: 17 server tests, including 40 rounds of real play at RTP 9400,
+Checked: 25 server tests, including 40 rounds of real play at RTP 9400,
 9700 and 9900 where the stats' net equals the wallet's change and the
-wagered and paid-out totals equal the ledger's. In the browser, 150 rounds
+wagered and paid-out totals equal the ledger's, and the real 24-hour rule
+at all three RTPs: a round refunded unplayed shows as nothing at all, and
+after a pump only the pumped balloon counts. In the browser, 150 rounds
 played on a local server: net +$25.74 on the page and in the wallet, the
 best win's Verify button opened that round and it checked out, no console
 errors, no sideways scroll at 375x812 or 320x568.
@@ -1098,6 +1100,11 @@ Turned out wrong, and how it was caught:
   now shrink and wrap only after a thousands comma.
 - One test check ("some round has the top gain") could never fail. Caught
   on reading the test back; it now names the exact round.
+- A new 24-hour test first expected "no best win" for a round where one
+  balloon cashed out at 1.04x and the other bet was refunded. That was the
+  test's mistake: $10.40 back on the $10 really played is a real win; only
+  counting the refunded $5 as stake would make it a loss. Caught when the
+  test failed against the code; the test now expects the win.
 - The browser tool's hover and click did not move the chart's readout,
   which looked like a bug. Real pointer and key events did move it; the
   tool moves the pointer off the chart right after a click.
