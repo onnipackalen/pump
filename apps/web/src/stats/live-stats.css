@@ -6,11 +6,11 @@
  * Where it goes. One rule above all: nothing covers the balloons or the sky
  * above them, where they grow, and the stage never changes size or moves.
  *
- * - Computer (a wide screen at least 560px tall): its own card in the side
+ * - Computer (a wide screen at least 600px tall): its own card in the side
  *   column, under the controls card, as wide as it, resting on the bottom.
- *   It is placed over the layout, not in its row, so the stage keeps its
- *   width; the controls card gets a lower height limit instead, so the two
- *   never overlap (it scrolls inside itself if it ever needs more).
+ *   The controls keep their own height and the card takes the room they
+ *   leave (its line goes first when that is short), so no control is
+ *   pushed out of sight; the stage keeps its exact size and place.
  * - Upright phone or tablet: a strip at the top of the sheet, between the
  *   stage and the bet controls, in the sheet's own flow: it pushes the bet
  *   panel down and scrolls with it, and the sheet keeps its two resting
@@ -20,7 +20,7 @@
  *   lower instead. During a round or auto-play the round panel needs all of
  *   its room, so the strip waits until play stops (useLiveStats leaves it
  *   out, and the button says it is waiting).
- * - Sideways phone, or any wide screen under 560px tall: there is no room
+ * - Sideways phone, or any wide screen under 600px tall: there is no room
  *   beside or under the stage, so the button and the panel are hidden.
  *
  * Colour: the game's own roles (graphics/README.md). Mint only for a real
@@ -136,34 +136,55 @@
 
 /* ------------------------------------------------------------- Computer */
 
-@media (orientation: landscape) and (height >= 560px) {
+@media (orientation: landscape) and (height >= 600px) {
+  /* The side column holds the controls at their own height and the card
+     under them, in the room they leave; the stage spans both rows, so it
+     is exactly as wide and as tall as beside the controls alone. The
+     controls come first: the card gets at most --live-h and at least
+     --live-min (its figures, without the line), and only if even that
+     does not fit do the controls scroll inside themselves. */
   .layout:has(> .live-stats) {
     --live-h: 236px;
-    position: relative;
+    --live-min: 136px;
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-rows: minmax(0, auto) minmax(var(--live-min), 1fr);
   }
-  /* In the side column: the layout's own padding, the controls card's width. */
+  .layout:has(> .live-stats) > .stage {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .layout:has(> .live-stats) > .controls {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  /* Resting on the bottom of the column, as wide as the controls card. */
   .layout > .live-stats {
-    position: absolute;
-    bottom: 12px;
-    left: 12px;
-    width: 320px;
-    height: var(--live-h);
+    container: live-card / size;
+    grid-column: 1;
+    grid-row: 2;
+    align-self: end;
+    height: min(100%, var(--live-h));
     grid-template-rows: auto auto minmax(0, 1fr);
     animation: live-stats-in 160ms ease-out;
   }
-  .layout:has(> .live-stats) > .controls {
-    max-height: calc(100% - var(--live-h) - var(--gap));
+}
+
+/* Squeezed by tall controls: the figures stay, the line goes. */
+@container live-card (height < 150px) {
+  .live-stats .profit-chart {
+    display: none;
   }
 }
 
-@media (orientation: landscape) and (560px <= height <= 720px) {
+@media (orientation: landscape) and (600px <= height <= 720px) {
   .layout:has(> .live-stats) {
     --live-h: 212px;
   }
 }
 
 /* Sideways phones and short windows: no room. */
-@media (orientation: landscape) and (height < 560px) {
+@media (orientation: landscape) and (height < 600px) {
   .topbar .live-opener,
   .layout > .live-stats {
     display: none;
