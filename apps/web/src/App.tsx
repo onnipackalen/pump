@@ -221,7 +221,7 @@ export function App() {
   // Keyboard play. The keyboard's own repeats are ignored: one press is one
   // action, except that holding Space or A keeps pumping (the hold sends
   // each pump after the last answer, like holding a Pump button). The key
-  // coming up ends the hold. Space, P and C wait out the pause after the
+  // coming up ends the hold. Space, Shift+P and C wait out the pause after the
   // controls move to another balloon.
   // While auto-play runs, only Esc (stop) and M (sound) do anything.
   // While settings is open, no key plays the game: Esc closes the sheet.
@@ -258,6 +258,9 @@ export function App() {
           break;
         case 'p':
         case 'P':
+          // A Patch spends money, late on many times the bet, so a stray P
+          // must not buy one: it takes Shift+P.
+          if (!event.shiftKey) break;
           if (!event.repeat && target !== null && !switchPause) game.pump(target, true);
           break;
         case 'c':

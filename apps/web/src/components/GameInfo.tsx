@@ -60,7 +60,8 @@ export function GameInfo({ config, autoPlay }: GameInfoProps) {
 
       <ul className="rules keys">
         <li>
-          <kbd>Space</kbd> pump · <kbd>P</kbd> patch + pump · <kbd>C</kbd> cash out ·{' '}
+          <kbd>Space</kbd> pump · <kbd>Shift</kbd>+<kbd>P</kbd> patch + pump · <kbd>C</kbd> cash
+          out ·{' '}
           <kbd>A</kbd> pump all
         </li>
         <li>Hold Space, A or a Pump button to keep pumping</li>

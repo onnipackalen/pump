@@ -152,7 +152,7 @@ export function RoundControls({
           className="btn btn-two btn-patch"
           disabled={off || patchPrice === null}
           onClick={onPatchPump}
-          title={`Buy a Patch for the next pump${name ? ` of ${name}` : ''}, then pump (P). If it would pop, the Patch is used up and the balloon stays.`}
+          title={`Buy a Patch for the next pump${name ? ` of ${name}` : ''}, then pump (Shift+P). If it would pop, the Patch is used up and the balloon stays.`}
           aria-label={
             name && patchPrice !== null
               ? `Patch + Pump ${name}, ${formatCents(patchPrice)}`
