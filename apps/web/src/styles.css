@@ -557,20 +557,14 @@ summary:focus-visible,
 }
 
 /*
- * The three round buttons differ by shape, not only colour, so none can be
- * taken for another: Pump is solid, Cash out is a plain outline, and
- * Patch + Pump looks like the patch the balloon wears: a stitched (dashed)
- * edge, faint tape stripes and a tape icon.
+ * The three round buttons differ by fill, not only colour, so none can be
+ * taken for another: Pump is solid pearl, Cash out is a plain outline with
+ * nothing inside, and Patch + Pump is a filled panel with the tape icon.
+ * No dashed edge or stripes: those read as "locked", and this button works.
  */
 .btn-patch {
-  border: 1.5px dashed #8a8f9a;
-  background:
-    repeating-linear-gradient(
-      135deg,
-      rgba(244, 242, 238, 0.06) 0 5px,
-      rgba(244, 242, 238, 0) 5px 10px
-    ),
-    var(--panel-raised);
+  border: 1.5px solid #8a8f9a;
+  background: var(--panel-raised);
 }
 
 .btn-patch:hover:not(:disabled) {

@@ -118,8 +118,8 @@ export function RoundControls({
           <span>Cash out</span>
           <strong>{cashOut === null ? '—' : formatCents(cashOut)}</strong>
         </button>
-        {/* Made to look like the patch itself (stitched edge, tape icon), so
-            it can't be taken for Cash out (a plain outline) or Pump (solid). */}
+        {/* A filled panel with the tape icon, so it can't be taken for Cash
+            out (a plain outline) or Pump (solid pearl). */}
         <button
           type="button"
           className="btn btn-two btn-patch"
