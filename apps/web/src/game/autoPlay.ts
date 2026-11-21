@@ -335,6 +335,15 @@ export function describeStop(
   }
 }
 
+/**
+ * What the pump count reaches on a ladder: the multiplier after that many
+ * successful pumps, in hundredths. Null for a count the ladder doesn't have.
+ */
+export function targetMultiplier(ladder: readonly number[], targetPumps: number): number | null {
+  if (!Number.isSafeInteger(targetPumps) || targetPumps < 1) return null;
+  return ladder[targetPumps - 1] ?? null;
+}
+
 /** Whether a bet change field is set to reset or to increase. */
 export type BetChangeKind = BetChange['kind'];
 

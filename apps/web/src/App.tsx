@@ -581,7 +581,8 @@ export function App() {
             {autoOffered && (
               <div hidden={!(panel === 'auto-running' || (panel === 'bet' && mode === 'auto'))}>
                 <AutoPlayPanel
-                  maxPumps={setupDifficulty.ladder.length}
+                  ladder={setupDifficulty.ladder}
+                  difficultyLabel={setupDifficulty.label}
                   roundBetCents={check.totalCents}
                   betsValid={check.betsCents !== null}
                   limits={config.limits}

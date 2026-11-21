@@ -6,6 +6,7 @@ import {
   describeHeld,
   describeStop,
   handCashOutsFor,
+  targetMultiplier,
   totalBetCents,
   type AutoPlayField,
   type AutoPlayForm,
@@ -14,11 +15,13 @@ import {
   type BetLimits,
 } from '../game/autoPlay';
 import type { AutoPlayStatus } from '../game/useAutoPlay';
-import { formatCents, formatSignedCents } from '../money';
+import { formatCents, formatMultiplier, formatSignedCents } from '../money';
 
 interface AutoPlayPanelProps {
-  /** Length of the chosen difficulty's ladder: the most pumps a balloon can take. */
-  readonly maxPumps: number;
+  /** The chosen difficulty's ladder: its length is the most pumps a balloon can take. */
+  readonly ladder: readonly number[];
+  /** The chosen difficulty's name, for screen readers ("on Easy"). */
+  readonly difficultyLabel: string;
   /** Total of the bets in the bet panel, and whether they are all valid. */
   readonly roundBetCents: number;
   readonly betsValid: boolean;
@@ -100,7 +103,8 @@ const ERROR_NAMES: readonly (readonly [AutoPlayField, string])[] = [
  * spelled out in settings, under Game info.
  */
 export function AutoPlayPanel({
-  maxPumps,
+  ladder,
+  difficultyLabel,
   roundBetCents,
   betsValid,
   limits,
@@ -114,9 +118,12 @@ export function AutoPlayPanel({
   onCashOut,
 }: AutoPlayPanelProps) {
   const [form, setForm] = useState<AutoPlayForm>(initialForm);
-  const check = checkAutoPlayForm(form, maxPumps, roundBetCents, betSizing);
+  const check = checkAutoPlayForm(form, ladder.length, roundBetCents, betSizing);
   const { running, stopping, progress, settings, stopReason, bets } = status;
   const firstWrong = ERROR_NAMES.find(([name]) => check.errors[name] !== null);
+  // What the pump count reaches on the chosen difficulty: "= 1.18×".
+  const reach = targetMultiplier(ladder, check.errors.targetPumps === null ? Number(form.targetPumps) : 0);
+  const reachText = reach === null ? null : `= ${formatMultiplier(reach)}`;
 
   const panelRef = useRef<HTMLElement>(null);
   const stopRef = useRef<HTMLButtonElement>(null);
@@ -235,21 +242,39 @@ export function AutoPlayPanel({
             </p>
           )}
           <div className="auto-grid">
-            {FIELDS.map((field) => (
-              <label key={field.name} className="field" title={field.full}>
-                <span className="field-label">{field.label}</span>
-                <input
-                  type="text"
-                  inputMode={field.money ? 'decimal' : 'numeric'}
-                  autoComplete="off"
-                  aria-label={field.full}
-                  value={form[field.name]}
-                  aria-invalid={check.errors[field.name] !== null}
-                  placeholder={field.money ? 'off' : undefined}
-                  onChange={(event) => setForm({ ...form, [field.name]: event.target.value })}
-                />
-              </label>
-            ))}
+            {FIELDS.map((field) => {
+              const reaches = field.name === 'targetPumps' && reachText !== null;
+              return (
+                <label
+                  key={field.name}
+                  className="field"
+                  title={
+                    reaches
+                      ? `${field.full}: ${form.targetPumps.trim()} pumps ${reachText} on ${difficultyLabel}`
+                      : field.full
+                  }
+                >
+                  <span className="field-label">{field.label}</span>
+                  <input
+                    type="text"
+                    inputMode={field.money ? 'decimal' : 'numeric'}
+                    autoComplete="off"
+                    aria-label={field.full}
+                    aria-describedby={reaches ? 'auto-reach' : undefined}
+                    value={form[field.name]}
+                    aria-invalid={check.errors[field.name] !== null}
+                    placeholder={field.money ? 'off' : undefined}
+                    onChange={(event) => setForm({ ...form, [field.name]: event.target.value })}
+                  />
+                  {/* What the count reaches on this difficulty: "3 = 1.18×". */}
+                  {reaches && (
+                    <span className="field-reach" id="auto-reach">
+                      {reachText}
+                    </span>
+                  )}
+                </label>
+              );
+            })}
           </div>
           {betSizing && (
             <div className="auto-sizing">

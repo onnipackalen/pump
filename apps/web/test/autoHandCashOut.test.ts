@@ -350,7 +350,8 @@ describe.each(RTPS)('hand cash-outs against the demo game at RTP %i', (rtpBp) =>
 
 describe('the auto-play panel while it runs: Cash out', () => {
   const base = {
-    maxPumps: GAME_CONFIG.difficulties[0]?.ladder.length ?? 1,
+    ladder: GAME_CONFIG.difficulties[0]?.ladder ?? [],
+    difficultyLabel: 'Easy',
     roundBetCents: 300,
     betsValid: true,
     limits,

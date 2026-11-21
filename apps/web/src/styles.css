@@ -989,6 +989,15 @@ input {
   font-size: 12px;
 }
 
+/* What the pump count reaches on the chosen difficulty: "= 1.18×". */
+.field-reach {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* On win and On loss: a name, Reset or Increase, and the percent. */
 .auto-sizing {
   display: grid;
