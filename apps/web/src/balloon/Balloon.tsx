@@ -18,6 +18,17 @@ import './balloon-app.css';
  */
 const HOSE_PATH = 'M116 295C88 295 100 262 100 227';
 
+/**
+ * The hose lying loose on the floor after a pop: out of the nozzle, down
+ * to the floor, then along it with one soft rise, about as long as the
+ * standing hose. It ends exactly where, and pointing the way, the standing
+ * hose's end lands when that hose is turned by --pb-hose-down
+ * (rotate(-87deg) around the nozzle): at (47.3, 307.4), pointing left. So
+ * the fitting and the torn neck, which turn with the standing hose, sit on
+ * this hose's end, and the fall can hand over to it without a jump.
+ */
+const FLAT_HOSE_PATH = 'M116 295C106 295 103 308.5 94 308.5C84 308.5 80 305.5 70 306C61 306.5 55.3 307.8 47.3 307.4';
+
 /** data-beat values: each is one moment the art can show. */
 export type BalloonBeat =
   | 'press'
@@ -198,11 +209,30 @@ export function Balloon({
         </g>
       </g>
 
+      {/* flat hose: the hose lying loose on the floor after a pop. Hidden
+           until then; the standing hose hands over to it as it lands. */}
+      <g className="pb-hose-flat">
+        <path className="pb-hose-tube" d={FLAT_HOSE_PATH} />
+        <path className="pb-hose-shine" d={FLAT_HOSE_PATH} />
+      </g>
+      {/* floor bits: three small pieces of the burst balloon that stay on
+           the floor after a pop, still. Between the hose's end and the
+           pump, inside this balloon's own slot. Hidden until a pop. */}
+      <g className="pb-floor-bits">
+        <path className="pb-floor-bit" d="M59.5 312.6L61.8 311.2L64.4 311.9L63.6 313.6L60.8 314Z" />
+        <path className="pb-floor-bit" d="M76.4 313.4L78.6 312.1L81.8 312.6L80.9 314.1L77.6 314.3Z" />
+        <path className="pb-floor-bit" d="M101.8 312.4L103.5 311.2L106.3 311.6L105.6 313.2L103 313.4Z" />
+      </g>
+
       {/* hose: from the pump into the neck. It curls back to the pump on a
            cash-out and drops to the floor on a pop. */}
       <g className="pb-hose">
-        <path className="pb-hose-tube" d={HOSE_PATH} />
-        <path className="pb-hose-shine" d={HOSE_PATH} />
+        {/* stand: the hose's tube and shine, faded as one, so the shine keeps
+             its own strength. After a pop the lying hose shows instead. */}
+        <g className="pb-hose-stand">
+          <path className="pb-hose-tube" d={HOSE_PATH} />
+          <path className="pb-hose-shine" d={HOSE_PATH} />
+        </g>
         {/* air: the pocket of air that runs up the hose on each tap. It is the
              hose itself swelling: short, thick pieces of the hose's own line,
              stacked from long and thin to short and fat, so together they
@@ -234,12 +264,22 @@ export function Balloon({
           <path className="pb-air-shine" d={HOSE_PATH} />
         </g>
         <rect className="pb-hose-end" x="96" y="221" width="8" height="7" rx="2" />
-        {/* remnant: the pop mark. A torn scrap of rubber still stuck over the
-             end of the hose, so it drops to the floor with it. Hidden until
-             a pop. It reaches only 8 units past the hose end: on the floor
-             that is the edge of this balloon's own slot, and the next pump
-             stands just beyond it. */}
-        <path className="pb-remnant" d="M96 230L94 222L93 216L97 218.5L99 214L102 218L105 213.5L107 218L111 215.5L112 222L108.5 225L111 230L105 229L104 232Z" />
+        {/* remnant: the pop mark. The balloon's torn neck, still on the end
+             of the hose: its rolled lip and three ragged flaps of rubber,
+             in a dull shade of the balloon's own colour. It drops to the
+             floor with the hose. Drawn on the standing hose, so "up" here
+             is along the floor once it lies down, and the flaps lean the
+             way that becomes "down": the long one lies on the floor, the
+             short one sticks up a little. Hidden until a pop. It reaches
+             only 8 units past the hose end: on the floor that is the edge
+             of this balloon's own slot, and the next pump stands just
+             beyond it. */}
+        <g className="pb-remnant">
+          <path className="pb-torn" d="M95.2 221.2L93.6 217.6L91.2 215.4L92.9 214.6L91.8 213.2L94.6 214.3L96.6 216.8L97.6 220.6Z" />
+          <path className="pb-torn" d="M98.4 220.6L98.2 216.8L97.6 214.2L99.3 215.1L100.1 213.4L101 215.3L102.4 214.6L101.8 217.6L101.6 220.6Z" />
+          <path className="pb-torn" d="M102.6 220.8L104 218.2L104.6 216.4L106.2 217.2L106.9 215.9L106.6 218.6L105.4 220.9Z" />
+          <ellipse className="pb-torn" cx="100" cy="221.3" rx="4.8" ry="1.9" />
+        </g>
       </g>
 
       {/* float: the balloon. Lifts and fades on cash-out. */}

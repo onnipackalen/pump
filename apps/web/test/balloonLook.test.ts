@@ -121,10 +121,34 @@ describe('a pop stays quiet', () => {
     expect(hidden).not.toContain('.pb-remnant');
   });
 
-  it('draws the scrap in a grey that stands out from the hose it lies on', () => {
-    expect(rule(css, '.pump-balloon .pb-remnant')).toContain('fill: var(--pb-scrap);');
+  it('draws the torn neck in a darker shade of the balloon colour, with an edge that stands out', () => {
+    // The user chose (2026-11-20) a torn neck in each balloon's own colour
+    // over a grey scrap. The flying pieces stay grey (above).
+    const remnant = rule(css, '.pump-balloon .pb-remnant');
+    expect(remnant).toContain('fill: var(--pb-torn);');
+    expect(remnant).toContain('stroke: var(--pb-torn-edge);');
     const hose = /\.pb-hose-tube \{[^}]*stroke: (#[0-9a-f]{6});/.exec(css)?.[1] ?? '';
-    expect(contrast(token('--pb-scrap'), hose)).toBeGreaterThanOrEqual(3);
+    const stage = /--stage: (#[0-9a-f]{6});/.exec(
+      readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8'),
+    )?.[1] ?? '';
+    const luminance = (hex: string): number => contrast(hex, '#000000');
+    const bases = balloonColours();
+    [1, 2, 3].forEach((slot, i) => {
+      // Slot 1 is the default on .pump-balloon; 2 and 3 have their own rules.
+      const sheet =
+        slot === 1 ? css : css.slice(css.lastIndexOf(`.pump-balloon[data-slot="${slot}"] {\n  /*`));
+      const torn = new RegExp(`--pb-torn: (#[0-9a-f]{6});`).exec(sheet)?.[1] ?? '';
+      const edge = new RegExp(`--pb-torn-edge: (#[0-9a-f]{6});`).exec(sheet)?.[1] ?? '';
+      expect(contrast(edge, hose)).toBeGreaterThanOrEqual(3);
+      expect(contrast(edge, stage)).toBeGreaterThanOrEqual(9);
+      // Darker than the balloon's own colour: a loss is never brighter.
+      expect(luminance(torn)).toBeLessThan(luminance(bases[i] ?? ''));
+    });
+  });
+
+  it('keeps the pump number at full strength after a pop', () => {
+    // It is how players tell balloons apart; dimmed, the pump looked off.
+    expect(css).not.toMatch(/\[data-beat="popped"\]\)? \.pb-tag \{[^}]*opacity/);
   });
 });
 

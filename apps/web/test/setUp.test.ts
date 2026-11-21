@@ -66,6 +66,16 @@ describe('the set-up in balloon.css', () => {
       'transform: var(--pb-hose-down);',
     );
     expect(transformAt(keyframes('pb-hose-up'), '0%')).toBe('var(--pb-hose-down)');
+    // ... and what shows there is the lying hose, not the standing one:
+    // the set-up starts with exactly that and hands over to the standing one.
+    expect(rule('.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-hose-stand')).toContain(
+      'opacity: 0;',
+    );
+    expect(keyframes('pb-hose-pick-up')).toMatch(/0% \{\s*opacity: 0;/);
+    expect(rule('.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) :is(.pb-hose-flat, .pb-floor-bits)')).toContain(
+      'opacity: 1;',
+    );
+    expect(keyframes('pb-hose-put-away')).toMatch(/from \{\s*opacity: 1;/);
     // ... after a cash-out it is shrunk back to the pump.
     const cashed = /transform: ([^;]+);/.exec(
       rule('.pump-balloon:is([data-beat="cashout"], [data-beat="cashed"]) .pb-hose'),
@@ -80,8 +90,9 @@ describe('the set-up in balloon.css', () => {
     for (const selector of [
       '.pump-balloon[data-setup="popped"] .pb-hose',
       '.pump-balloon[data-setup="cashed"] .pb-hose',
-      '.pump-balloon[data-setup="popped"] .pb-remnant',
-      '.pump-balloon[data-setup="popped"] .pb-tag',
+      '.pump-balloon[data-setup="popped"] .pb-hose-flat',
+      '.pump-balloon[data-setup="popped"] .pb-hose-stand',
+      '.pump-balloon[data-setup="popped"] :is(.pb-remnant, .pb-floor-bits)',
       '.pump-balloon[data-setup] .pb-float',
     ]) {
       // "backwards" shows the start pose from the first frame; nothing is
@@ -101,9 +112,62 @@ describe('the set-up in balloon.css', () => {
   it('keeps the air pocket in the hose layer, so a pump during the set-up rides the moving hose', () => {
     const hose = art.indexOf('<g className="pb-hose">');
     const pocket = art.indexOf('<g className="pb-air">');
-    const hoseEnd = art.indexOf('<path className="pb-remnant"');
+    const hoseEnd = art.indexOf('<g className="pb-remnant">');
     expect(hose).toBeGreaterThan(0);
     expect(pocket).toBeGreaterThan(hose);
     expect(pocket).toBeLessThan(hoseEnd);
+  });
+});
+
+describe('the popped picture in Balloon.tsx', () => {
+  /** The numbers of a path constant in Balloon.tsx. */
+  const pathNumbers = (name: string): number[] => {
+    const found = new RegExp(`const ${name} =\\s*'([^']+)'`).exec(art);
+    if (!found?.[1]) throw new Error(`no ${name}`);
+    return [...found[1].matchAll(/-?\d+(\.\d+)?/g)].map((m) => Number(m[0]));
+  };
+  const angle = Number(/--pb-hose-down: rotate\((-?[\d.]+)deg\)/.exec(css)?.[1]);
+  /** A point of the standing hose, turned by --pb-hose-down around the nozzle. */
+  const turned = (x: number, y: number): [number, number] => {
+    const [nx, ny] = [116, 295];
+    const r = (angle * Math.PI) / 180;
+    return [
+      nx + (x - nx) * Math.cos(r) - (y - ny) * Math.sin(r),
+      ny + (x - nx) * Math.sin(r) + (y - ny) * Math.cos(r),
+    ];
+  };
+
+  it('lays the hose so its end is where the fallen standing hose ends, pointing the same way', () => {
+    // The fitting and the torn neck turn with the standing hose; the lying
+    // hose must end right under them, or they would float beside it.
+    const stand = pathNumbers('HOSE_PATH');
+    const flat = pathNumbers('FLAT_HOSE_PATH');
+    const [ex, ey] = turned(stand[stand.length - 2] ?? 0, stand[stand.length - 1] ?? 0);
+    const [fx, fy] = [flat[flat.length - 2] ?? 0, flat[flat.length - 1] ?? 0];
+    expect(Math.hypot(ex - fx, ey - fy)).toBeLessThan(0.3);
+    // Direction at the end: from the last control point to the end point.
+    const [cx, cy] = turned(stand[stand.length - 4] ?? 0, stand[stand.length - 3] ?? 0);
+    const [gx, gy] = [flat[flat.length - 4] ?? 0, flat[flat.length - 3] ?? 0];
+    const along = (a: number, b: number) => Math.atan2(b, a);
+    const diff = Math.abs(along(ex - cx, ey - cy) - along(fx - gx, fy - gy));
+    expect(diff).toBeLessThan((5 * Math.PI) / 180);
+    // Both start at the nozzle.
+    expect(flat.slice(0, 2)).toEqual(stand.slice(0, 2));
+  });
+
+  it('keeps the floor bits on the floor, between the hose end and the pump', () => {
+    const bits = [...art.matchAll(/className="pb-floor-bit" d="([^"]+)"/g)].map((m) => m[1] ?? '');
+    expect(bits.length).toBeGreaterThanOrEqual(2);
+    expect(bits.length).toBeLessThanOrEqual(3);
+    const flat = pathNumbers('FLAT_HOSE_PATH');
+    const hoseEnd = flat[flat.length - 2] ?? 0;
+    for (const d of bits) {
+      const n = [...d.matchAll(/-?\d+(\.\d+)?/g)].map((m) => Number(m[0]));
+      for (let i = 0; i < n.length; i += 2) {
+        expect(n[i]).toBeGreaterThan(hoseEnd);
+        expect(n[i]).toBeLessThan(116); // the nozzle: the pump starts here
+        expect(n[i + 1]).toBeGreaterThan(310); // on the floor, in front of the hose
+      }
+    }
   });
 });
