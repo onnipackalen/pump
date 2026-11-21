@@ -15,19 +15,27 @@ import type { BalloonView, RoundView } from '../api/contract';
  * waits for the set-up, and a pump during it is fine (balloon.css).
  */
 
-/** How the balloon that was in a slot before ended. */
-export type SetUpFrom = 'popped' | 'cashed';
+/**
+ * What was in a slot before: how its balloon ended, or "idle", the
+ * picture before any bet (the hose on the floor, no balloon).
+ */
+export type SetUpFrom = 'idle' | 'popped' | 'cashed';
 
 /**
  * For each slot of `next`: how the balloon in the same slot of `previous`
- * ended, when `next` is a new round that replaces it on screen. Empty when
- * there is no earlier round on screen or `next` is the same round.
+ * ended, when `next` is a new round that replaces it on screen. With no
+ * earlier round, "idle" for every slot if the picture before any bet was on
+ * screen (`idleShown`). Empty when `next` is the same round, or when
+ * nothing was on screen before it (a round restored after a page load).
  */
 export function setUpFrom(
   previous: RoundView | null,
   next: RoundView | null,
+  idleShown = false,
 ): readonly (SetUpFrom | undefined)[] {
-  if (!previous || !next || previous.id === next.id) return [];
+  if (!next) return [];
+  if (!previous) return idleShown ? next.balloons.map(() => 'idle') : [];
+  if (previous.id === next.id) return [];
   return next.balloons.map((balloon) => {
     const before = previous.balloons[balloon.index]?.status;
     return before === 'popped' || before === 'cashed' ? before : undefined;
@@ -57,18 +65,42 @@ export function balloonSetUp(
 /**
  * setUpFrom for the round on screen, kept for as long as that round is on
  * screen. The round object changes on every answer; only a new round id
- * starts a new set-up. A round restored after a page refresh gets none:
- * nothing was on screen before it.
+ * starts a new set-up. `idleShown`: the picture before any bet is on screen
+ * now (no round, not loading). A round restored after a page load gets no
+ * set-up: only the loading message was on screen before it.
  */
-export function useSetUpFrom(round: RoundView | null): readonly (SetUpFrom | undefined)[] {
+export function useSetUpFrom(
+  round: RoundView | null,
+  idleShown: boolean,
+): readonly (SetUpFrom | undefined)[] {
   const [shown, setShown] = useState<{
     readonly round: RoundView | null;
+    readonly idleShown: boolean;
     readonly from: readonly (SetUpFrom | undefined)[];
-  }>({ round, from: [] });
-  if (round === shown.round) return shown.from;
+  }>({ round, idleShown, from: [] });
+  if (round === shown.round && idleShown === shown.idleShown) return shown.from;
   // The round changed since the last render. React's way to keep a value
   // derived from the previous render: set it during this one.
-  const from = round !== null && round.id === shown.round?.id ? shown.from : setUpFrom(shown.round, round);
-  setShown({ round, from });
+  const from =
+    round !== null && round.id === shown.round?.id
+      ? shown.from
+      : setUpFrom(shown.round, round, shown.idleShown);
+  setShown({ round, idleShown, from });
   return from;
+}
+
+/**
+ * The first pump's state for a balloon's art (Balloon's `first`): the
+ * small flat balloon lies on the floor until its first pump; the first
+ * pump that holds lifts it and blows it up; one that pops it pops it on
+ * the floor. Read from the balloon alone, so a round restored after a page
+ * load shows the same picture.
+ */
+export function balloonFirst(balloon: BalloonView): 'floor' | 'lift' | 'floor-popped' | undefined {
+  if (balloon.rung === 0) {
+    if (balloon.status === 'active') return 'floor';
+    if (balloon.status === 'popped') return 'floor-popped';
+    return undefined;
+  }
+  return balloon.status === 'active' && balloon.rung === 1 ? 'lift' : undefined;
 }

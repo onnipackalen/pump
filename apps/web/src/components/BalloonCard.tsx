@@ -4,7 +4,7 @@ import { Balloon, balloonSize, type BalloonBeat } from '../balloon/Balloon';
 import { afterRoundLine, twoLineChars } from '../game/afterRound';
 import type { Beat } from '../game/useGame';
 import { balloonTension } from '../game/risk';
-import { balloonSetUp, type SetUpFrom } from '../game/setUp';
+import { balloonFirst, balloonSetUp, type SetUpFrom } from '../game/setUp';
 import { HoldButton } from './HoldButton';
 import type { WinTier } from '../game/winTier';
 import { formatCents, formatMultiplier } from '../money';
@@ -288,6 +288,7 @@ export function BalloonCard({
           scale={cardScale(balloon)}
           beat={balloonBeat(balloon, beat, pending)}
           setUp={balloonSetUp(balloon, setUp)}
+          first={balloonFirst(balloon)}
           // How tense its next pump is within this balloon's own range of
           // pop chances; the game's press length reads the same number.
           strain={balloonTension({ rtpBp, ladder }, balloon)}
@@ -331,7 +332,9 @@ export function PreviewCard({ slot, betCents }: PreviewCardProps) {
   return (
     <article className="slot" data-status="preview" aria-label={`Balloon ${slot}`}>
       <div className="balloon-box">
-        <Balloon slot={slot} scale={0.45} />
+        {/* Before any bet: the pump with its hose on the floor, no balloon.
+             The balloon goes on when the bet is placed. */}
+        <Balloon slot={slot} scale={0.45} idle />
       </div>
       <SlotLabel main={betCents === null ? '—' : formatCents(betCents)} sub="" />
       <SlotAction slot={slot} show={false} onPump={() => undefined} onPumpHold={() => undefined} />
