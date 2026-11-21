@@ -10,6 +10,10 @@
  *
  * Tiers are multiples of the round's total stake, the way slots set their
  * big-win levels by multiples of the bet. Money is compared in integer cents.
+ *
+ * A refunded balloon is left out of everything here. Its bet was handed back
+ * because the round was left for 24 hours before it was ever pumped: no draw
+ * was made on it, so it is a void bet, not money spent and not a result.
  */
 
 import type { RoundView } from '../api/contract';
@@ -19,13 +23,27 @@ export type WinTier = 1 | 2 | 3;
 /** Payout as a multiple of total stake at which tiers 2 and 3 start. */
 export const WIN_TIER_MULTIPLES = { tier2: 2, tier3: 10 } as const;
 
-/** What the round cost: every bet plus every Patch. */
+/** What the round cost: every bet that was played plus every Patch. */
 export function roundStakeCents(round: RoundView): number {
-  return round.balloons.reduce((sum, b) => sum + b.betCents + b.patchesCents, 0);
+  return round.balloons.reduce(
+    (sum, b) => (b.status === 'refunded' ? sum : sum + b.betCents + b.patchesCents),
+    0,
+  );
 }
 
+/** What the round paid out. A refund is not a payout. */
 export function roundPayoutCents(round: RoundView): number {
-  return round.balloons.reduce((sum, b) => sum + b.payoutCents, 0);
+  return round.balloons.reduce((sum, b) => (b.status === 'refunded' ? sum : sum + b.payoutCents), 0);
+}
+
+/** Bets handed back unplayed (void), for showing next to the result. */
+export function roundRefundedCents(round: RoundView): number {
+  return round.balloons.reduce((sum, b) => (b.status === 'refunded' ? sum + b.betCents : sum), 0);
+}
+
+/** What the round did to the player's money: payout minus played bets and Patches. */
+export function roundNetCents(round: RoundView): number {
+  return roundPayoutCents(round) - roundStakeCents(round);
 }
 
 /** The win tier of a finished round, or null when it is not a real gain. */
