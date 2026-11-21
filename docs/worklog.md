@@ -2066,3 +2066,75 @@ What went wrong on the way, and how it was caught:
 
 Not checked: Safari and a real iPhone, as before. The slide was measured
 in Chromium by stepping its animations, not watched on a phone.
+## 2026-11-20: live stats beside the game
+
+Built on `live-stats`: a chart button in the top bar, next to the session
+net, opens this visit's Profit, Wagered, Wins, Losses and profit line,
+with Reset and Close. Closed at the start of every visit, kept in memory
+only (a refresh starts it afresh, as Stake's does).
+
+- The figures come from `stats/liveTally.ts`, pure and tested: a round is
+  added once by its id, refunded bets are left out as on the stats page,
+  a round of refunds only is not a round, Patches count as wagered, and a
+  round that breaks even is neither a win nor a loss. Reset keeps the ids,
+  so a round counted before it can't come back.
+- A round counts when the screen shows its end (the round as drawn, with
+  a pop, top or cash-out beat), so nothing shows before the balloon does,
+  and only if it was seen in play on this screen: a round closed by the
+  24-hour rule while the player was away is left out.
+- Computer: its own card in the side column under the controls, laid over
+  the layout so the stage keeps its size. Upright phone: the top of the
+  sheet, pushing the bet panel down, short enough that Bet stays in sight;
+  it steps aside in a round and during auto-play, when the round panel
+  needs all the room. Sideways phones and windows under 560px tall: no
+  room, so the button is hidden.
+- The stats page's chart got a `compact` prop instead of a copy.
+
+What went wrong, and how it was caught:
+- `liveStats.ts` and `LiveStats.tsx` are one name on macOS's disk; the
+  compiler picked up the wrong file. Caught by `npm run typecheck`; the
+  tally module is `liveTally.ts` now.
+- The opener first took a React ref through the hook's result object;
+  the React lint rule flagged every read of that object as a ref read
+  during render. Caught by `npm run lint`; the opener is found by its id.
+- The live check could not be done: the `live-stats` server was started
+  before this worktree had a build, so it serves the API only (its log
+  says so, and the page is a 404). It reads the build folder only when it
+  starts, and stopping it was not allowed from this session.
+
+## 2026-11-21: live stats, review fixes
+
+Three reviews of the live stats branch (money logic, the live screen,
+trying to break it). Fixed:
+- A round now counts once it shows as finished, after being seen in play,
+  unless it came to the screen finished in a refusal (`endedElsewhere` in
+  useGame: the 24-hour rule, or an end elsewhere). It no longer needs a
+  pop, top or cash-out beat, which goes back to idle after 1.5 s: a round
+  whose last answer was lost could be missed for good.
+- A round that leaves the screen before its end shows (its answer lost
+  twice, then the catch-up finds no round in play) is counted from its
+  line in the history list, unless the line shows the 24-hour rule (a
+  refund, or a round that lasted a day). Live stats and the session net
+  agreed to the cent after both lost-answer cases, played on the server.
+- Upright phone: during a round or auto-play the strip is left out (the
+  round panel needs all the room), and the button now says so: unlit,
+  unavailable, "Live stats after this round". Before, a tap lit it and
+  showed nothing.
+- Upright phone: the strip has a fixed height and the line takes what the
+  figures leave, so six-figure amounts no longer push Bet off the screen.
+- Computer: with the card open the layout is a grid; the controls keep
+  their own height and the card takes the room left. Before, a fixed card
+  cut the Manual/Auto toggle at 1024x560, and the auto form with three
+  balloons at 1440x730, 1280x720 and 1024x768. No card under 600px tall.
+- The small chart shows no "$0.00" twice and no lone dot before a round.
+
+What went wrong, and how it was caught:
+- The beat rule was the first version's own choice; the money review
+  found the 1.5 s gap by feeding a held round through `shownRound` by hand.
+  Tests now run `shownRound` into `watchShown` for that case.
+- The auto form with three balloons being cut was wider than the review
+  said: found by measuring every control against the controls card at
+  eight window sizes in four panel states.
+- The `live-stats` server still serves the API only, so the live checks
+  ran in a headless Chrome with no port, the page files served from
+  `apps/web/dist` and every /api call going to that server.

@@ -32,7 +32,9 @@ import { useMotionSetting } from './motion';
 import { shownReveals } from './verify/shownReveals';
 import { cuesFor } from './sound/cues';
 import { soundBoard } from './sound/SoundBoard';
+import { LiveStats, LiveStatsOpener } from './stats/LiveStats';
 import { StatsPage } from './stats/StatsPage';
+import { useLiveStats } from './stats/useLiveStats';
 
 const config = GAME_CONFIG;
 
@@ -169,6 +171,11 @@ export function App() {
   // What the panel shows: Stop while auto-play runs, the round's buttons
   // during a round played by hand, and the bet otherwise.
   const panel = autoRunning ? 'auto-running' : roundActive ? 'round' : 'bet';
+  // This visit's live stats, counted from the game as the screen shows it.
+  const liveStats = useLiveStats(
+    state,
+    panel === 'auto-running' ? 'auto-play' : panel === 'round' ? 'round' : null,
+  );
   // The balloons still in play in a round played by hand.
   const live =
     panel === 'round' && round
@@ -403,6 +410,13 @@ export function App() {
               <span title="Time played this session">{formatElapsed(sessionMs)}</span>
             </span>
           </div>
+          {/* Live stats opens from here, next to the session net it spells
+              out. The top bar is on screen at every size and in every state
+              (betting, in a round, during auto-play), so the button is
+              always in reach, yet away from Bet, Pump and Cash out, where a
+              stray tap costs money. Only on the game: the stats and verify
+              pages have no room for the panel. */}
+          {view === 'game' && <LiveStatsOpener live={liveStats} />}
           <SettingsMenu open={settingsOpen} onOpenChange={setSettingsOpen}>
             <div className="card settings-row">
               <span>Sound</span>
@@ -544,6 +558,11 @@ export function App() {
             </div>
           )}
         </section>
+
+        {/* Live stats: between the stage and the controls, so on an upright
+            phone it is the top of the sheet. Where it sits at each size is
+            in stats/live-stats.css. */}
+        {liveStats.shown && <LiveStats live={liveStats} />}
 
         {state.phase !== 'loading' && (
           <aside className="controls" aria-label="Controls">

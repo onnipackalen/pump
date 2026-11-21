@@ -6,6 +6,13 @@ import { CHART_HEIGHT, CHART_WIDTH, nearestIndex, profitLine } from './profitLin
 interface ProfitChartProps {
   /** The running net after each round, oldest first, as the server sends it. */
   readonly profit: readonly ProfitPoint[];
+  /**
+   * The small chart in the live stats panel: no line of round numbers under
+   * it, and the net of a pointed-at round shows over the chart's corner only
+   * while pointing (the panel shows the latest net already). Its height
+   * comes from the panel.
+   */
+  readonly compact?: boolean;
 }
 
 /**
@@ -15,7 +22,7 @@ interface ProfitChartProps {
  * at the chart, or using the arrow keys on it, shows the net after that
  * round; otherwise it shows the latest.
  */
-export function ProfitChart({ profit }: ProfitChartProps) {
+export function ProfitChart({ profit, compact = false }: ProfitChartProps) {
   const line = useMemo(() => profitLine(profit), [profit]);
   const [picked, setPicked] = useState<number | null>(null);
   const clipId = useId();
@@ -47,19 +54,31 @@ export function ProfitChart({ profit }: ProfitChartProps) {
     setPicked(Math.max(0, Math.min(lastIndex, to)));
   };
 
+  // The small chart on a line that has not moved (no rounds yet, or only
+  // rounds that broke even): no "$0.00" twice beside it, and no dot until a
+  // round is on it. The stats page never draws a line with no rounds.
+  const flat = compact && line.highCents === line.lowCents;
+  const dot = !compact || last.round > 0;
+
   const description =
-    `Net after each round, rounds 1 to ${String(last.round)}. ` +
-    `Highest ${formatSignedCents(line.highCents)}, lowest ${formatSignedCents(line.lowCents)}, ` +
-    `now ${formatSignedCents(last.netCents)}.`;
+    last.round === 0
+      ? 'No rounds yet.'
+      : `Net after each round, rounds 1 to ${String(last.round)}. ` +
+        `Highest ${formatSignedCents(line.highCents)}, lowest ${formatSignedCents(line.lowCents)}, ` +
+        `now ${formatSignedCents(last.netCents)}.`;
 
   return (
-    <figure className="profit-chart">
-      <p className="profit-readout">
-        <span className="muted">{shown.round === 0 ? 'Start' : `Round ${String(shown.round)}`}</span>
-        <span className={shown.netCents > 0 ? 'win' : undefined}>
-          {formatSignedCents(shown.netCents)}
-        </span>
-      </p>
+    <figure className={compact ? 'profit-chart profit-chart-compact' : 'profit-chart'}>
+      {(!compact || picked !== null) && (
+        <p className="profit-readout">
+          <span className="muted">
+            {shown.round === 0 ? 'Start' : `Round ${String(shown.round)}`}
+          </span>
+          <span className={shown.netCents > 0 ? 'win' : undefined}>
+            {formatSignedCents(shown.netCents)}
+          </span>
+        </p>
+      )}
       <div
         className="profit-plot"
         role="img"
@@ -93,20 +112,30 @@ export function ProfitChart({ profit }: ProfitChartProps) {
           <polyline className="profit-line" points={path} />
         </svg>
         {/* The dot is HTML so it stays round however the chart is stretched. */}
-        <span
-          className="profit-dot"
-          style={{
-            left: `${String((shown.x / CHART_WIDTH) * 100)}%`,
-            top: `${String((shown.y / CHART_HEIGHT) * 100)}%`,
-          }}
-        />
-        <span className="profit-axis profit-axis-high">{formatSignedCents(line.highCents)}</span>
-        <span className="profit-axis profit-axis-low">{formatSignedCents(line.lowCents)}</span>
+        {dot && (
+          <span
+            className="profit-dot"
+            style={{
+              left: `${String((shown.x / CHART_WIDTH) * 100)}%`,
+              top: `${String((shown.y / CHART_HEIGHT) * 100)}%`,
+            }}
+          />
+        )}
+        {!flat && (
+          <>
+            <span className="profit-axis profit-axis-high">
+              {formatSignedCents(line.highCents)}
+            </span>
+            <span className="profit-axis profit-axis-low">{formatSignedCents(line.lowCents)}</span>
+          </>
+        )}
       </div>
-      <div className="profit-x muted">
-        <span>Start</span>
-        <span>Round {last.round}</span>
-      </div>
+      {!compact && (
+        <div className="profit-x muted">
+          <span>Start</span>
+          <span>Round {last.round}</span>
+        </div>
+      )}
     </figure>
   );
 }
