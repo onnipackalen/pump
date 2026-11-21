@@ -282,4 +282,16 @@ describe('the bet panel', () => {
       );
     });
   });
+
+  it('stacks the dot under the name in the button\'s own flow, so it cannot touch the letters', () => {
+    // Placed absolutely, a fixed gap from the bottom, it ran into the "y"
+    // of Easy and the "p" of Expert once short screens shrank the button.
+    const button = /\.segment:has\(> \.level-dot\) \{([^}]*)\}/.exec(pageCss)?.[1] ?? '';
+    const dot = /\.level-dot \{([^}]*)\}/.exec(pageCss)?.[1] ?? '';
+    expect(button).toMatch(/display: flex;/);
+    expect(button).toMatch(/flex-direction: column;/);
+    expect(button).toMatch(/gap: [1-9]/);
+    expect(dot).toMatch(/order: 1;/);
+    expect(button + dot).not.toMatch(/position: absolute/);
+  });
 });
