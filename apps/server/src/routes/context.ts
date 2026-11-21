@@ -68,7 +68,11 @@ export function identify(context: RouteContext, request: FastifyRequest): string
   const { players, game } = context.services;
   const player = players.find(request.cookies[PLAYER_COOKIE]);
   if (!player) {
-    throw new ApiError('no_session', 'Load the game first: this request has no player yet.');
+    // The game screen shows these words to the player as they are.
+    throw new ApiError(
+      'no_session',
+      'Your game session was not found. Reload the page to start a new one. The game needs cookies to work.',
+    );
   }
   game.settleIfAbandoned(player.id);
   return player.id;

@@ -16,6 +16,13 @@ import type {
 
 type Method = 'GET' | 'POST' | 'PUT';
 
+/**
+ * How long one request may take. The server answers in a few milliseconds, so
+ * a request still open after this long is stuck. Giving up is safe: the screen
+ * sends it again with the same key, and the server applies it once.
+ */
+const REQUEST_LIMIT_MS = 10_000;
+
 interface CallOptions {
   /** Sent as JSON. Left out, the request has no body at all. */
   readonly body?: object;
@@ -48,8 +55,10 @@ function refusalIn(json: unknown): ApiErrorBody | null {
  *    creates a player. Every other call waits for it.
  * 2. A request that changes something carries the idempotency key the screen
  *    made for that action. A retry reuses the key, so it is applied once.
- * 3. If the cookie has gone (cleared, or the server's data was reset), the
- *    session is opened again and the request is tried once more.
+ * 3. A request never quietly becomes another player's. If the cookie has gone
+ *    (cleared, or the server's data was reset) the server refuses with
+ *    `no_session`, and that refusal is passed on as it is. Only loading the
+ *    session, which a page reload does, starts a new player.
  */
 export class HttpClient implements GameClient {
   readonly isDemo = false;
@@ -57,6 +66,8 @@ export class HttpClient implements GameClient {
   private readonly send: typeof fetch;
   /** The session load that everything else waits for. */
   private opening: Promise<unknown> | null = null;
+  /** A session load that has been sent and not answered yet. */
+  private loading: Promise<SessionView> | null = null;
 
   /** `send` is the browser's fetch unless a test hands in its own. */
   constructor(send: typeof fetch = (input, init) => fetch(input, init)) {
@@ -77,35 +88,49 @@ export class HttpClient implements GameClient {
           ...(options.key === undefined ? {} : { 'idempotency-key': options.key }),
         },
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+        signal: AbortSignal.timeout(REQUEST_LIMIT_MS),
       });
     } catch {
       throw new NetworkFailure('Could not reach the game server. Check your connection.');
     }
 
-    let json: unknown = null;
+    let json: unknown;
+    let isJson = true;
     try {
       json = await response.json();
     } catch {
-      // Not JSON: handled below as "no proper answer".
+      // Not JSON, or the answer stopped half way.
+      isJson = false;
     }
     // The server's answers follow the shared contract; that is what T names.
-    if (response.ok) return json as T;
+    if (response.ok && isJson) return json as T;
 
-    const refusal = refusalIn(json);
+    const refusal = isJson ? refusalIn(json) : null;
     if (refusal) throw new ApiFailure(refusal);
-    // Something between us and the game answered (a proxy, a crash page).
-    // The request may or may not have arrived, so it is safe to retry with
-    // the same key.
+    // Something between us and the game answered (a proxy, a crash page, a
+    // plain web page where the API should be). The request may or may not
+    // have arrived, so it is safe to retry with the same key.
     throw new NetworkFailure(`The game server did not answer properly (${String(response.status)}).`);
   }
 
   private openSession(): Promise<SessionView> {
+    // A first visit has no cookie yet, so two loads sent at the same moment
+    // would make two players. While one is on its way, everyone shares it.
+    if (this.loading) return this.loading;
+
     const loading = this.call<SessionView>('GET', '/api/session');
+    this.loading = loading;
     this.opening = loading;
-    // A failed load must not be waited on for ever: the next call tries again.
-    loading.catch(() => {
-      if (this.opening === loading) this.opening = null;
-    });
+    loading.then(
+      () => {
+        if (this.loading === loading) this.loading = null;
+      },
+      () => {
+        if (this.loading === loading) this.loading = null;
+        // A failed load must not be waited on for ever: the next call tries again.
+        if (this.opening === loading) this.opening = null;
+      },
+    );
     return loading;
   }
 
@@ -114,16 +139,10 @@ export class HttpClient implements GameClient {
     await (this.opening ?? this.openSession());
   }
 
-  /** A request made as the player: after the session is open, and once more if the cookie was lost. */
+  /** A request made as the player: sent only once the session is open. */
   private async asPlayer<T>(method: Method, path: string, options: CallOptions = {}): Promise<T> {
     await this.opened();
-    try {
-      return await this.call<T>(method, path, options);
-    } catch (error) {
-      if (!(error instanceof ApiFailure) || error.code !== 'no_session') throw error;
-      await this.openSession();
-      return this.call<T>(method, path, options);
-    }
+    return this.call<T>(method, path, options);
   }
 
   getSession(): Promise<SessionView> {

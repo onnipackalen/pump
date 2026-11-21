@@ -144,16 +144,45 @@ describe('the game screen’s client against the real server', () => {
     expect(check.problems).toEqual([]);
   });
 
-  it('opens a new session by itself if the cookie has gone', async () => {
+  it('makes one player when the session is asked for twice at the same moment', async () => {
+    const world = testWorld();
+    const client = new HttpClient(browserFor(world.app).fetch);
+
+    // This is what React does in development: it runs the first load twice.
+    const [one, two] = await Promise.all([client.getSession(), client.getSession()]);
+
+    expect(two).toEqual(one);
+    expect(count(world.db, 'players')).toBe(1);
+  });
+
+  it('never quietly becomes a new player if the cookie has gone', async () => {
     const world = testWorld();
     const browser = browserFor(world.app);
     const client = new HttpClient(browser.fetch);
     await client.getSession();
+    await client.setClientSeed('made-in-the-browser', newKey());
 
     browser.forgetCookie();
-    const history = await client.getHistory(10);
 
-    expect(history).toEqual([]);
+    // Reading and playing are both refused, in the server's words, and no
+    // second player appears behind the screen's back.
+    const reading = await client.getHistory(10).catch((error: unknown) => error);
+    const playing = await client
+      .startRound({ difficultyId: 'easy', betsCents: [1000] }, newKey())
+      .catch((error: unknown) => error);
+    for (const refused of [reading, playing]) {
+      expect(refused).toBeInstanceOf(ApiFailure);
+      if (refused instanceof ApiFailure) {
+        expect(refused.code).toBe('no_session');
+        expect(refused.message).toContain('Reload the page');
+      }
+    }
+    expect(count(world.db, 'players')).toBe(1);
+    expect(count(world.db, 'rounds')).toBe(0);
+
+    // A reload loads the session, and that is what starts a new player.
+    const fresh = await client.getSession();
+    expect(fresh.fairness.clientSeed).toBeNull();
     expect(count(world.db, 'players')).toBe(2);
   });
 
@@ -182,5 +211,11 @@ describe('the game screen’s client against the real server', () => {
       Promise.resolve(new Response('<html>502 Bad Gateway</html>', { status: 502 })),
     );
     await expect(badGateway.getSession()).rejects.toBeInstanceOf(NetworkFailure);
+
+    // A web page answering "200 OK" where the API should be is not the game either.
+    const aPage = new HttpClient(() =>
+      Promise.resolve(new Response('<!doctype html><title>Pump</title>', { status: 200 })),
+    );
+    await expect(aPage.getSession()).rejects.toBeInstanceOf(NetworkFailure);
   });
 });
