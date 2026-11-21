@@ -1680,3 +1680,41 @@ it is in the motion-off list now.
 
 `balloonLook.test.ts` asked for the old grey scrap; it now checks the
 torn neck's colours on every balloon and that the number is not dimmed.
+
+## 2026-11-20: auto-bet, cash out during auto-play, and three panel fixes
+
+From the user's notes on a competitor: "Auto-bet: more control. It can
+change the bet size by itself on win or on loss", "Off switch: some of
+this might not be allowed in Ontario", and "Auto mode: it goes by itself,
+but you still have the cash out option". Built on the `auto-bet` branch.
+
+- Auto-bet. Two new auto-play settings, On win and On loss: Reset (back
+  to the bets entered) or Increase by a whole percent, 0 to 1000. A round
+  is a win only if it paid more than it cost (refunds void), the same
+  test as the win effects. The next bet is floor(bet * (100 + N) / 100) in
+  whole cents, held at the $0.10 and $1,000 limits; the screen says when a
+  bet was held. Every round still goes through checkBeforeRound with the
+  new bets, so the loss limit looks ahead at the grown bets. Defaults are
+  Reset both ways, and the percent box starts empty: the game never
+  suggests a number. The running line shows the round's bet.
+- Off switch. `autoBetSizing` in market.ts: on for default, off for gb
+  and for any market the file doesn't know. Off hides On win and On loss
+  and forces Reset both ways, so the bets never change.
+- Cash out during auto-play. Cash out per balloon (and Cash out all) sit
+  under Stop while it runs. The press goes through auto-play, which sends
+  it as that balloon's next step. Sending it straight to the server
+  would have broken the run: auto-play's next pump would find the balloon
+  busy or already cashed out and stop with an error. Found by reading
+  useGame before building, not by a failure.
+- Fixes from the critique: the bet panel's info line shows the top the
+  entered bets can reach (it said 5,000x on Expert at a $1,000 bet that
+  tops out at 100x); ½ and 2× no longer take focus, so Enter bets; the
+  Pumps box says what the count reaches ("3 = 1.18×").
+
+Caught while trying it live (desktop and 375x812): choosing Increase
+focused the percent box a moment too late, so a fast first keystroke was
+lost (now drawn at once with flushSync); and the Cash out row vanished
+between rounds, so the panel jumped every round (it now stays, greyed).
+
+Worth knowing: rounding down means a small bet with a small percent can
+stay put. $0.10 up 5% is $0.105, so it stays $0.10 every round.
