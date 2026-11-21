@@ -2750,3 +2750,13 @@ from Pump all to plain Pump when one balloon is left. Branch
 Checked lightly: typecheck, lint, web tests (one run stalled for four
 minutes and failed three tests by time; a clean re-run passed all 536),
 and one look at 390 x 844 with 3 balloons on Expert after two popped.
+
+## 2026-11-21: 21fffd3 deployed to the live site
+
+Six screen-only commits since d35abe8 (the stage follows the settings at
+once, the auto-play Target − / +, the last balloon keeps its own Pump, and
+the deploy worklog). Nothing under `apps/server`, `packages` or
+`render.yaml` changed, so no database step ran. Same light checks as
+before: typecheck and build here, GitHub's check green, then Manual Deploy >
+Deploy latest commit. Live 41 seconds later; the page serves the new
+build's files and the log says `opened the existing file, 7 players`.
