@@ -32,9 +32,14 @@ export function StepRow({ slot, mainChars, subChars, ...input }: StepRowProps) {
     '--sub-chars': subChars,
   } as CSSProperties;
   return (
-    // "slid": a row along the top has moved on from its start, so it
-    // fades at the left too (steps.css).
-    <div className="steps" data-slot={slot} data-slid={lead > 1} style={style}>
+    // data-lead: a row along the top that has moved on from its start fades
+    // at the left too, and how soon it moves depends on its width (steps.css).
+    <div
+      className="steps"
+      data-slot={slot}
+      data-lead={lead === 0 ? '0' : lead === 1 ? '1' : 'more'}
+      style={style}
+    >
       <ol className="steps-track" aria-label={`Balloon ${slot}: multiplier steps`}>
         {/* Before the first pump the balloon is on no step: this empty place
             stands where its step will be. */}

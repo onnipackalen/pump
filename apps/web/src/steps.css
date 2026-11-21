@@ -127,33 +127,67 @@
  * coming. A ladder short enough to fit sits in the middle and does not
  * move; a longer one starts at the left and slides along, and stops when
  * its last step is in view.
+ *
+ * The current step and the one the next pump goes for are always in full
+ * view, clear of the faded edges. Three balloons in a smaller window leave
+ * a row too narrow for "one passed, current, next", so a narrow row gives
+ * up the passed step, a narrower one also has smaller steps, and under
+ * that there is no row at all (the panel still names the next step).
  */
 @media (orientation: landscape) and (min-height: 560px) {
   .steps {
+    /* How many passed steps stay in view before the current one. */
+    --step-keep: 1;
+    /* How far the left edge fades: nothing until steps have gone by. */
+    --step-fade-left: 0px;
     flex: none;
     display: flex;
     height: var(--step-h);
     /* Air at the sides, so one balloon's row does not run into the next. */
     margin: 0 10px 8px;
-    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - var(--step-fade)), transparent);
-    mask-image: linear-gradient(90deg, #000 calc(100% - var(--step-fade)), transparent);
-  }
-  /* Slid along: it fades at the left too, where steps have gone by. */
-  .steps[data-slid='true'] {
     -webkit-mask-image: linear-gradient(
       90deg,
       transparent,
-      #000 var(--step-fade),
+      #000 var(--step-fade-left),
       #000 calc(100% - var(--step-fade)),
       transparent
     );
     mask-image: linear-gradient(
       90deg,
       transparent,
-      #000 var(--step-fade),
+      #000 var(--step-fade-left),
       #000 calc(100% - var(--step-fade)),
       transparent
     );
+  }
+  /* Slid along: it fades at the left too, where steps have gone by. */
+  .steps[data-lead='more'] {
+    --step-fade-left: var(--step-fade);
+  }
+  /*
+   * The row is its slot less 20px of margin. With one passed step kept it
+   * needs 3 steps, 2 gaps and both fades: 246px, so a slot of 266px.
+   * Without the passed step, 178px: a slot of 198px. With the smaller steps
+   * and fades, 138px: a slot of 158px.
+   */
+  @container slot (max-width: 265.98px) {
+    .steps {
+      --step-keep: 0;
+    }
+    .steps[data-lead='1'] {
+      --step-fade-left: var(--step-fade);
+    }
+  }
+  @container slot (max-width: 197.98px) {
+    .steps {
+      --step-w: 54px;
+      --step-fade: 12px;
+    }
+  }
+  @container slot (max-width: 157.98px) {
+    .steps {
+      display: none;
+    }
   }
   .steps-track {
     /* In the middle when it fits; from the left edge when it does not. */
@@ -163,7 +197,7 @@
         -1 *
           clamp(
             0px,
-            (var(--lead) - 1) * var(--step-pitch) - var(--step-fade),
+            (var(--lead) - var(--step-keep)) * var(--step-pitch) - var(--step-fade),
             var(--steps) * var(--step-pitch) - var(--step-gap) + var(--step-fade) - 100cqw
           )
       )
