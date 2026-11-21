@@ -25,6 +25,16 @@
  *   GET  /api/history?limit=10            -> { rounds: RoundSummary[] }
  *   GET  /api/stats                       -> PlayerStats
  *        The player's results over every round they have finished.
+ *   GET  /api/settings                    -> PlayerSettings
+ *   PUT  /api/settings                    PlayerSettings    -> PlayerSettings
+ *        The player's own choices. winsPrivate: true keeps all of their
+ *        wins, past ones too, out of the public lists.
+ *   GET  /api/wins                        -> PublicWinsResponse
+ *        The latest, largest and luckiest wins of all players who have not
+ *        chosen to keep theirs private (the viewer's own are among them
+ *        unless they have). Needs no player and no cookie. Empty lists when
+ *        the server has it switched off, which on a host it is until
+ *        PUBLIC_WINS=on.
  *   POST /api/rounds                      StartRoundRequest -> ActionResult
  *   POST /api/rounds/:roundId/pump        PumpBody          -> PumpResult
  *        With patch: true this buys a Patch and pumps in one atomic step.
@@ -342,6 +352,67 @@ export interface VerifiableRound {
 /** The shape of every error response. */
 export interface ApiErrorResponse {
   readonly error: ApiErrorBody;
+}
+
+/**
+ * What a player has chosen for themselves. The same shape is sent to
+ * PUT /api/settings and comes back from it and from GET /api/settings.
+ */
+export interface PlayerSettings {
+  /**
+   * True: none of this player's wins is shown in the public lists
+   * (GET /api/wins), past wins included. It takes effect at once; until the
+   * lists are next read they can then be shorter than ten. False, which
+   * every player starts with: their wins may be listed there, under a tag.
+   * Switching back to false shows them again the next time the lists are
+   * read: about five seconds, longer after a slow read.
+   */
+  readonly winsPrivate: boolean;
+}
+
+/**
+ * One win that everyone may see: a finished round that paid out more than
+ * went in. There is no player id, no round id, no seed and no cookie in it,
+ * so nobody can look the round up or learn who the player is.
+ */
+export interface PublicWin {
+  /**
+   * A short tag in place of the player: six characters of a one-way hash of
+   * the player and the day (UTC). One player's wins of one day carry the
+   * same tag, so they can be seen to belong together; the next day the tag
+   * is another. Two players can share a tag by chance. The player asking is
+   * not told which tag is theirs.
+   */
+  readonly playerTag: string;
+  readonly difficultyId: string;
+  /** Bets that were played plus Patches. Refunded (void) bets are left out. */
+  readonly wageredCents: number;
+  readonly payoutCents: number;
+  /** The gain: payoutCents minus wageredCents. Always above 0. */
+  readonly netCents: number;
+  /** The highest multiplier a balloon in this round cashed out at. */
+  readonly multiplierHundredths: number;
+  /** ISO 8601. */
+  readonly finishedAt: string;
+}
+
+/**
+ * The response of GET /api/wins. Each list holds at most ten wins, and the
+ * same win can be in more than one list. The server reuses one answer for a
+ * few seconds, so a win can take that long to show.
+ */
+export interface PublicWinsResponse {
+  /**
+   * False when the server has this switched off for its market. The three
+   * lists are then empty and the screen should not show the panel at all.
+   */
+  readonly enabled: boolean;
+  /** The latest wins, newest first. */
+  readonly recent: readonly PublicWin[];
+  /** The largest gains (netCents), largest first. */
+  readonly biggest: readonly PublicWin[];
+  /** The highest multipliers, highest first. */
+  readonly luckiest: readonly PublicWin[];
 }
 
 /** The response of GET /api/history. */

@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { GAME_CONFIG, type GameConfig } from '@pump/engine';
 import type { Db } from './db/database';
+import type { Features } from './features';
 
 /**
  * Everything the services need from the outside world: the database, the
@@ -11,6 +12,8 @@ export interface Runtime {
   readonly db: Db;
   /** RTP, limits and ladders. New rounds are started with these. */
   readonly config: GameConfig;
+  /** What is switched on for this market. Not game math: see features.ts. */
+  readonly features: Features;
   readonly now: () => Date;
   /** A new unique id for a player or a round. */
   readonly newId: () => string;
@@ -21,10 +24,11 @@ export interface Runtime {
 }
 
 /** The real thing: the system clock and the operating system's secure random source. */
-export function systemRuntime(db: Db): Runtime {
+export function systemRuntime(db: Db, features: Features): Runtime {
   return {
     db,
     config: GAME_CONFIG,
+    features,
     now: () => new Date(),
     newId: () => randomUUID(),
     newToken: () => randomBytes(32).toString('base64url'),

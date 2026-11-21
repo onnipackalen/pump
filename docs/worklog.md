@@ -1731,6 +1731,96 @@ it is in the motion-off list now.
 `balloonLook.test.ts` asked for the old grey scrap; it now checks the
 torn neck's colours on every balloon and that the number is not dimmed.
 
+## 2026-11-20: public wins, the server half (branch public-wins)
+
+Built, from the owner's competitor notes ("you can see other people's wins,
+and lucky wins. Want to show other people's biggest wins too", and "make it
+easy to turn off"):
+
+- `GET /api/wins`: three lists of at most ten wins across all players: the
+  latest, the largest gains and the highest multipliers. A win is a finished
+  round that paid out more than its played bets plus Patches; refunded bets
+  are left out, as on the stats page. It needs no cookie and makes no player.
+- Nothing in the answer identifies a player or a round. A player is a
+  six-character tag, a one-way hash of the player's id. No round id is sent,
+  so nobody can ask for another player's round.
+- The off switch: `PUBLIC_WINS=off` when the server starts. The answer is
+  then `enabled: false` with empty lists and nothing is read. A word that is
+  neither `on` nor `off` switches it off too, with a warning in the log.
+- One answer is reused for five seconds, because the address is open to
+  anyone and each fresh answer reads every finished round.
+- No database step and no change to any money path: it only reads.
+
+Checked: 15 tests at 9400, 9700 and 9900. They play real rounds whose
+outcomes are chosen in advance from the real draw code: a win, a pop, a
+cash-out that only returns the bet (not a win), a round ended by the 24-hour
+rule with one bet handed back (a win on the bet that was played), and a round
+still in progress with a balloon already cashed out for a gain (not shown).
+They search the raw answer for every player id, round id, seed, seed hash,
+client seed, token hash and cookie in the database.
+
+Not built here: the screen half. The shape is `PublicWinsResponse` in
+`packages/contract`.
+
+Known and left: the three lists are read with a full pass over finished
+rounds. That is fine for a demo and is why the answer is reused for five
+seconds. With real traffic it wants an index or a small table kept up to
+date when a round finishes.
+
+## 2026-11-20: public wins after its review (branch public-wins)
+
+Three reviewers (privacy and abuse, correctness, whether the tests can fail),
+each finding attacked by a second reader. The lists themselves were right in
+every case they built; an independent recount of 160 hammered rounds matched
+the answer byte for byte. What turned out wrong, and how it was caught:
+
+- The check that a round in progress never shows could not fail. The round
+  in my test had two bets of 1000 and one balloon cashed for 1180, so it was
+  not ahead by the numbers and was hidden for that reason, not because it was
+  still open. A reviewer deleted the "finished only" line from the query and
+  all 15 tests still passed. The open round now has bets of 1000 and 10 with
+  5000 cashed, so only its being open keeps it out.
+- No test bought a Patch, so leaving Patches out of the stake passed. And
+  "ten", "five seconds" and the tag recipe were only ever compared with the
+  constants and the function under test. There are now hand-made rounds for
+  Patches, for the highest of two cashed multipliers and for the finishing
+  time, and the promised numbers are written out in the tests. The tests are
+  also worked out from whatever the first ladder is, because four valid
+  retunes of the ladders broke the first version.
+- I had written that nothing identifies a player. A reviewer played as a
+  player, matched one own win to its public row by time, stake and payout,
+  and from the tag followed every other win of that player. The id, cookie
+  and seeds were never exposed (none of 349 secrets was in any answer), but a
+  tag that never changes is a pseudonym. The tag now changes every day, and
+  the README says what the lists give away.
+- A fresh answer was three full reads of every finished round, and SQLite is
+  synchronous, so nothing else is served meanwhile: about 0.4 s at 100,000
+  rounds on a laptop, and the five seconds of reuse were counted from before
+  the read, so a read of five seconds or more would have been repeated on
+  every request. The three lists are now cut from one read, and the answer is
+  kept from the END of the read for five seconds or twenty times the read,
+  whichever is longer.
+- The switch failed open on the likeliest mistake: an empty value, or a typo
+  in the variable's NAME, left it on with nothing in the log. The server now
+  says "public wins: ON" or "OFF" at every start with the value it read, and
+  the switch has to be handed to the runtime (leaving it out is a type
+  error; before, the server could have ignored the setting unnoticed).
+
+Left as it is, on purpose:
+
+- One visitor's script can fill the "recent" list with tiny wins from free
+  wallets. Every row is still a real win; it is a question of what the list
+  should be worth, for the owner to decide (a floor on the gain is one line).
+- Any visitor can make the table of rounds grow, for free. The longer rest
+  after a slow read bounds what that costs. The real cure is an index and a
+  small table of wins written as a round finishes, which is a database step.
+- It is on unless switched off. That is right for someone running the game
+  from the repo. On the live site it shows past wins of existing players
+  with no notice on the screen yet, so going live with it is the owner's
+  call, to be made when the screen half exists.
+- One engine test (the sweep over every bet in math.test.ts) timed out once
+  while this Mac was running many agents at a load of 18. It passes alone
+  and on GitHub. Nothing in it was changed.
 ## 2026-11-20: auto-bet, cash out during auto-play, and three panel fixes
 
 From the user's notes on a competitor: "Auto-bet: more control. It can
@@ -1976,6 +2066,107 @@ Not built, not checked:
 - Chromium only. The rows use container queries, `:has()` and a mask; none
   has been tried in Safari or on a real iPhone.
 
+## 2026-11-20: a player can keep their wins private (branch public-wins)
+
+The owner's answer to "past wins of people who already played become visible
+to everyone" was: "You can keep your wins private." So each player now has
+that choice.
+
+Built:
+
+- Database step 3: one column on `players`, `wins_private`, 0 or 1, starting
+  at 0 for everyone, also for players who were there before the step.
+- `GET /api/settings` and `PUT /api/settings` with `{ winsPrivate }`. The
+  change needs the player's cookie and an idempotency key like every other
+  change, and moves no money.
+- The public lists leave out every win of a player who chose private, past
+  wins included. It takes effect at once: the answer being reused has that
+  player's rows taken out of it in memory, with no new read of the rounds,
+  so switching it on and off cannot be used to make the server read more
+  often. Showing them again takes until the next read, a few seconds.
+
+Checked:
+
+- Tests at 9400, 9700 and 9900: two players win, one goes private and is
+  gone from all three lists with no time passed, stays gone after the next
+  read and for a new win, still sees their own stats, and is back after
+  switching it off. The change is refused without a cookie, without a key,
+  with a wrong body; a repeat gets the same answer; the ledger does not move.
+- An older database (steps 1 and 2 with a player in it) is brought up to
+  step 3 and that player starts with wins shown.
+- On a database made by the live version (8562809) with rounds left in
+  progress, started the way the host starts it: the server came up, steps 2
+  and 3 were applied, the old rounds were finished and all verify, a player
+  from before the upgrade switched to private and was out of the lists in
+  the next answer, and reconcile found no problems.
+- 27 bugs were planted one at a time in the public wins and settings code
+  (a private player still listed, the change not stored, not applied until
+  the next read, hiding everyone, no cookie needed, the body unchecked, and
+  the 21 from before). The tests caught all 27.
+
+Turned out wrong, and how it was caught: two tests of the reveal work
+counted the database steps as exactly 2 and failed when the third was
+added. They now compare with a fresh database's count instead of a number,
+so the next step will not break them.
+
+For the owner to decide: wins are shown unless a player chooses private. If
+it should be private unless a player chooses to show them, it is the default
+of that one column.
+
+## 2026-11-21: the private setting after its review (branch public-wins)
+
+Two reviewers (the database step and the upgrade; the setting itself), each
+finding attacked by a second reader. A third reader, from the chat that
+coordinates merges, read the earlier fix commits. The code held: the upgrade
+from the live version's database with rounds in progress left every row the
+same, all old rounds verified and reconciled, nobody could read or change
+another player's choice, and no moment was found where a private player's
+row is served. What turned out wrong, and how it was caught:
+
+- The lists would have gone public before anyone could choose. The screen has
+  no switch yet, and the server showed the lists unless told not to, so a
+  deploy would have shown every existing player's past wins with no way for
+  them to say no. On a host the lists are now OFF unless PUBLIC_WINS is set
+  to "on" (a forgotten or misnamed entry shows nothing), `render.yaml` says
+  "off" in so many words, and run from the repo they are still on.
+- A clock jump during a read froze the lists. The read was timed with the
+  wall clock, so an hour's jump (a laptop waking, a time correction) counted
+  as an hour's read and a rest of twenty hours. A read now counts for a
+  minute at most. Found by the coordinator's reader with a throwaway test.
+- Two tests were blind. The "no cookie" test ran in a world with no players,
+  so a bug that fell back on an existing player still got 401; a planted
+  fallback passed all tests. And nothing checked the claim that switching the
+  setting never re-reads the rounds: a planted hide() that threw the kept
+  answer away passed too, at 501 reads for 1,000 switches. Both are now
+  tested, the second by counting reads over 200 switches.
+- No test pinned the names of the database steps. A rename passes every test
+  and would make the live database refuse to start. They are pinned now.
+- The words were ahead of the code in four places: "all players' wins" (it is
+  all who have not chosen private), "shows them again within a few seconds"
+  (it is at the next read, up to twenty minutes after a very slow one), "one
+  default in one place" (only until the step has run on a database), and "and
+  no further" about the day tag (a player who goes private has all their rows
+  leave together, which ties their days together for anyone comparing two
+  answers). All four now say what the code does.
+
+Database steps are one-way. Step 3, like step 2, cannot be undone on a
+database it has run on: once it has run on the live database, no version from
+before it may be deployed there. A server with the guard refuses to start on
+such a file. The live site was put on the guard version (8d9c901) on
+2026-11-20, so the version behind this one refuses instead of running; the
+older deploys still in the host's list (8562809, 297760c) have no guard and
+must never be put back.
+
+Left as it is, and why:
+
+- Going private can be seen by someone polling the lists. Hiding the rows at
+  once is the point; hiding them slowly would leave a private player listed
+  for longer. The README says so.
+- After someone goes private the lists can be shorter than ten until the next
+  read. Filling them would need the read that this is built to avoid.
+- Everyone starts with wins shown. With the lists off on the live site
+  nobody's wins are shown until the owner switches them on, so the other
+  default can still be chosen then, as a new database step.
 ## 2026-11-21: the step row after an independent review
 
 The coordinator had the step row read by a second checker, apart from

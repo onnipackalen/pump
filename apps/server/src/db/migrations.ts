@@ -568,6 +568,22 @@ const MIGRATIONS: readonly Migration[] = [
       BEGIN SELECT RAISE(ABORT, 'a round closes with the reveal of each balloon cashed out below its top rung'); END;
     `,
   },
+  {
+    id: 3,
+    name: 'a player can keep their wins private',
+    sql: `
+      ------------------------------------------------------------------
+      -- Whether a player keeps their wins out of the public lists
+      -- (GET /api/wins). 0: their wins may be listed. 1: none of them is,
+      -- past wins included. Every player who was here before this step
+      -- starts at 0, which is what the lists did before the choice existed.
+      -- This is the player's own choice and touches no money: the balance,
+      -- the ledger and the rounds do not know about it.
+      ------------------------------------------------------------------
+      ALTER TABLE players
+        ADD COLUMN wins_private INTEGER NOT NULL DEFAULT 0 CHECK (wins_private IN (0, 1));
+    `,
+  },
 ];
 
 /**

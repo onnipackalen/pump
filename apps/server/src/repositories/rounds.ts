@@ -42,6 +42,26 @@ export interface PlayedRound {
 }
 
 /**
+ * One finished round that paid out more than went in, for the public lists.
+ * It carries the player's id so the service can make a tag from it; the id
+ * itself is never sent to anyone.
+ */
+export interface PublicWinRow {
+  readonly playerId: string;
+  readonly difficultyId: string;
+  /** Bets that were played. Refunded (void) bets are left out. */
+  readonly betCents: number;
+  readonly patchesCents: number;
+  readonly payoutCents: number;
+  /** The highest multiplier a balloon in the round cashed out at, in hundredths. */
+  readonly topMultiplierHundredths: number;
+  readonly finishedAt: string;
+}
+
+/** Which public list: the latest wins, the largest gains, or the highest multipliers. */
+export type PublicWinOrder = 'recent' | 'biggest' | 'luckiest';
+
+/**
  * A round as stored: who owns it, which seeds it uses, and the round itself
  * in the engine's own shape (its RTP, its ladder and its balloons).
  */
@@ -280,6 +300,45 @@ export function roundsRepository(db: Db) {
     GROUP BY r.id
     ORDER BY r.finished_at ASC, r.started_at ASC, r.id ASC
   `);
+  // Wins across all players, for the public lists. Only rounds that are
+  // over; a round still in progress never shows. "More than went in" counts
+  // bets played plus Patches, with refunded bets left out, exactly as the
+  // stats page does. The top multiplier is read from the round's own stored
+  // ladder (a JSON list): rung k is item k - 1. A round can only have paid
+  // out through a cashed balloon, so a win always has one. A player who
+  // keeps their wins private has none of them listed, past ones included.
+  //
+  // The wins are worked out once (the MATERIALIZED part) and the three lists
+  // are cut from that one result, so the finished rounds are read once, not
+  // three times. Each list is the first :limit rows in its own order.
+  const publicWinsList = (list: PublicWinOrder, order: string): string => `
+    SELECT * FROM (
+      SELECT '${list}' AS list, wins.* FROM wins
+      ORDER BY ${order}, finished_at DESC, round_id DESC
+      LIMIT :limit
+    )`;
+  const selectPublicWins = db.prepare(`
+    WITH wins AS MATERIALIZED (
+      SELECT r.id AS round_id, r.player_id, r.difficulty_id, r.finished_at,
+             SUM(CASE WHEN b.status = 'refunded' THEN 0 ELSE b.bet_cents END) AS staked_cents,
+             SUM(b.patches_cents) AS patch_cents,
+             SUM(b.payout_cents)  AS paid_cents,
+             MAX(CASE WHEN b.status = 'cashed'
+                      THEN json_extract(r.ladder, '$[' || (b.rung - 1) || ']') END)
+                                  AS top_hundredths
+      FROM rounds r
+      JOIN players p ON p.id = r.player_id
+      JOIN balloons b ON b.round_id = r.id
+      WHERE r.status = 'finished' AND p.wins_private = 0
+      GROUP BY r.id
+      HAVING paid_cents > staked_cents + patch_cents
+    )
+    ${publicWinsList('recent', 'finished_at DESC')}
+    UNION ALL
+    ${publicWinsList('biggest', '(paid_cents - staked_cents - patch_cents) DESC')}
+    UNION ALL
+    ${publicWinsList('luckiest', 'top_hundredths DESC')}
+  `);
   const selectExpired = db.prepare(`
     SELECT id FROM rounds WHERE status = 'active' AND last_action_at <= :cutoff
     ORDER BY last_action_at
@@ -399,6 +458,53 @@ export function roundsRepository(db: Db) {
         seedRevealed: nullableText(row, 'revealed_at') !== null,
         finishedAt: text(row, 'finished_at'),
       }));
+    },
+
+    /** The three public lists, each with up to `limit` wins, read in one go. */
+    publicWins(limit: number): Record<PublicWinOrder, PublicWinRow[]> {
+      interface Listed extends PublicWinRow {
+        readonly list: string;
+        readonly roundId: string;
+      }
+      const rows: Listed[] = selectPublicWins.all({ limit }).map((row) => ({
+        list: text(row, 'list'),
+        roundId: text(row, 'round_id'),
+        playerId: text(row, 'player_id'),
+        difficultyId: text(row, 'difficulty_id'),
+        betCents: int(row, 'staked_cents'),
+        patchesCents: int(row, 'patch_cents'),
+        payoutCents: int(row, 'paid_cents'),
+        topMultiplierHundredths: int(row, 'top_hundredths'),
+        finishedAt: text(row, 'finished_at'),
+      }));
+      // The database picked each list's rows in the right order; the order of
+      // rows across a UNION is not promised, so each list is put in order
+      // again here, by the same rule: its own measure, then newest first.
+      // Plain character order, as the database's own ORDER BY uses.
+      const later = (x: string, y: string): number => (x === y ? 0 : x > y ? -1 : 1);
+      const newestFirst = (x: Listed, y: Listed): number =>
+        later(x.finishedAt, y.finishedAt) || later(x.roundId, y.roundId);
+      const gain = (row: Listed): number => row.payoutCents - row.betCents - row.patchesCents;
+      const measure: Record<PublicWinOrder, (row: Listed) => number> = {
+        recent: () => 0,
+        biggest: gain,
+        luckiest: (row) => row.topMultiplierHundredths,
+      };
+      const cut = (list: PublicWinOrder): PublicWinRow[] =>
+        rows
+          .filter((row) => row.list === list)
+          .sort((x, y) => measure[list](y) - measure[list](x) || newestFirst(x, y))
+          // Only the win itself leaves this file: not the round's id.
+          .map((row) => ({
+            playerId: row.playerId,
+            difficultyId: row.difficultyId,
+            betCents: row.betCents,
+            patchesCents: row.patchesCents,
+            payoutCents: row.payoutCents,
+            topMultiplierHundredths: row.topMultiplierHundredths,
+            finishedAt: row.finishedAt,
+          }));
+      return { recent: cut('recent'), biggest: cut('biggest'), luckiest: cut('luckiest') };
     },
 
     /** Rounds still in progress that nobody has touched since `cutoff`. */

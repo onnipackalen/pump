@@ -5,6 +5,7 @@ import { buildApp } from './app';
 import { openDatabase, type Db } from './db/database';
 import { databasePlace, runningOnHost } from './db/location';
 import { migrate } from './db/migrations';
+import { featuresFromEnv } from './features';
 import { playersRepository } from './repositories/players';
 import { systemRuntime } from './runtime';
 import { buildServices } from './services';
@@ -63,8 +64,20 @@ function openOrExplain(): Db {
 const db = openOrExplain();
 migrate(db);
 
-const runtime = systemRuntime(db);
+// What this market allows, for example PUBLIC_WINS=off. See features.ts.
+const market = featuresFromEnv(process.env, runningOnHost(process.env));
+const runtime = systemRuntime(db, market.features);
 const app = buildApp({ runtime, logger: true, ...(webRoot === undefined ? {} : { webRoot }) });
+for (const warning of market.warnings) app.log.warn(warning);
+// Said at every start, on or off, with the value that was read: a missing or
+// mistyped entry on a host is then seen in the log, not found out later.
+app.log.info(
+  `public wins: ${market.features.publicWins ? 'ON' : 'OFF'} (PUBLIC_WINS ${
+    process.env.PUBLIC_WINS === undefined
+      ? `is not set, which means ${runningOnHost(process.env) ? 'off on a host' : 'on away from a host'}`
+      : `is "${process.env.PUBLIC_WINS}"`
+  })`,
+);
 // Said at every start, so a host's log shows where the wallets are kept and
 // whether they were found. The folder check in db/location.ts cannot tell the
 // host's disk from any other folder that exists. This line can: on a site that

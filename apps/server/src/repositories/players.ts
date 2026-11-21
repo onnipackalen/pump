@@ -6,6 +6,8 @@ export interface Player {
   readonly balanceCents: number;
   /** Null until the browser has sent its first client seed. */
   readonly clientSeed: string | null;
+  /** True: the player keeps their wins out of the public lists. */
+  readonly winsPrivate: boolean;
   readonly createdAt: string;
 }
 
@@ -14,6 +16,7 @@ function toPlayer(row: Row): Player {
     id: text(row, 'id'),
     balanceCents: int(row, 'balance_cents'),
     clientSeed: nullableText(row, 'client_seed'),
+    winsPrivate: int(row, 'wins_private') === 1,
     createdAt: text(row, 'created_at'),
   };
 }
@@ -27,6 +30,7 @@ export function playersRepository(db: Db) {
   const byTokenHash = db.prepare('SELECT * FROM players WHERE token_hash = :tokenHash');
   const byId = db.prepare('SELECT * FROM players WHERE id = :id');
   const updateClientSeed = db.prepare('UPDATE players SET client_seed = :clientSeed WHERE id = :id');
+  const updateWinsPrivate = db.prepare('UPDATE players SET wins_private = :value WHERE id = :id');
   const countAll = db.prepare('SELECT COUNT(*) AS players FROM players');
 
   return {
@@ -54,6 +58,10 @@ export function playersRepository(db: Db) {
 
     setClientSeed(id: string, clientSeed: string): void {
       updateClientSeed.run({ id, clientSeed });
+    },
+
+    setWinsPrivate(id: string, winsPrivate: boolean): void {
+      updateWinsPrivate.run({ id, value: winsPrivate ? 1 : 0 });
     },
   };
 }

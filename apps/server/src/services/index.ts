@@ -9,7 +9,9 @@ import { fairnessService, type FairnessService } from './fairness';
 import { gameService, type GameService } from './game';
 import { idempotencyService, type IdempotencyService } from './idempotency';
 import { playersService, type PlayersService } from './players';
+import { publicWinsService, type PublicWinsService } from './publicWins';
 import { sessionService, type SessionService } from './session';
+import { settingsService, type SettingsService } from './settings';
 import { statsService, type StatsService } from './stats';
 import { walletService, type WalletService } from './wallet';
 
@@ -20,6 +22,8 @@ export interface Services {
   readonly game: GameService;
   readonly session: SessionService;
   readonly stats: StatsService;
+  readonly publicWins: PublicWinsService;
+  readonly settings: SettingsService;
   readonly idempotency: IdempotencyService;
 }
 
@@ -44,6 +48,7 @@ export function buildServices(runtime: Runtime): Services {
   const wallet = walletService(ledger);
   const fairness = fairnessService(runtime, players, seeds, rounds);
   const game = gameService(runtime, players, seeds, rounds, wallet);
+  const publicWins = publicWinsService(runtime, rounds);
   return {
     wallet,
     players: playersService(runtime, players, seeds, wallet),
@@ -51,6 +56,8 @@ export function buildServices(runtime: Runtime): Services {
     game,
     session: sessionService(wallet, fairness, game, rounds),
     stats: statsService(runtime, rounds),
+    publicWins,
+    settings: settingsService(players, publicWins),
     idempotency: idempotencyService(runtime, keys),
   };
 }
