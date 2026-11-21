@@ -99,28 +99,23 @@ export function Balloon({
       {/* pump: the floor pump for this balloon. The slot number sits on it,
            so balloons never rely on colour alone. */}
       <g className="pb-pump">
-        <rect className="pb-pump-base" x="114" y="305" width="56" height="6" rx="3" />
+        <rect className="pb-pump-base" x="116" y="305" width="52" height="6" rx="3" />
         {/* handle: pushes down on each tap. Drawn before the barrel, which
              hides the rod as it goes in. */}
         <g className="pb-handle">
-          <rect className="pb-pump-rod" x="139" y="238" width="6" height="24" />
-          <rect className="pb-pump-grip" x="118" y="232" width="48" height="8" rx="4" />
+          <rect className="pb-pump-rod" x="139.5" y="224" width="5" height="26" />
+          <rect className="pb-pump-grip" x="124" y="220" width="36" height="7" rx="3.5" />
         </g>
-        <rect className="pb-pump-cap" x="120" y="254" width="44" height="6" rx="3" />
-        <rect className="pb-pump-barrel" x="122" y="258" width="40" height="48" rx="5" />
-        <rect className="pb-pump-shine" x="126" y="262" width="4" height="40" rx="2" />
-        <rect className="pb-pump-nozzle" x="115" y="291" width="9" height="8" rx="2" />
-        {/* tag: the slot number plate. */}
+        <rect className="pb-pump-nozzle" x="115" y="291" width="20" height="8" rx="2" />
+        <rect className="pb-pump-cap" x="130" y="242" width="24" height="5" rx="2.5" />
+        <rect className="pb-pump-barrel" x="132" y="245" width="20" height="60" rx="4" />
+        <rect className="pb-pump-shine" x="135" y="249" width="3.5" height="52" rx="1.75" />
+        {/* tag: the slot number, on the pump's gauge dial. */}
         <g className="pb-tag">
-          <rect className="pb-tag-card" x="127" y="266" width="30" height="26" rx="5" />
-          <text className="pb-tag-text" x="142" y="286">
+          <circle className="pb-tag-card" cx="142" cy="273" r="13" />
+          <text className="pb-tag-text" x="142" y="280">
             {slot}
           </text>
-          {/* tick: neutral "collected" badge after a cash-out. */}
-          <g className="pb-tick">
-            <circle className="pb-tick-badge" cx="157" cy="267" r="9" />
-            <path className="pb-tick-mark" d="M153 267.3L155.8 270.1L161.1 264.4" />
-          </g>
         </g>
       </g>
 
