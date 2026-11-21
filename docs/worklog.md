@@ -2902,3 +2902,42 @@ What went wrong, and how it was caught:
   commits were staged from whole files.
 - Moving the "page start" snap from the app to the sticky top bar was
   tried and dropped: Chrome then let the page rest anywhere.
+
+## 2026-11-21: the compile, overnight
+
+The coordinator ("Agents finishing and game compilation") merged the
+user's competitor to-do list into one game. Into main, in this order:
+auto-bet, the step-row follow-ups, live stats, the public-wins server
+half (with "Keep my wins private", database step 3), the start
+animation (flat balloon on the floor until the first pump, the nozzle
+fix, the bigger early balloon), the level colour on the pump, Bet and
+Pump in one spot, and the public-wins screen. Three later user asks
+from other chats came in between: the stage following the settings at
+once, auto-play's Target − / +, the last balloon keeping its own Pump,
+and the stage glide. Each piece had its own review before it landed.
+
+Built here, in the compile copy:
+- The bet box's "Top" label moved under the box. In the box it squeezed
+  the input until a $1,000 bet read as "$ 100" (found by the auto-bet
+  fixer; it was already on main).
+- During auto-play the hand Cash out buttons say "after pump" instead of
+  an amount that was usually one step behind what the press paid.
+- Auto-play's first press of a round waits for the set-up (SET_UP_MS).
+- README: one list of every feature switch.
+- The public wins hide during a round on every screen, not only on
+  phones, so a round is always one screen (decided without the user).
+
+What went wrong, and how it was caught:
+- A formatter with default settings was run on a merge and rewrapped
+  hundreds of unrelated lines in App.tsx. Caught by the merge's diff
+  size (673 lines for a 2-line change); the files were put back with
+  only the merge's real changes, as a new commit.
+- A test server kept running old server code after a merge (tsx does not
+  reload), so a live check of the wins panel first saw nothing (the
+  endpoint answered 404). Caught by asking the endpoint directly; the
+  server was restarted.
+- With load averages up to 100 from many chats at once, heavy tests (the
+  math sweeps, the roll count, the Python reference) timed out. Each
+  passed when run alone; they are timeouts, not failures.
+- The Mac slept for about two hours overnight and stalled three
+  builders; they restarted on their own.
