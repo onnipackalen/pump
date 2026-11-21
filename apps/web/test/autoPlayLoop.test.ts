@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { BalloonView, RoundView } from '../src/api/contract';
 import { DemoClient } from '../src/demo/DemoClient';
 import type { AutoPlaySettings } from '../src/game/autoPlay';
-import { runAutoPlay, type AutoPlayHooks } from '../src/game/useAutoPlay';
+import { SET_UP_MS } from '../src/game/setUp';
+import {
+  firstStepDelayMs,
+  runAutoPlay,
+  SCREEN_PAUSES,
+  type AutoPlayHooks,
+} from '../src/game/useAutoPlay';
 import type { GameActions } from '../src/game/useGame';
 import { balloon, round } from './fixtures';
 
@@ -272,5 +278,17 @@ describe('DemoClient keeps the server rules under same-moment requests', () => {
       const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
       expect(hex).toBe(serverSeedHash);
     }
+  });
+});
+
+describe('the first press of a round waits for the set-up', () => {
+  it('waits the longer of the step pause and the set-up', () => {
+    expect(firstStepDelayMs({ stepMs: 150, roundMs: 900 })).toBe(150);
+    expect(firstStepDelayMs({ stepMs: 150, roundMs: 900, setUpMs: 320 })).toBe(320);
+    expect(firstStepDelayMs({ stepMs: 400, roundMs: 900, setUpMs: 320 })).toBe(400);
+  });
+
+  it('on screen waits the whole set-up, so the first air pocket runs on a settled hose', () => {
+    expect(firstStepDelayMs(SCREEN_PAUSES)).toBe(SET_UP_MS);
   });
 });

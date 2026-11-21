@@ -19,6 +19,7 @@ import {
   type StopReason,
 } from './autoPlay';
 import { roundProgress } from './roundOrder';
+import { SET_UP_MS } from './setUp';
 import type { GameActions } from './useGame';
 
 /** Everything auto-play needs to know when it starts. */
@@ -66,6 +67,17 @@ export interface AutoPlayPauses {
   readonly stepMs: number;
   /** Pause between rounds, so each result can be seen. */
   readonly roundMs: number;
+  /**
+   * The least time between a new round appearing and its first press: the
+   * new balloons' set-up (the hose laid down, the flat balloon put on). The
+   * first press waits for the longer of this and stepMs.
+   */
+  readonly setUpMs?: number;
+}
+
+/** How long auto-play waits after a round appears before its first step. */
+export function firstStepDelayMs(pauses: AutoPlayPauses): number {
+  return Math.max(pauses.stepMs, pauses.setUpMs ?? 0);
 }
 
 /** How auto-play hears from the screen, and tells it how it is going. */
@@ -90,7 +102,11 @@ export interface AutoPlayEnd {
   readonly bets: RoundBets;
 }
 
-const SCREEN_PAUSES: AutoPlayPauses = { stepMs: 150, roundMs: 900 };
+/**
+ * The screen's pauses. The first press of a round waits for the set-up
+ * (SET_UP_MS), so its air pocket runs along a hose that has settled.
+ */
+export const SCREEN_PAUSES: AutoPlayPauses = { stepMs: 150, roundMs: 900, setUpMs: SET_UP_MS };
 
 const idle: AutoPlayStatus = {
   running: false,
@@ -178,8 +194,10 @@ export async function runAutoPlay(
 
     const stepLimit = maxStepsPerRound(round.balloons.length, settings.targetPumps);
     let taken = 0;
+    let first = true;
     while (nextSteps(round, settings.targetPumps).length > 0) {
-      await sleep(pauses.stepMs);
+      await sleep(first ? firstStepDelayMs(pauses) : pauses.stepMs);
+      first = false;
       // Read after the pause, so a Cash out pressed during it goes on this beat.
       const handCashOuts = hooks.handCashOuts(round.id);
       const steps = nextSteps(round, settings.targetPumps, handCashOuts);
