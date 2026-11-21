@@ -59,11 +59,14 @@ export function usePublicWins(client: GameClient, latestRoundId: string | null):
 
   // The one place a request is sent. Every change to the watch clears the
   // timer and works out the next one afresh, so there is never more than one.
+  // Times come from the page's own clock, which never jumps: a wall clock
+  // set back would hold the refresh up, and one set forward would send two
+  // requests within five seconds.
   useEffect(() => {
-    const delay = nextFetchIn(watch, Date.now());
+    const delay = nextFetchIn(watch, performance.now());
     if (delay === null) return;
     const timer = setTimeout(() => {
-      setWatch((w) => sent(w, Date.now()));
+      setWatch((w) => sent(w, performance.now()));
       client.getPublicWins().then(
         (answer) => {
           setWins(answer);

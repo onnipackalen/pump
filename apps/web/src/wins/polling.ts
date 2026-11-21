@@ -37,7 +37,7 @@ export interface WinsWatch {
   readonly onScreen: boolean;
   /** Whether the browser tab is in front (document.visibilityState). */
   readonly tabVisible: boolean;
-  /** When the last request was sent (ms), or null if none was. */
+  /** When the last request was sent (ms on the page's own clock, performance.now()), or null if none was. */
   readonly lastSentAt: number | null;
   /** A request is on its way. */
   readonly inFlight: boolean;

@@ -365,6 +365,13 @@ describe('When the wins are asked for', () => {
     expect(nextFetchIn(later, T + 10_000)).toBe(POLL_MS);
   });
 
+  it('counts a request sent at 0 on the page’s clock (performance.now() starts near 0)', () => {
+    const first = answered(sent(watch({ onScreen: true }), 0), true);
+    expect(first.lastSentAt).toBe(0);
+    expect(nextFetchIn(first, 1_000)).toBe(POLL_MS - 1_000);
+    expect(nextFetchIn(wanted(first), 1_000)).toBe(MIN_GAP_MS - 1_000);
+  });
+
   it('over a minute on screen with a round ending every few seconds, never two within five seconds', () => {
     let w = watch({ onScreen: true });
     const sentAt: number[] = [];
