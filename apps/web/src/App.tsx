@@ -533,8 +533,36 @@ export function App() {
               />
             )}
 
+            {/* Always mounted, so the typed auto-play settings are kept. Before the
+                bet panel, so on the Auto tab Start is the first thing in the panel. */}
+            {autoOffered && (
+              <div hidden={!(panel === 'auto-running' || (panel === 'bet' && mode === 'auto'))}>
+                <AutoPlayPanel
+                  maxPumps={setupDifficulty.ladder.length}
+                  roundBetCents={check.totalCents}
+                  betsValid={check.betsCents !== null}
+                  roundActive={roundActive && !autoRunning}
+                  starting={state.starting && !autoRunning}
+                  status={autoPlay.status}
+                  onStart={startAutoPlay}
+                  onStop={autoPlay.stop}
+                />
+              </div>
+            )}
+
             {panel === 'bet' && (
               <>
+                <BetPanel
+                  config={config}
+                  setup={setup}
+                  check={check}
+                  disabled={state.phase !== 'ready'}
+                  starting={state.starting}
+                  showBet={mode === 'manual' || !market.autoPlay}
+                  onChange={setSetup}
+                  onStart={start}
+                />
+                {/* Last in the panel: how to play is chosen once, the rest every round. */}
                 {market.autoPlay && (
                   <div className="segmented" role="radiogroup" aria-label="How to play">
                     <button
@@ -557,33 +585,7 @@ export function App() {
                     </button>
                   </div>
                 )}
-                <BetPanel
-                  config={config}
-                  setup={setup}
-                  check={check}
-                  disabled={state.phase !== 'ready'}
-                  starting={state.starting}
-                  showBet={mode === 'manual' || !market.autoPlay}
-                  onChange={setSetup}
-                  onStart={start}
-                />
               </>
-            )}
-
-            {/* Always mounted, so the typed auto-play settings are kept. */}
-            {autoOffered && (
-              <div hidden={!(panel === 'auto-running' || (panel === 'bet' && mode === 'auto'))}>
-                <AutoPlayPanel
-                  maxPumps={setupDifficulty.ladder.length}
-                  roundBetCents={check.totalCents}
-                  betsValid={check.betsCents !== null}
-                  roundActive={roundActive && !autoRunning}
-                  starting={state.starting && !autoRunning}
-                  status={autoPlay.status}
-                  onStart={startAutoPlay}
-                  onStop={autoPlay.stop}
-                />
-              </div>
             )}
           </aside>
         )}

@@ -1332,15 +1332,18 @@ th {
 
 /*
  * Phones on their side: the screen is wide and very short, so the panel
- * goes two columns wide instead of tall. Left: how to play, difficulty,
- * balloons. Right: the bets. Buttons run the full width underneath.
- * The half and double buttons are left out here to make room; the bet can
- * still be typed.
+ * goes two columns wide instead of tall. The Bet button runs the full
+ * width at the top, as everywhere. Under it, left: balloons, difficulty,
+ * how to play. Right: the bets. The half and double buttons are left out
+ * here to make room; the bet can still be typed.
  */
 @media (max-height: 480px) and (min-width: 640px) and (orientation: landscape) {
   .controls {
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    /* Dense: the left column's rows fill in beside the bets, whatever
+       notes happen to be showing above them. */
+    grid-auto-flow: row dense;
     align-content: start;
     column-gap: 8px;
     width: min(64vw, 520px);
@@ -1360,7 +1363,7 @@ th {
     grid-column: 1;
   }
   .bet > .bets {
-    grid-row: 1 / span 3;
+    grid-row: span 3;
     grid-column: 2;
     align-content: start;
   }
