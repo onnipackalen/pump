@@ -2760,3 +2760,42 @@ the deploy worklog). Nothing under `apps/server`, `packages` or
 before: typecheck and build here, GitHub's check green, then Manual Deploy >
 Deploy latest commit. Live 41 seconds later; the page serves the new
 build's files and the log says `opened the existing file, 7 players`.
+
+## 2026-11-21: the stage flows into a new set-up
+
+The user: "Make it flow better. Like flow into 3 pumps." (relayed by the
+deploy chat). Before a round, picking another number of balloons or
+difficulty used to cut straight to the new stage.
+
+Built on `stage-flow` (`apps/web/src/stageFlow.ts`, `flow.css`):
+
+- Each pump and the line under it glide from where they were to their
+  new place, 320 ms, the step row's own calm curve, no bounce. A new
+  balloon's slot rises in; one that goes sinks away (an inert copy in a
+  layer over the slots, cleared after). A typed bet just changes.
+- The page itself changes at once; only the pieces move back and glide.
+  So a click mid-way never meets a half-drawn stage: it measures the
+  pieces where they are and glides on from there.
+- Animations off (the player's setting, or the device's reduced motion):
+  nothing moves, as before. Starting a round and the round itself are
+  untouched.
+- Not done: the rings fading to a new difficulty's colour. balloon.css
+  says the rings are "Never animated", so they still change at once
+  (the pump under them glides). One CSS line if the user wants it.
+
+Turned out wrong: the first build used the browser's view transitions.
+They glide nicely, but while one runs every tap lands on the page itself,
+not on a button (`elementFromPoint` gave HTML mid-way, even with
+`pointer-events: none` on the transition layer), so a quick Bet or second
+click after a switch would be lost for 320 ms. Replaced with Web
+Animations on the real elements; a tap mid-glide now reaches its button.
+Also: the browser pane was hidden, so no frames ran and copies of gone
+slots stayed until their finish event; they now also clear on a timer.
+
+Checked lightly: typecheck, lint, web tests (36 files, 541). In the
+browser the pane was hidden, so the glide was stepped by hand: at
+1440 x 900 pump 1 starts exactly where it was and ends in its new place,
+new slots fade in from 0, two copies sink and clear on 3 to 1, and with
+Animations off nothing moves. At 390 x 844 a picture halfway through 1 to
+3 shows pump 1 shrinking left with its line, pumps 2 and 3 rising in.
+Not seen running at full speed on a screen, nor on a real phone or Safari.
