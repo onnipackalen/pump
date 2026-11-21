@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import type { BalloonView } from '../api/contract';
+import type { BalloonView, PumpOutcome } from '../api/contract';
 import { Balloon, balloonScale, type BalloonBeat } from '../balloon/Balloon';
 import type { Beat } from '../game/useGame';
 import { riskStep } from '../game/risk';
@@ -14,6 +14,14 @@ interface BalloonCardProps {
   readonly beat: Beat;
   /** Its last pump was bought with a Patch. */
   readonly patched: boolean;
+  /** What its last pump did, kept until the next press. */
+  readonly outcome: PumpOutcome | null;
+  /** Its own cash-out ended the round in a win: it waits a moment before it floats away. */
+  readonly held: boolean;
+  /** A request for this balloon is on its way. */
+  readonly pending: boolean;
+  /** This round's win effects have already played: the art gets no win any more. */
+  readonly winShown: boolean;
   /**
    * The round's win tier once it is over, or null. A round is one game, so
    * win effects are judged over all its balloons (UK RTS 14F).
@@ -38,8 +46,18 @@ interface BalloonCardProps {
  * motion once. With no live result (say, a round restored after a refresh),
  * a finished balloon shows only its end picture, so a pop or cash-out never
  * plays twice.
+ *
+ * `pending`: this balloon's own request is still on its way. Answers can
+ * arrive out of order: another balloon's answer may already show this one
+ * as cashed out. Until its own answer arrives (and starts the motion), it is
+ * still drawn in play, instead of vanishing and then floating away.
  */
-export function balloonBeat(balloon: BalloonView, beat: Beat): BalloonBeat | undefined {
+export function balloonBeat(
+  balloon: BalloonView,
+  beat: Beat,
+  pending = false,
+): BalloonBeat | undefined {
+  if (pending && beat === 'idle') return undefined;
   switch (beat) {
     case 'press':
       return 'press';
@@ -76,7 +94,8 @@ export function balloonStrain(balloon: BalloonView): number | undefined {
 /**
  * The Patch sticker for a pump bought with a Patch: it goes on with the
  * press, then tears off if it stopped a pop (the pump would have popped
- * the balloon) or peels off if the pump survived anyway.
+ * the balloon) or peels off if the pump survived anyway, the pump that
+ * reached the top included.
  */
 export function balloonPatch(beat: Beat, patched: boolean): 'on' | 'spent' | 'torn' | undefined {
   if (!patched) return undefined;
@@ -86,6 +105,7 @@ export function balloonPatch(beat: Beat, patched: boolean): 'on' | 'spent' | 'to
     case 'saved':
       return 'torn';
     case 'survived':
+    case 'top':
       return 'spent';
     default:
       return undefined;
@@ -102,10 +122,15 @@ function mainText(balloon: BalloonView): string {
 
 /**
  * The small line under it: the money that goes with the big line. A Patch is
- * shown as plain words, not an animation: "Patch on" while that pump is on
- * its way, then what it did.
+ * also said in plain words: "Patch on" while that pump is on its way, then
+ * what it did, which stays until the next press.
  */
-function subText(balloon: BalloonView, beat: Beat, patched: boolean): string {
+export function subText(
+  balloon: BalloonView,
+  beat: Beat,
+  patched: boolean,
+  outcome: PumpOutcome | null,
+): string {
   switch (balloon.status) {
     case 'popped':
       return formatCents(-(balloon.betCents + balloon.patchesCents));
@@ -116,8 +141,8 @@ function subText(balloon: BalloonView, beat: Beat, patched: boolean): string {
     case 'active':
       if (beat === 'press' && patched) return 'Patch on';
       // The pump would have popped the balloon; the Patch stopped it.
-      if (beat === 'saved') return 'Patch stopped a pop';
-      if (beat === 'survived' && patched) return 'Patch not needed';
+      if (outcome === 'saved') return 'Patch stopped a pop';
+      if (outcome === 'survived' && patched) return 'Patch not needed';
       if (balloon.cashOutCents === null) return `Bet ${formatCents(balloon.betCents)}`;
       return formatCents(balloon.cashOutCents);
   }
@@ -168,7 +193,7 @@ function SlotAction({
     <div className="slot-action">
       {show && (
         <HoldButton
-          className="btn btn-outline slot-pump"
+          className="btn slot-pump"
           // Never greyed out while a pump is on its way: during a hold it
           // would flash on every pump, and the balloon's press already shows
           // it. A press that comes too soon is ignored by the game.
@@ -195,6 +220,10 @@ export function BalloonCard({
   ladder,
   beat,
   patched,
+  outcome,
+  held,
+  pending,
+  winShown,
   roundWin,
   quiet,
   selectable,
@@ -209,6 +238,8 @@ export function BalloonCard({
   // Only a real gain is celebrated, judged over the whole round: never a
   // round that paid back no more than its bets and Patches.
   const win = balloon.status === 'cashed' && roundWin !== null ? roundWin : undefined;
+  // The art plays the win once; the label keeps its win colour.
+  const artWin = winShown ? undefined : win;
 
   return (
     <article
@@ -224,11 +255,15 @@ export function BalloonCard({
         <Balloon
           slot={slot}
           scale={balloonScale(balloon.multiplierHundredths, topMultiplier)}
-          beat={balloonBeat(balloon, beat)}
+          beat={balloonBeat(balloon, beat, pending)}
           strain={balloonStrain(balloon)}
           patch={balloonPatch(beat, patched)}
-          win={win}
+          win={artWin}
           top={balloon.rung === balloon.topRung}
+          hold={held}
+          // The pump that reached the top: the handle comes back up as the
+          // balloon grows to full size and is let go.
+          stroke={beat === 'top' ? 'up' : undefined}
           value={
             balloon.multiplierHundredths === null ? '' : formatMultiplier(balloon.multiplierHundredths)
           }
@@ -236,7 +271,7 @@ export function BalloonCard({
       </div>
       <SlotLabel
         main={mainText(balloon)}
-        sub={subText(balloon, beat, patched)}
+        sub={subText(balloon, beat, patched, outcome)}
         won={win !== undefined}
         live={!quiet}
       />

@@ -138,7 +138,7 @@ export function App() {
       ? round.balloons.filter((b) => b.status === 'active').map((b) => b.index)
       : [];
   // Holding a Pump button, Space or A keeps pumping.
-  const hold = useHoldPump(round, state.pending, state.beats, game.pump, panel === 'round');
+  const hold = useHoldPump(round, state.pending, game.pump, panel === 'round');
 
   /**
    * Pump all: one ordinary pump per balloon still in play, each its own
@@ -395,6 +395,10 @@ export function App() {
                       ladder={round.ladder}
                       beat={state.beats[balloon.index] ?? 'idle'}
                       patched={state.patched[balloon.index] ?? false}
+                      outcome={state.outcomes[balloon.index] ?? null}
+                      held={state.held[balloon.index] ?? false}
+                      pending={state.pending[balloon.index] ?? false}
+                      winShown={state.winShownFor === round.id}
                       roundWin={roundWin}
                       quiet={autoRunning}
                       selectable={

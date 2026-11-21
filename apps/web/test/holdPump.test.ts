@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { controlTarget } from '../src/game/controls';
-import {
-  HOLD_GAP_MS,
-  holdGap,
-  holdStep,
-  SAVED_GAP_MS,
-  type HoldTarget,
-} from '../src/game/useHoldPump';
+import { holdStartStep, holdStep, type HoldTarget } from '../src/game/useHoldPump';
 import { balloon, round } from './fixtures';
 
 const one = (index: number): HoldTarget => ({ kind: 'one', roundId: 'round-1', index });
@@ -50,14 +44,22 @@ describe('holdStep', () => {
   });
 });
 
-describe('holdGap', () => {
-  it('waits the short gap after an ordinary survive', () => {
-    expect(holdGap([0, 1], ['survived', 'survived'])).toBe(HOLD_GAP_MS);
+describe('holdStartStep', () => {
+  it('on Pump all, pumps the free balloons at once and leaves out a busy one', () => {
+    // Balloon 0 is still playing its Patch save (pending).
+    const r = round([balloon(), balloon(), balloon()]);
+    expect(holdStartStep(r, [true, false, false], all)).toEqual([1, 2]);
   });
 
-  it('waits for the whole Patch save to play before the next pump', () => {
-    expect(holdGap([0, 1], ['survived', 'saved'])).toBe(SAVED_GAP_MS);
-    expect(SAVED_GAP_MS).toBeGreaterThan(HOLD_GAP_MS);
+  it('pumps nothing yet when the one held balloon is busy, but the hold stays on', () => {
+    const r = round([balloon(), balloon()]);
+    expect(holdStartStep(r, [false, true], one(1))).toEqual([]);
+  });
+
+  it('has nothing to hold once no held balloon is in play', () => {
+    const r = round([balloon({ status: 'popped' }), balloon()]);
+    expect(holdStartStep(r, [false, false], one(0))).toBeNull();
+    expect(holdStartStep(round([balloon()], { id: 'round-2' }), [false], all)).toBeNull();
   });
 });
 

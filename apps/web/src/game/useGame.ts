@@ -13,6 +13,7 @@ import type {
 } from '../api/contract';
 import { makeClientSeed } from './clientSeed';
 import { isOlder } from './roundOrder';
+import { roundWinTier } from './winTier';
 
 /**
  * What a balloon's picture is doing right now. The balloon art reads it:
@@ -39,6 +40,25 @@ export interface GameState {
   readonly pending: readonly boolean[];
   /** Per balloon index: its last pump was bought with a Patch. */
   readonly patched: readonly boolean[];
+  /**
+   * Per balloon index: what its last pump did, kept until the next press.
+   * The beat goes back to idle once its motion is over; this stays, so the
+   * line under the balloon can still say "Patch stopped a pop".
+   */
+  readonly outcomes: readonly (PumpOutcome | null)[];
+  /**
+   * Per balloon index: its own cash-out (or top) answer ended the round in
+   * a real win, so it waits a moment before it floats away and the win can
+   * be seen. Decided once, when that motion starts: a balloon cashed out
+   * earlier never gets it later, which would restart a float already on
+   * its way.
+   */
+  readonly held: readonly boolean[];
+  /**
+   * The id of the won round whose win effects have already played, or null.
+   * The art then gets no win, so the burst never plays a second time.
+   */
+  readonly winShownFor: string | null;
   readonly starting: boolean;
   readonly notice: Notice | null;
   /**
@@ -108,13 +128,58 @@ const HISTORY_SIZE = 10;
 const MIN_PRESS_MS = 300;
 
 /**
- * How long a pop, cash-out or top beat stays before the balloon is set back
- * to "idle", which shows its still end picture ("popped" or "cashed"). It is
- * longer than the longest of those motions, a win's included, so none is
- * cut short. Without it the beat would stay, and switching the Animations
- * setting back on would play the pop or float-away again.
+ * Every answer's beat goes back to "idle" once its motion is over, so the
+ * balloon shows a still picture: its end picture ("popped" or "cashed") once
+ * it is finished, or no beat at all while it is in play. Otherwise the beat
+ * would stay, and switching the Animations setting would play the motion
+ * again. Each wait is longer than the longest motion of that beat (see
+ * balloon.css), so none is cut short.
+ *
+ * END_BEAT_MS: pop, top and cash-out, a win's included (the float-away is
+ * 1100 ms after a 160 ms win wait).
+ * SURVIVE_BEAT_MS: the spring (340 ms) and a Patch that wasn't needed
+ * peeling off (80 + 280 ms).
+ * SAVED_BEAT_MS: the Patch save (800 ms), with room for a late first frame
+ * on a slow phone, so the falling patch halves are never cut.
  */
-const END_BEAT_MS = 1200;
+const END_BEAT_MS = 1500;
+const SURVIVE_BEAT_MS = 450;
+const SAVED_BEAT_MS = 950;
+
+/**
+ * When a Patch stops a pop, the balloon swells as if to pop, shudders and
+ * the patch tears off: 800 ms (--pb-blocked-ms in balloon.css). The balloon
+ * takes no new press (pump, Patch, cash-out, a hold) until it is over, so
+ * nothing cuts it off halfway.
+ */
+const SAVED_MS = 800;
+
+/**
+ * Whether a settle timer may set a balloon back to "idle": only if nothing
+ * has happened to it since. Same round, same beat, and the same number of
+ * draws, so a newer pump that ended the same way keeps its own motion.
+ */
+export function shouldSettle(
+  state: Pick<GameState, 'round' | 'beats'>,
+  roundId: string,
+  balloonIndex: number,
+  beat: Beat,
+  drawIndex: number,
+): boolean {
+  return (
+    state.round?.id === roundId &&
+    state.beats[balloonIndex] === beat &&
+    state.round.balloons[balloonIndex]?.drawIndex === drawIndex
+  );
+}
+
+/**
+ * Whether a pump's answer leaves its balloon busy (pending) for a while:
+ * only a Patch save, whose motion must not be cut by the next press.
+ */
+export function busyAfter(outcome: PumpOutcome): boolean {
+  return outcome === 'saved';
+}
 
 const initialState: GameState = {
   phase: 'loading',
@@ -126,6 +191,9 @@ const initialState: GameState = {
   beats: [],
   pending: [],
   patched: [],
+  outcomes: [],
+  held: [],
+  winShownFor: null,
   starting: false,
   notice: null,
   session: null,
@@ -189,14 +257,32 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
       for (const timer of timers) clearTimeout(timer);
     };
   }, []);
-  const settleEndBeat = useCallback((roundId: string, balloonIndex: number, beat: Beat) => {
+  // Only if nothing has happened to the balloon since (see shouldSettle).
+  const settleBeat = useCallback(
+    (roundId: string, balloonIndex: number, beat: Beat, drawIndex: number, afterMs: number) => {
+      const timer = setTimeout(() => {
+        endTimers.current.delete(timer);
+        setState((s) =>
+          shouldSettle(s, roundId, balloonIndex, beat, drawIndex)
+            ? { ...s, beats: replaceAt(s.beats, balloonIndex, 'idle') }
+            : s,
+        );
+      }, afterMs);
+      endTimers.current.add(timer);
+    },
+    [],
+  );
+
+  // A won round's effects play once. After its motion is over the round is
+  // marked as shown, and the balloons stop passing the win to the art, so
+  // nothing can start the burst again (say, coming back from the Verify
+  // page, which remounts the balloons).
+  const settleWin = useCallback((result: ActionResult) => {
+    if (result.round.status !== 'finished' || roundWinTier(result.round) === null) return;
+    const roundId = result.round.id;
     const timer = setTimeout(() => {
       endTimers.current.delete(timer);
-      setState((s) =>
-        s.round?.id === roundId && s.beats[balloonIndex] === beat
-          ? { ...s, beats: replaceAt(s.beats, balloonIndex, 'idle') }
-          : s,
-      );
+      setState((s) => (s.round?.id === roundId ? { ...s, winShownFor: roundId } : s));
     }, END_BEAT_MS);
     endTimers.current.add(timer);
   }, []);
@@ -238,6 +324,8 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           beats: round ? round.balloons.map(() => 'idle') : [],
           pending: round ? round.balloons.map(() => false) : [],
           patched: round ? round.balloons.map(() => false) : [],
+          outcomes: round ? round.balloons.map(() => null) : [],
+          held: round ? round.balloons.map(() => false) : [],
         }));
       } catch (error) {
         if (cancelled) return;
@@ -285,6 +373,8 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           round,
           beats: sameRound ? s.beats : (round?.balloons.map(() => 'idle' as const) ?? []),
           patched: sameRound ? s.patched : (round?.balloons.map(() => false) ?? []),
+          outcomes: sameRound ? s.outcomes : (round?.balloons.map(() => null) ?? []),
+          held: sameRound ? s.held : (round?.balloons.map(() => false) ?? []),
           pending: round?.balloons.map((b) => inFlight.current.has(String(b.index))) ?? [],
         };
       });
@@ -345,6 +435,8 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           beats: result.round.balloons.map(() => 'idle'),
           pending: result.round.balloons.map(() => false),
           patched: result.round.balloons.map(() => false),
+          outcomes: result.round.balloons.map(() => null),
+          held: result.round.balloons.map(() => false),
         }));
         emit({ kind: 'round-start', round: result.round });
         return result;
@@ -374,6 +466,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         beats: replaceAt(s.beats, balloonIndex, 'press'),
         pending: replaceAt(s.pending, balloonIndex, true),
         patched: replaceAt(s.patched, balloonIndex, patch),
+        outcomes: replaceAt(s.outcomes, balloonIndex, null),
       }));
       emit({ kind: 'press', balloon });
       try {
@@ -383,18 +476,43 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           ),
           sleep(MIN_PRESS_MS),
         ]);
+        const after = result.round.balloons[balloonIndex];
+        const drawIndex = after?.drawIndex ?? balloon.drawIndex + 1;
+        const busy = busyAfter(result.outcome);
         setState((s) => ({
           ...s,
           beats: replaceAt(s.beats, balloonIndex, result.outcome),
-          pending: replaceAt(s.pending, balloonIndex, false),
+          outcomes: replaceAt(s.outcomes, balloonIndex, result.outcome),
+          held: replaceAt(
+            s.held,
+            balloonIndex,
+            result.outcome === 'top' && roundWinTier(result.round) !== null,
+          ),
+          // A Patch save keeps the balloon busy until its motion is over.
+          pending: busy ? s.pending : replaceAt(s.pending, balloonIndex, false),
         }));
-        if (result.outcome === 'popped' || result.outcome === 'top') {
-          settleEndBeat(round.id, balloonIndex, result.outcome);
-        }
+        const settleMs =
+          result.outcome === 'survived'
+            ? SURVIVE_BEAT_MS
+            : result.outcome === 'saved'
+              ? SAVED_BEAT_MS
+              : END_BEAT_MS;
+        settleBeat(round.id, balloonIndex, result.outcome, drawIndex, settleMs);
         apply(result);
-        const after = result.round.balloons[balloonIndex];
+        settleWin(result);
         if (after) {
           emit({ kind: 'pump', outcome: result.outcome, balloon: after, round: result.round });
+        }
+        if (busy) {
+          await sleep(SAVED_MS);
+          // Always free the balloon, even if a resync has put another round on
+          // screen meanwhile: its pending flag came from this request
+          // (inFlight), which ends in the finally below.
+          setState((s) =>
+            balloonIndex < s.pending.length
+              ? { ...s, pending: replaceAt(s.pending, balloonIndex, false) }
+              : s,
+          );
         }
         return result;
       } catch (error) {
@@ -404,7 +522,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         inFlight.current.delete(tag);
       }
     },
-    [apply, client, emit, handleFailure, settleEndBeat],
+    [apply, client, emit, handleFailure, settleBeat, settleWin],
   );
 
   const cashOutAction = useCallback(
@@ -425,14 +543,22 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         const result = await send((key) =>
           client.cashOut(round.id, { balloonIndex, expectedDrawIndex: balloon.drawIndex }, key),
         );
+        const after = result.round.balloons[balloonIndex];
         setState((s) => ({
           ...s,
           beats: replaceAt(s.beats, balloonIndex, 'cashed'),
+          held: replaceAt(s.held, balloonIndex, roundWinTier(result.round) !== null),
           pending: replaceAt(s.pending, balloonIndex, false),
         }));
-        settleEndBeat(round.id, balloonIndex, 'cashed');
+        settleBeat(
+          round.id,
+          balloonIndex,
+          'cashed',
+          after?.drawIndex ?? balloon.drawIndex,
+          END_BEAT_MS,
+        );
         apply(result);
-        const after = result.round.balloons[balloonIndex];
+        settleWin(result);
         if (after) emit({ kind: 'cash-out', balloon: after, round: result.round });
         return result;
       } catch (error) {
@@ -442,7 +568,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         inFlight.current.delete(tag);
       }
     },
-    [apply, client, emit, handleFailure, settleEndBeat],
+    [apply, client, emit, handleFailure, settleBeat, settleWin],
   );
 
   const actions = useMemo<GameActions>(

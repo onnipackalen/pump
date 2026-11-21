@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RoundView } from '../api/contract';
-import type { Beat } from './useGame';
 
 /**
  * Hold to pump: while a Pump button or key is held down, the balloon is
  * pumped again and again. Each pump is still an ordinary pump, sent only
  * after the last one's answer is back, so the server sees exactly what it
- * would see from fast taps.
+ * would see from fast taps. A balloon a Patch just saved stays busy
+ * (pending) until its save motion is over, so a hold waits for it too.
  */
 
 /** What a hold keeps pumping: one balloon, or every balloon still in play. */
@@ -19,18 +19,6 @@ export type HoldTarget =
  * balloon's grow can be seen before the next press.
  */
 export const HOLD_GAP_MS = 250;
-
-/**
- * The pause after a Patch stopped a pop. The balloon's "saved" motion (it
- * swells as if to pop, shudders, and the patch tears off) takes 800 ms; a
- * press sooner would cut it off in the middle.
- */
-export const SAVED_GAP_MS = 800;
-
-/** How long a hold waits before pumping these balloons again. */
-export function holdGap(indexes: readonly number[], beats: readonly Beat[]): number {
-  return indexes.some((i) => beats[i] === 'saved') ? SAVED_GAP_MS : HOLD_GAP_MS;
-}
 
 /**
  * Which balloons a hold pumps now. Null: the hold is over, because the
@@ -53,6 +41,26 @@ export function holdStep(
   return live.map((b) => b.index);
 }
 
+/**
+ * Which balloons the first press of a hold pumps: every held balloon that is
+ * free now. A balloon still busy (its pump on its way, or a Patch save still
+ * playing) is left out of this first press instead of holding up the
+ * others, the same as Pump all from the keyboard. Later steps (holdStep)
+ * wait for all of them, so they fall into step. Null: nothing to hold.
+ */
+export function holdStartStep(
+  round: RoundView | null,
+  pending: readonly boolean[],
+  hold: HoldTarget,
+): readonly number[] | null {
+  if (!round || round.id !== hold.roundId || round.status !== 'active') return null;
+  const live = round.balloons.filter(
+    (b) => b.status === 'active' && (hold.kind === 'all' || b.index === hold.index),
+  );
+  if (live.length === 0) return null;
+  return live.filter((b) => !(pending[b.index] ?? false)).map((b) => b.index);
+}
+
 export interface HoldPump {
   /**
    * Pumps at once, then again after each answer until the hold ends. A
@@ -66,7 +74,6 @@ export interface HoldPump {
 export function useHoldPump(
   round: RoundView | null,
   pending: readonly boolean[],
-  beats: readonly Beat[],
   pump: (balloonIndex: number, patch: boolean) => void,
   enabled: boolean,
 ): HoldPump {
@@ -82,7 +89,7 @@ export function useHoldPump(
   const start = useCallback(
     (next: HoldTarget, by: 'pointer' | 'key') => {
       if (!enabled) return;
-      const now = holdStep(round, pending, next);
+      const now = holdStartStep(round, pending, next);
       if (now === null) return;
       for (const index of now) pump(index, false);
 
@@ -109,9 +116,9 @@ export function useHoldPump(
     if (!step || step.length === 0) return;
     const timer = setTimeout(() => {
       for (const index of step) pump(index, false);
-    }, holdGap(step, beats));
+    }, HOLD_GAP_MS);
     return () => clearTimeout(timer);
-  }, [hold, enabled, round, pending, beats, pump]);
+  }, [hold, enabled, round, pending, pump]);
 
   useEffect(() => () => unlisten.current?.(), []);
 
