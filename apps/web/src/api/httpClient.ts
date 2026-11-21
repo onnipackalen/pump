@@ -5,7 +5,9 @@ import type {
   CashOutBody,
   FairnessView,
   HistoryResponse,
+  PlayerSettings,
   PlayerStats,
+  PublicWinsResponse,
   PumpBody,
   PumpResult,
   RotateResult,
@@ -188,5 +190,25 @@ export class HttpClient implements GameClient {
 
   getVerifiableRound(roundId: string): Promise<VerifiableRound> {
     return this.asPlayer('GET', `/api/rounds/${encodeURIComponent(roundId)}/verify`);
+  }
+
+  /**
+   * Sent at once, not after the session: the lists are the same for everyone
+   * and the server reads no cookie for them, so this never makes a player.
+   */
+  getPublicWins(): Promise<PublicWinsResponse> {
+    return this.call('GET', '/api/wins');
+  }
+
+  getSettings(): Promise<PlayerSettings> {
+    return this.asPlayer('GET', '/api/settings');
+  }
+
+  /** Only the field the server knows is sent, so nothing else can ride along. */
+  setSettings(settings: PlayerSettings, key: string): Promise<PlayerSettings> {
+    return this.asPlayer('PUT', '/api/settings', {
+      body: { winsPrivate: settings.winsPrivate },
+      key,
+    });
   }
 }

@@ -49,6 +49,9 @@ import type {
   BalloonView,
   CashOutBody,
   FairnessView,
+  PlayerSettings,
+  PublicWin,
+  PublicWinsResponse,
   PumpBody,
   PumpResult,
   RotateResult,
@@ -62,6 +65,9 @@ import type {
 import { CLIENT_SEED_PATTERN } from '../game/clientSeed';
 
 const STARTING_BALANCE_CENTS = 1_000_000;
+
+/** As on the server: each public list holds at most ten wins. */
+const PUBLIC_WINS_PER_LIST = 10;
 
 /** A round as the demo "server" keeps it: the engine's round plus its seeds and actions. */
 interface DemoRound {
@@ -115,6 +121,14 @@ export class DemoClient implements GameClient {
   /** Finished rounds, newest first. */
   private finished: DemoRound[] = [];
   private readonly answered = new Map<string, Promise<unknown>>();
+  /** The player's own choice, as GET and PUT /api/settings keep it. */
+  private winsPrivate = false;
+  /**
+   * The demo player's tag in the public lists. The server's tag is a hash of
+   * the player and the day; this stand-in has one player and no days, so a
+   * random one per visit does the same job.
+   */
+  private readonly playerTag = newServerSeed().slice(0, 6);
 
   constructor(
     private readonly config: GameConfig = GAME_CONFIG,
@@ -296,6 +310,71 @@ export class DemoClient implements GameClient {
         draws: demo.draws[index] ?? [],
         afterRound: demo.afterRounds[index] ?? null,
       })),
+    };
+  }
+
+  /**
+   * The public lists, made from the only player this stand-in has: the
+   * demo player's own winning rounds, in the server's three orders (its
+   * measure, then newest first). Nothing when that player keeps their wins
+   * private.
+   */
+  async getPublicWins(): Promise<PublicWinsResponse> {
+    await sleep(this.latencyMs);
+    // this.finished is newest first already, and sort keeps that order for ties.
+    const wins = this.winsPrivate
+      ? []
+      : this.finished.map((r) => this.publicWin(r)).filter((w) => w !== null);
+    const top = (list: PublicWin[]): PublicWin[] => list.slice(0, PUBLIC_WINS_PER_LIST);
+    return {
+      enabled: true,
+      recent: top(wins),
+      biggest: top([...wins].sort((a, b) => b.netCents - a.netCents)),
+      luckiest: top([...wins].sort((a, b) => b.multiplierHundredths - a.multiplierHundredths)),
+    };
+  }
+
+  async getSettings(): Promise<PlayerSettings> {
+    await sleep(this.latencyMs);
+    return { winsPrivate: this.winsPrivate };
+  }
+
+  setSettings(settings: PlayerSettings, key: string): Promise<PlayerSettings> {
+    return this.once(key, async () => {
+      await sleep(this.latencyMs);
+      this.winsPrivate = settings.winsPrivate;
+      return { winsPrivate: this.winsPrivate };
+    });
+  }
+
+  /**
+   * A finished round as the public lists show it, or null if it is not a
+   * win: it must pay out more than its played bets and Patches. Its
+   * multiplier is the highest one a balloon cashed out at.
+   */
+  private publicWin(demo: DemoRound): PublicWin | null {
+    const { balloons, ladder } = demo.round;
+    let wageredCents = 0;
+    let payoutCents = 0;
+    let multiplierHundredths = 0;
+    for (const b of balloons) {
+      // A refunded bet was never played, so it is not a stake.
+      if (b.status !== 'refunded') wageredCents += b.betCents;
+      wageredCents += b.patchesCents;
+      payoutCents += b.payoutCents;
+      if (b.status === 'cashed') {
+        multiplierHundredths = Math.max(multiplierHundredths, multiplierAt(ladder, b.rung));
+      }
+    }
+    if (payoutCents <= wageredCents || demo.finishedAt === null) return null;
+    return {
+      playerTag: this.playerTag,
+      difficultyId: demo.round.difficultyId,
+      wageredCents,
+      payoutCents,
+      netCents: payoutCents - wageredCents,
+      multiplierHundredths,
+      finishedAt: demo.finishedAt,
     };
   }
 

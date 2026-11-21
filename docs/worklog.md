@@ -2808,3 +2808,97 @@ GitHub's check green, Manual Deploy > Deploy latest commit; live 50 seconds
 later, serving the new build's files, and the log says `opened the existing
 file, 7 players`. The difficulty rings stay instant: the user chose "Keep
 them instant".
+
+## 2026-11-21: public wins on the screen (branch public-wins-screen)
+
+Built the screen half of the public wins; the server half was already in.
+- Client: `getPublicWins`, `getSettings` and `setSettings` on GameClient,
+  the HttpClient and the demo. `/api/wins` goes out at once (it needs no
+  player); the settings go as the player, the PUT with its
+  Idempotency-Key and only `winsPrivate` in the body. The demo lists its
+  own player's wins and hides them while private.
+- Panel (`apps/web/src/wins/`): a "Wins" heading, three tabs (Recent,
+  Biggest, Lucky; arrow keys, Home, End) and one table: player tag,
+  difficulty (config label, else the id), bet, multiplier, payout, gain.
+  The payout column drops out on a card under 480px. Mint only on the
+  gain. No live region. Nothing at all while the server says off.
+- Where: at the very end of the page. Computer: a card under the game;
+  the page now scrolls down to it, and the top bar and layout are still
+  exactly one screen (svh), so the game keeps its size and place.
+  Upright: the sheet's last part; its end is a third resting place, the
+  two sheet places are where they were. During play on an upright or a
+  touch screen it is hidden, so a round stays one screen that never
+  scrolls and a drag on a held Pump cannot scroll the page.
+- When it asks (`wins/polling.ts`, pure): once at page load; never again
+  in that page if off; otherwise only while on screen with the tab in
+  front, every 10 s, or 5 s after the last request when something new is
+  wanted (it came into view, the tab came back, a round of the player's
+  ended, the private switch changed). Never two within 5 s.
+- Settings: "Keep my wins private", read when the menu opens, saved per
+  press, a plain message on failure.
+
+Measured in my own headless Chrome (stage, slots, controls, top bar, before
+and after, at the top and with the sheet up): the same to the pixel at
+1440x900, 1024x768, 390x844 and 375x667. Live, against the worktree's
+server: one request in 22 s with the panel out of sight, then 0/10/10 s on
+screen, none while the tab was hidden, one at once when it came back; my
+round's end brought the next refresh 5 s after the last instead of 10.
+Private on: my rows left the list 1.3 s after the press; off again: back
+at the next refresh, 4 s later. With the answer replaced by "off": no
+panel, one request per load, the page exactly as before.
+
+What went wrong, and how it was caught:
+- On a computer the card starts exactly at the screen's bottom edge, and
+  an IntersectionObserver counts a box that only touches the edge as on
+  screen, so it would have polled out of sight. Seen in the measurements
+  (card top 900 at 900 high) before the polling check; the observer's
+  root is now cut by a pixel, and the live check confirmed it.
+- My headless driver kept touch emulation on after a phone size, so a
+  1440x900 round showed the card hidden (pointer: coarse). Caught because
+  the check printed the media query; the driver now turns touch off.
+- The browser pane reset its size mid-measurement when its width changed,
+  so every live check ran in an own headless Chrome instead.
+
+## 2026-11-21: public wins, fixes after the review (branch public-wins-screen)
+
+Fixed what the review of the public wins screen found:
+- Phones: a quick flick up from sheet down flew past the bet panel to the
+  end of the wins table. The whole app is a snap area and its end is the
+  wins' end, so scroll-snap-stop could not stop it. Now the wins wait off
+  the page while the sheet is down and join it once the page rests with
+  the sheet up (`wins/sheetFirst.ts`, pure rule tested). Every flick and
+  slow drag from sheet down rests at sheet up, a second one goes on to the
+  wins; most flicks back down stop at sheet up (scroll-snap-stop on the
+  sheet), hard ones go to the top.
+- Computer: the page shows no scrollbar while the wins are on it, so
+  where scrollbars take room the game no longer gets 15px narrower when
+  the wins arrive. The top bar is sticky there, with the page's sky fixed
+  behind it, so the balance and settings stay in reach.
+- A wide table now scrolls inside its card (the card's grid column could
+  grow past the card); long difficulty names are cut.
+- The panel itself shows nothing for an off answer, with a test (the only
+  guard was in an effect no test ran).
+- The multiplier column is "Best ×": a round's best balloon, so Bet times
+  it is not the payout with two or three balloons.
+- Settings row: its rule is a pure reducer with tests (never shows a value
+  the server did not send); no switch role before the value is known;
+  busy only while a request is on its way; the failure line lines up.
+- Polling uses performance.now(), so a clock jump does not stall it.
+
+Left as built, for the user: with a mouse the page can still scroll down
+to the wins during a round (the top comment of styles.css now says so).
+
+Checked live in my own headless Chrome at pwfix.localhost:3220: touch
+flicks at 390x844 and 375x667 (135/543 and 113/517), forced 15px
+scrollbars at 1440x900 and 1024x768 (page width and game rects the same
+as with the wins off), the top bar's pixels at the top of the page (at
+most 1 of 255 off, the same noise a scrollable page has without the
+sticky bar), a 320x568 table, a forced 500 on the settings read and save.
+
+What went wrong, and how it was caught:
+- Staging one CSS file by hunks with no context put the sheet-down rule
+  after the file's last block in the first commit. Caught by reading the
+  diff left after that commit; the next commit moves it back. Later
+  commits were staged from whole files.
+- Moving the "page start" snap from the app to the sticky top bar was
+  tried and dropped: Chrome then let the page rest anywhere.

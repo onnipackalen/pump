@@ -169,6 +169,15 @@ class FakeClient implements GameClient {
   getStats(): never {
     throw new Error('not used');
   }
+  getPublicWins(): never {
+    throw new Error('not used');
+  }
+  getSettings(): never {
+    throw new Error('not used');
+  }
+  setSettings(): never {
+    throw new Error('not used');
+  }
 }
 
 describe('E3: starting over like the first load', () => {

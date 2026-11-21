@@ -11,6 +11,13 @@
  * fairness, past rounds, rules, keys) is behind the settings button, which
  * is always in the top bar.
  *
+ * Under all of it, at the very end of the page, are everyone's wins (the
+ * public wins, like Stake's bets table). They add to the page, below the
+ * game's one screen, and never take room from it: see "Public wins under
+ * the game" below and wins/public-wins.css. They are hidden while a round
+ * or auto-play runs, on every screen, so a round is always exactly one
+ * screen and Pump or Cash out can never be scrolled away.
+ *
  * Colour roles follow graphics/README.md: mint only for a real win, grey
  * only for a pop, the sand-to-orange steps only for the pop chance.
  * Balloons are pearl, azure and violet. The scene behind the balloons is
@@ -159,6 +166,69 @@ body {
 }
 
 /*
+ * Public wins under the game, on a wide screen. Without them nothing here
+ * scrolls. With them the page runs on below the game's one screen, and the
+ * page scrolls down to them; the game itself is not touched: the top bar
+ * and the layout together are still exactly one screen tall, so every part
+ * of the game keeps its size and place. (The layout's height is the screen
+ * at its smallest, svh, as the upright stage's is: a sideways phone hides
+ * its browser bars while the page scrolls, and the game must not grow then.)
+ * The sides stay clipped, as everywhere, so the page never scrolls
+ * sideways. Only while the wins are on the page: the verify and stats pages
+ * keep their own scrolling box.
+ *
+ * The page shows no scrollbar. Where scrollbars take room (Windows, or a
+ * Mac set to always show them), one would make the game 15px narrower the
+ * moment the wins arrived, and wider again on the verify page. The wheel,
+ * a touchpad and the keys still scroll.
+ */
+@media (orientation: landscape) {
+  html:has(.app > .public-wins:not([hidden])) {
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  html:has(.app > .public-wins:not([hidden]))::-webkit-scrollbar {
+    display: none;
+  }
+  html:has(.app > .public-wins:not([hidden])) body,
+  html:has(.app > .public-wins:not([hidden])) #root {
+    height: auto;
+  }
+  html:has(.app > .public-wins:not([hidden])) body {
+    overflow: visible;
+  }
+  .app:has(> .public-wins:not([hidden])) {
+    height: auto;
+    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: visible;
+  }
+  .app:has(> .public-wins:not([hidden])) > .layout {
+    flex: none;
+    height: calc(100vh - var(--bar));
+    height: calc(100svh - var(--bar));
+  }
+}
+
+/*
+ * On a computer the top bar stays at the top while the page is scrolled
+ * down to the wins, so the balance and the settings button (with "Keep my
+ * wins private") are always there, as on an upright phone. Its background
+ * is the page's own sky, fixed to the screen, so at the top of the page it
+ * looks exactly as it does without the wins. Only with a mouse: a phone on
+ * its side does not draw fixed backgrounds the same way.
+ */
+@media (orientation: landscape) and (pointer: fine) {
+  .app:has(> .public-wins:not([hidden])) > .topbar {
+    position: sticky;
+    z-index: 5;
+    top: 0;
+    background: var(--sky-glow) fixed, var(--stage);
+  }
+}
+
+/*
  * Upright phones and tablets: the stage on top, the panel underneath, and
  * the page may scroll down.
  *
@@ -184,7 +254,9 @@ body {
  *   How: the swipe is the page's own scroll, so it moves the way every
  *   other sheet on the phone does. The stage is stuck in place under the
  *   top bar, so the page's scroll moves only the panel, over it. The page
- *   comes to rest in one of two places, sheet down or sheet up.
+ *   comes to rest in one of two places, sheet down or sheet up. (Under
+ *   the sheet are the public wins; their table's end is a third place, one
+ *   more swipe up. The two sheet places stay where they were.)
  * - The top bar stays at the top the whole time, so the balance and the
  *   settings button are always there.
  * - The page never scrolls sideways: the app is clipped at its sides.
@@ -1354,6 +1426,12 @@ input {
 
 .settings-body .card {
   background: var(--stage);
+}
+
+/* "Keep my wins private": a settings row with room for a failure under it,
+   which starts where the row's label does. */
+.private-wins .private-wins-failure {
+  margin: 0 14px 10px;
 }
 
 .info summary {

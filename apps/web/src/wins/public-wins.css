@@ -1,0 +1,142 @@
+/*
+ * Public wins: everyone's latest, largest and luckiest wins, in one small
+ * table at the very end of the page, under everything, like Stake's bets
+ * table. The user's rule for phones holds at every size: it goes only where
+ * there is clearly room, and nothing covers the balloons or the sky above
+ * them.
+ *
+ * - Computer (a wide screen): a card under the game. The game keeps its one
+ *   screen, the exact size and place it has without the card, and the page
+ *   scrolls down to the card (styles.css, "Public wins under the game").
+ * - Upright phone or tablet: the last part of the sheet, under the bet
+ *   panel, as wide as the sheet. The sheet keeps its two resting places
+ *   (down at the top of the page, up with its bottom at the screen's
+ *   bottom); one more swipe up goes on to the table's end, a third place.
+ *   While the sheet is down the table waits off the page, so a quick flick
+ *   cannot fly past sheet up to it (wins/sheetFirst.ts). The stage stays
+ *   stuck under the top bar and does not move.
+ * - During a round or auto-play on an upright screen or a touch screen it
+ *   is hidden: a round is one screen that never scrolls, and a finger
+ *   dragging on a held Pump button must not scroll the page away. It is
+ *   back as soon as play stops. With a mouse there is no such risk, so on a
+ *   computer it stays.
+ *
+ * Colour: the game's own roles (graphics/README.md). Mint only for a real
+ * gain, and the server sends only wins.
+ *
+ * This file is loaded before styles.css (App imports it first), so every
+ * rule here that changes a styles.css element is more specific than that
+ * element's own rule.
+ */
+
+.public-wins {
+  /* Above the scene, which is drawn wider than the stage (background.css). */
+  position: relative;
+  z-index: 2;
+  /* The table drops a column on a narrow card (below). */
+  container-type: inline-size;
+  display: grid;
+  /* One column no wider than the card: a wide table scrolls in its own box
+     (.table-scroll) instead of pushing the tabs and the gain past the edge. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  width: min(calc(100% - 24px), 960px);
+  margin: 0 auto 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  font-variant-numeric: tabular-nums;
+}
+
+.pw-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.public-wins .pw-title {
+  margin: 0;
+}
+
+.pw-tabs {
+  flex: 0 1 270px;
+}
+
+.pw-tabs .segment[aria-selected='true'] {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+
+.pw-tabs .segment:focus-visible {
+  outline: 2px solid var(--pearl);
+  outline-offset: -2px;
+}
+
+.public-wins [role='tabpanel']:focus-visible {
+  outline: 2px solid var(--pearl);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.public-wins .hint {
+  margin: 4px 0;
+}
+
+.pw-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.pw-tag {
+  color: var(--muted);
+}
+
+/* A long difficulty name (one the config does not know) is cut, not the row. */
+.pw-table .pw-difficulty {
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A narrow card keeps the gain and leaves out the payout (bet plus gain). */
+@container (max-width: 480px) {
+  .pw-table .pw-payout {
+    display: none;
+  }
+  .pw-table th,
+  .pw-table td {
+    padding-inline: 4px;
+    font-size: 12px;
+  }
+}
+
+/* Upright: the sheet's last part, as wide as it, flat against its bottom. */
+@media (orientation: portrait) {
+  .public-wins {
+    width: min(100%, 560px);
+    margin: 0 auto;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    border-bottom: 0;
+    border-radius: 0;
+    scroll-snap-align: end;
+  }
+  /* Sheet down: off the page until it is up (wins/sheetFirst.ts). */
+  .public-wins[data-waiting] {
+    display: none;
+  }
+  /* Coming back down from the table, a flick stops at sheet up first. */
+  .app:has(> .public-wins) .controls {
+    scroll-snap-stop: always;
+  }
+}
+
+/*
+ * Hidden during play on every screen: a round (or auto-play) is always
+ * exactly one screen, so the page can never scroll Pump or Cash out away
+ * (with a finger, or with a mouse wheel on a computer). The wins come back
+ * when the round is over.
+ */
+.app:has(.controls > .round, .auto-progress[data-running='true']) > .public-wins {
+  display: none;
+}
