@@ -137,9 +137,9 @@ auto-play off. A value the file does not know switches every listed feature
 off and says so in the browser console, so a typo never turns a banned feature
 on. Adding a market, for example one for Ontario, is one line in `market.ts`.
 
-The player's own settings (sound, Animations off) are in the game's settings
-menu. Animations off removes movement but keeps the same timing, so a result
-never shows sooner.
+The player's own settings (sound, Animations off, Keep my wins private) are
+in the game's settings menu. Animations off removes movement but keeps the
+same timing, so a result never shows sooner.
 
 ## Scripts
 

@@ -2329,3 +2329,53 @@ What went wrong, and how it was caught:
 - The `live-stats` server still serves the API only, so the live checks
   ran in a headless Chrome with no port, the page files served from
   `apps/web/dist` and every /api call going to that server.
+
+## 2026-11-21: public wins on the screen (branch public-wins-screen)
+
+Built the screen half of the public wins; the server half was already in.
+- Client: `getPublicWins`, `getSettings` and `setSettings` on GameClient,
+  the HttpClient and the demo. `/api/wins` goes out at once (it needs no
+  player); the settings go as the player, the PUT with its
+  Idempotency-Key and only `winsPrivate` in the body. The demo lists its
+  own player's wins and hides them while private.
+- Panel (`apps/web/src/wins/`): a "Wins" heading, three tabs (Recent,
+  Biggest, Lucky; arrow keys, Home, End) and one table: player tag,
+  difficulty (config label, else the id), bet, multiplier, payout, gain.
+  The payout column drops out on a card under 480px. Mint only on the
+  gain. No live region. Nothing at all while the server says off.
+- Where: at the very end of the page. Computer: a card under the game;
+  the page now scrolls down to it, and the top bar and layout are still
+  exactly one screen (svh), so the game keeps its size and place.
+  Upright: the sheet's last part; its end is a third resting place, the
+  two sheet places are where they were. During play on an upright or a
+  touch screen it is hidden, so a round stays one screen that never
+  scrolls and a drag on a held Pump cannot scroll the page.
+- When it asks (`wins/polling.ts`, pure): once at page load; never again
+  in that page if off; otherwise only while on screen with the tab in
+  front, every 10 s, or 5 s after the last request when something new is
+  wanted (it came into view, the tab came back, a round of the player's
+  ended, the private switch changed). Never two within 5 s.
+- Settings: "Keep my wins private", read when the menu opens, saved per
+  press, a plain message on failure.
+
+Measured in my own headless Chrome (stage, slots, controls, top bar, before
+and after, at the top and with the sheet up): the same to the pixel at
+1440x900, 1024x768, 390x844 and 375x667. Live, against the worktree's
+server: one request in 22 s with the panel out of sight, then 0/10/10 s on
+screen, none while the tab was hidden, one at once when it came back; my
+round's end brought the next refresh 5 s after the last instead of 10.
+Private on: my rows left the list 1.3 s after the press; off again: back
+at the next refresh, 4 s later. With the answer replaced by "off": no
+panel, one request per load, the page exactly as before.
+
+What went wrong, and how it was caught:
+- On a computer the card starts exactly at the screen's bottom edge, and
+  an IntersectionObserver counts a box that only touches the edge as on
+  screen, so it would have polled out of sight. Seen in the measurements
+  (card top 900 at 900 high) before the polling check; the observer's
+  root is now cut by a pixel, and the live check confirmed it.
+- My headless driver kept touch emulation on after a phone size, so a
+  1440x900 round showed the card hidden (pointer: coarse). Caught because
+  the check printed the media query; the driver now turns touch off.
+- The browser pane reset its size mid-measurement when its width changed,
+  so every live check ran in an own headless Chrome instead.
