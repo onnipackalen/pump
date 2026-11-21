@@ -53,7 +53,8 @@ export function databasePlace(inputs: PlaceInputs): DatabasePlace {
       throw new Error(
         'DATABASE_PATH is not set. On a host it must name a file on the disk that survives ' +
           'deploys (for example /var/data/pump.db). Without it every wallet would be lost on ' +
-          'the next deploy, so the server will not start.',
+          'the next deploy, so the server will not start. (This counts as a host because ' +
+          'NODE_ENV is "production" or RENDER is set. On your own computer, unset NODE_ENV.)',
       );
     }
     return { path: inputs.fallback, createFolder: true };
