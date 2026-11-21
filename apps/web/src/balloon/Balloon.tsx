@@ -129,6 +129,21 @@ export function Balloon({
           <stop offset="0.45" className="pb-band-b" />
           <stop offset="1" className="pb-band-c" />
         </linearGradient>
+        {/* Latex: the balloon's own deeper colour builds towards the bottom,
+             where the rubber is thicker. A mask, so the colour comes from
+             the fill and the id can repeat. */}
+        <linearGradient id="pb-deep-fade" gradientUnits="userSpaceOnUse" x1="0" y1="118" x2="0" y2="208">
+          <stop offset="0" className="pb-deep-fade-a" />
+          <stop offset="1" className="pb-deep-fade-b" />
+        </linearGradient>
+        <mask id="pb-deep-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="320">
+          <rect x="0" y="0" width="200" height="320" fill="url(#pb-deep-fade)" />
+        </mask>
+        {/* Latex: the broad, soft light of the window on the upper left. */}
+        <radialGradient id="pb-soft-light" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" className="pb-soft-light-a" />
+          <stop offset="1" className="pb-soft-light-b" />
+        </radialGradient>
         <clipPath id="pb-body-clip">
           <path d={BODY_PATH} />
         </clipPath>
@@ -196,13 +211,31 @@ export function Balloon({
             <g className="pb-squash">
               <path className="pb-body" d="M100 208C82 206 28 166 28 100C28 52 60 22 100 22C140 22 172 52 172 100C172 166 118 206 100 208Z" />
               <path className="pb-shade" fill="url(#pb-shade)" d="M100 208C82 206 28 166 28 100C28 52 60 22 100 22C140 22 172 52 172 100C172 166 118 206 100 208Z" />
-              {/* depth: a darker underside, and a little light bounced up
-                   along the lower left edge, so it reads as round rubber. */}
+              {/* depth: the balloon's deeper colour towards the bottom, a
+                   darker underside, and a little light bounced up along the
+                   lower left edge, so it reads as round rubber. */}
+              <path className="pb-deep" mask="url(#pb-deep-mask)" d={BODY_PATH} />
               <path className="pb-core" fill="url(#pb-core-fade)" d={BODY_PATH} />
               <path
                 className="pb-bounce"
                 clipPath="url(#pb-body-clip)"
                 d="M40 150C52 178 74 198 96 205C78 196 58 178 46 150Z"
+              />
+              {/* gather: the little creases where the rubber bunches into
+                   the neck, each with a lit edge beside it. */}
+              <g className="pb-gather" clipPath="url(#pb-body-clip)">
+                <path className="pb-gather-line" d="M87 198Q94 203 98.6 206.5M113 198Q106 203 101.4 206.5M93 192Q97 200 99.4 206.5M107 192Q103 200 100.6 206.5" />
+                <path className="pb-gather-light" d="M87.6 196.8Q94.6 201.8 99 205.4M93.9 191.4Q97.9 199.4 99.9 205.4" />
+              </g>
+              {/* soft light: the broad glow of the window on the upper left. */}
+              <ellipse
+                className="pb-soft-light"
+                fill="url(#pb-soft-light)"
+                cx="72"
+                cy="72"
+                rx="34"
+                ry="46"
+                transform="rotate(-24 72 72)"
               />
               <path className="pb-rim" d="M163 118C160 156 132 190 108 201C128 186 153 158 163 118Z" />
               <path className="pb-shine" d="M47 96C45 66 61 42 85 33C70 47 60 68 58 93C57.5 101 47.5 102 47 96Z" />
@@ -269,8 +302,22 @@ export function Balloon({
           </g>
           {/* tie: the knot. Hidden until the balloon is tied off on cash-out. */}
           <g className="pb-tie">
-            <path className="pb-knot" d="M100 205C96 209 92.5 214 91 219.5Q100 217 109 219.5C107.5 214 104 209 100 205Z" />
-            <ellipse className="pb-knot" cx="100" cy="220" rx="9.5" ry="2.6" />
+            {/* tail: the end of the neck left below the knot, flaring out. */}
+            <path
+              className="pb-knot-tail"
+              d="M97.6 213.5C97.8 216 96.6 218.6 94.4 220.4H105.6C103.4 218.6 102.2 216 102.4 213.5Z"
+            />
+            <path
+              className="pb-knot-tail-shade"
+              fill="url(#pb-neck-fade)"
+              d="M97.6 213.5C97.8 216 96.6 218.6 94.4 220.4H105.6C103.4 218.6 102.2 216 102.4 213.5Z"
+            />
+            {/* lip: the rolled end of the neck. */}
+            <ellipse className="pb-knot" cx="100" cy="220.6" rx="6.2" ry="2" />
+            {/* knot: the wrapped lump, with the wrap's crease and a little light. */}
+            <ellipse className="pb-knot" cx="100" cy="210.4" rx="5.2" ry="4.4" />
+            <path className="pb-knot-crease" d="M95.4 210.6Q100 213.6 104.6 209.8" />
+            <ellipse className="pb-knot-gleam" cx="98.2" cy="208.6" rx="1.9" ry="1.1" />
           </g>
           {/* shards: 8 pieces of rubber that fly out on a pop. Hidden until
                then. They rest inside the body outline so they don't move the

@@ -69,6 +69,21 @@
 .pump-balloon .pb-knot {
   fill: var(--balloon-deep);
 }
+/* The knot: the neck's end flares below a wrapped lump. */
+.pump-balloon .pb-knot-tail {
+  fill: var(--balloon-base);
+}
+.pump-balloon .pb-knot-crease {
+  fill: none;
+  stroke: #000;
+  stroke-opacity: 0.28;
+  stroke-width: 0.9px;
+  stroke-linecap: round;
+}
+.pump-balloon .pb-knot-gleam {
+  fill: #fff;
+  opacity: 0.4;
+}
 
 /* Open neck while pumping; the knot (.pb-tie) only shows once tied. */
 .pump-balloon .pb-neck-tube {
@@ -157,7 +172,45 @@
 }
 .pump-balloon .pb-core-b {
   stop-color: #000;
-  stop-opacity: 0.26;
+  stop-opacity: 0.16;
+}
+/* Latex: the balloon's deeper colour towards the bottom (a mask, so white
+   only here; the colour is the fill). */
+.pump-balloon .pb-deep {
+  fill: var(--balloon-deep);
+  opacity: 0.55;
+}
+.pump-balloon .pb-deep-fade-a {
+  stop-color: #fff;
+  stop-opacity: 0;
+}
+.pump-balloon .pb-deep-fade-b {
+  stop-color: #fff;
+  stop-opacity: 1;
+}
+/* The creases where the rubber gathers into the neck. */
+.pump-balloon .pb-gather-line {
+  fill: none;
+  stroke: var(--balloon-deep);
+  stroke-width: 1.1px;
+  stroke-linecap: round;
+  opacity: 0.6;
+}
+.pump-balloon .pb-gather-light {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 0.8px;
+  stroke-linecap: round;
+  opacity: 0.22;
+}
+/* The broad soft light of the window, under the sharp streak. */
+.pump-balloon .pb-soft-light-a {
+  stop-color: #fff;
+  stop-opacity: 0.22;
+}
+.pump-balloon .pb-soft-light-b {
+  stop-color: #fff;
+  stop-opacity: 0;
 }
 .pump-balloon .pb-bounce {
   fill: #fff;
