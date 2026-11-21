@@ -1561,6 +1561,56 @@ README intro on main ("is live") and on `cashout-reveal` ("Not live yet")
 already clash when merged; the new sections add no clash of their own
 (checked with `git merge-file`).
 
+## 2026-11-20: the phone's bet panel is a sheet you swipe up
+
+The user, in the layout chat: "Make it so you can like swipe up on it.
+Like on an iphone opening an page or something on iphone also make sure
+like iphone and webbrowser are not identical."
+
+Built on the branch `one-screen-layout`, in `styles.css` only, on top of
+"upright screens scroll down to bet":
+
+- On an upright screen the panel is a sheet: docked at the bottom, as wide
+  as the phone (560 px in the middle on a tablet), rounded at the top, with
+  a shadow and a handle. With the sheet down, its top is on screen: the
+  handle, Bet and the amount.
+- Swipe up and it slides up over the balloons; swipe down and it goes back.
+  The swipe is the page's own scroll, so it moves the way every sheet on
+  the phone does and needs no script. The stage is stuck in place under
+  the top bar (`position: sticky`), so the scroll moves only the sheet. The
+  page comes to rest in one of two places (`scroll-snap`): sheet down or
+  sheet up.
+- The handle shows only while there is something to pull: not in a round
+  and not while auto-play runs.
+- A wide screen (a desktop browser, a phone on its side) is deliberately
+  different: the panel is a card beside the stage, nothing scrolls, there
+  is no sheet and no handle.
+
+Checked on the real server, 32 sizes, the same nine states as the entry
+before. 31 pass; 568x320 on its side fails as before. New in what "pass"
+means: on an upright screen the sheet is the full width (or 560 px and
+centred); in a round it is docked at the bottom and has no handle; with
+the sheet up the stage has not moved or changed size, the top bar is still
+at the top, the sheet's end is at the bottom of the screen, its last
+control is on screen and it does not go under the top bar; a wide screen
+has no handle. At 375x812 by hand: a nudge of 40 px falls back to sheet
+down, a nudge of 100 px goes on to sheet up (135 px), and with the sheet
+up the stage is at the same place and size (558 px) with the sheet over
+its lowest 125 px.
+
+Known limits:
+
+- Checked in Chromium only. The swipe itself, the snap, and how a phone's
+  browser hides its bars while the page scrolls are exactly the things
+  that differ in Safari on a real iPhone, and they have not been tried
+  there. The stage's height is taken from the screen at its smallest
+  (`svh`) so that it should not grow when the bars hide; that is by the
+  rules of the browser, not by a test on a phone.
+- The handle is a picture, not a button: tapping it does nothing. The
+  sheet is moved by swiping, by the Tab key (the browser brings the focused
+  control into view) or by any scroll.
+- With the sheet up the lower part of the balloons is covered (up to 341
+  of 558 px on the Auto form with three bets). That is what a sheet does.
 ## 2026-11-21: the after-round reveal lands on main
 
 From the "Agents finishing and game compilation" chat, which coordinates
@@ -1771,3 +1821,179 @@ Left as it is, on purpose:
 - One engine test (the sweep over every bet in math.test.ts) timed out once
   while this Mac was running many agents at a load of 18. It passes alone
   and on GitHub. Nothing in it was changed.
+## 2026-11-20: the swipe-up sheet, checked again on top of the reveal and the new pump set-up
+
+The sheet waited for two other merges (the after-round reveal and the
+new-balloon set-up with the popped picture). With both in main, main was
+merged into `one-screen-layout` (no conflicts, 1461 tests pass) and the
+size check was run again on the real server before main was moved.
+
+Result, 32 sizes and eight states (a one-balloon round and the screen
+after it, a three-balloon round, the same round down to its last balloon,
+the screen after it, capped bets, the Auto form, auto-play running):
+31 pass, and nothing moves between the states on any upright screen.
+568x320 on its side fails as before (the panel scrolls inside itself).
+The after-round line passes everywhere except with three balloons on the
+three phones on their side (667x375, 640x360, 568x320), where it runs
+into the numbers. That was already so on main before the sheet and is
+the reveal's own fix, not a change from the sheet.
+
+What went wrong, and how it was caught: the first run of the check died
+part-way ("Cannot read properties of undefined (reading 'click')") after
+one state. The check drives the game in a hidden frame inside the preview
+tab, and the user was playing in that same tab at the same time. Both
+were the same player (one cookie for `localhost`), so each kept ending
+the other's round. The fix is the one the pump set-up entry above found
+for a different reason: run the check in its own tab on `127.0.0.1`,
+which is a different player from `localhost`. The script now also waits
+for a button and says which one is missing, instead of clicking nothing.
+
+## 2026-11-20: the after-round line on phones on their side
+
+The sheet's size check found the last gap in the after-round line: with
+three balloons on a phone on its side (667x375, 640x360, 568x320) each
+slot is only 64 to 70 px wide. The line, at its 9px floor, wrapped to
+four lines there and ran up into the numbers above it.
+
+Built: a second, shorter wording of the same facts ("Would pop next",
+"Would pop after 1.37×", "Would reach top (25.00×)"). The card writes
+both, and a container query on the slot shows the short one only below
+104 px. The full line stays as the title. Upright phones (about 120 px a
+slot) still show the full line.
+
+Checked live on its own server at all three sizes after a real
+three-balloon round: no overlap, two lines. Then the longest wording any
+ladder can produce (the 5,000× top) was put in by hand: three lines at
+9px, still clear of the numbers. A test now wraps every short line word
+by word at 12 characters, for every ladder's top multiplier, and asks for
+three lines at most, so a new ladder with a bigger top fails the test
+instead of the screen. 1465 tests pass.
+
+Nothing turned out wrong in this step.
+
+## 2026-11-20: the multiplier steps go with each balloon
+
+From the user's competitor notes (#5 on their list): "Multipliers on top.
+In auto mode it shows the multipliers growing and the ones coming next,
+and it scrolls along the top", "We have a lot of space at the top ...
+Maybe put the rows up there", and "Three balloons: harder for us with
+three balloons, especially on a phone. Need to figure out how to fit it."
+Then, in the competitor chat, the rule for phones: "It only go if there's
+like space clearly available", and a plan they approved ("Yes, send it"):
+on a computer one row per balloon in the top space; on an iPhone a row
+under the balloon for one balloon and a small "next 1.23×" for two or
+three; nothing over the balloons or the sky above them, which is where
+they grow.
+
+Built on `one-screen-layout`:
+
+- `game/stepRow.ts` (pure, tested): every step of a balloon's ladder with
+  its state: passed, current, next, ahead, locked (above the top its bet
+  can reach) or popped (the step it was going for). It reads only the
+  balloon's own state and the round's own ladder, so it cannot hint at a
+  pump that was not made.
+- `components/StepRow.tsx` and `steps.css`: one row per balloon, drawn
+  three ways.
+  - A computer (wide, at least 560 px tall): a line of its own along the
+    top of the balloon's slot. One passed step stays in view, then the
+    current one in the balloon's colour, then what is coming; it slides
+    along as the balloon climbs. A short ladder sits in the middle and does
+    not move. The Net badge and messages moved down under the rows.
+  - An upright slot at least 300 px wide (one balloon on a phone): the
+    steps run left and right of the amount under the balloon, in the band
+    those two lines already have. The big multiplier is the current step.
+    Shown only while the balloon can still be pumped.
+  - A narrower upright slot (two or three balloons on a phone): no row.
+    Each balloon in play says "next 1.28×" small, inside its own Pump
+    button, or alone in that row when it has no button.
+  - A phone on its side: nothing.
+- `BalloonCard.tsx`: the row is the first child of both cards; the Pump
+  row takes the next step (the server's own number). `App.tsx` gives the
+  preview its ladder and the top its bet can reach.
+
+One thing is not as the approved plan worded it. The plan put the phone's
+row "in the gap between the amount and the bet panel (~100px free)". That
+gap is the empty Pump row, which exists only with two or three balloons;
+with one balloon it is closed and the round panel starts right under the
+amount. A row of its own there would take about 34 px from the picture.
+Beside the amount it takes nothing. The coordinator agreed and will show
+the user this difference before it lands.
+
+Checked on the real server, 32 sizes, twelve states (bet screen with one
+and three balloons, both again with a bet the payout cap cuts short, a
+one-balloon round after four pumps, after it, a pop on the first pump, a
+three-balloon round, the same round down to its last balloon, after it,
+the Auto form, auto-play running). 31 sizes pass as before; 568x320 on its
+side still scrolls inside its panel. New in what "pass" means: on a wide
+screen the row is at the top of its slot, inside it, above the picture,
+with the current and the next step in view and no message on it; on an
+upright screen the steps are inside the label band, level with the big
+multiplier, never on the amount, and hidden once the balloon is over; in
+a narrow slot each balloon in play has exactly one "next" line, inside
+its host, at 9 px or more, and the Pump button is no taller than before.
+The after-round line now passes everywhere (the coordinator's fix).
+
+The balloons' size, old build against new at all 32 sizes with one and
+three balloons: identical on every upright screen and every phone on its
+side (51 of 64 measurements). On a wide screen the picture is 34 px
+shorter, the row's own line: 3% at 1500x1400, 5% at 1440x900, 8% at
+1024x600. 1474 tests pass.
+
+What went wrong, and how it was caught:
+
+- The step width is set smaller on the row itself for the phone band, but
+  the distance from one step to the next was first worked out on the
+  stage, above it. A custom property is worked out where it is written, so
+  the row would have slid by the computer's distance. Seen on reading the
+  file before the first run; the distance is now worked out on the row.
+- The first run of the size check said steps lay on the amount at nineteen
+  upright sizes. They did not: the check resizes its frame and measures at
+  once, and the row takes 280 ms to slide to its new place. The check now
+  switches the slide off in its own frame; with that it finds none. In
+  the game a step cannot cross the amount in any case: the row is cut away
+  around the middle, so steps slide in under the amount and out the other
+  side.
+- The same run measured "bet screen, one balloon" with three balloons on
+  the stage: the stage keeps the last round until the next bet, and a
+  round from an earlier try was still there. The check now ends any round
+  and loads the page again before it starts.
+- A fifth preview server was refused (five per folder, four belong to
+  other chats), and rebuilding the one build would have changed the game
+  the user was playing in the same server's tab. The trial build is now
+  served beside it, under /wip/, from the same server.
+
+- Found before the merge, after the user's yes, on reading the check
+  itself: its three-balloon round had every balloon one pump in, so no
+  row had slid, and "the next step is in view" only asked that it was
+  inside the row. With three balloons in a 1024 px wide window a slot is
+  213 px and its row 193 px. Kept as "one passed, current, next", the next
+  step sat at 160 to 222 px: cut off at the row's edge once a balloon was
+  three pumps up. Measured both ways in the game at 1024x768 (balloon 1 at
+  1.28×): before, next at 160 to 222 of 193; now, current at 24 to 86 and
+  next at 92 to 154. The fix: a row under 246 px gives up the passed step,
+  one under 178 px also has smaller steps and fades, and a slot under
+  158 px (a window about 800 px wide with three balloons) has no row; the
+  panel's "Next" still names the step. The check now has a round with one
+  balloon four pumps up, asks that the current and the next step are clear
+  of the faded edges, and has two smaller windows (900x700, 800x600):
+  34 sizes, thirteen states, 33 pass, the row checks all pass.
+- One test run just before the merge showed 13 failed tests in 7 files.
+  Nothing had been changed that a test reads, and the same run passed
+  three times straight after (1474 tests). Two things were going on at
+  that moment: the machine was very busy (load average 17, several chats
+  running their own tests), and another chat's reviewer had just put a
+  throwaway test file into this worktree. Which of the two it was is not
+  known; the failing names were not kept. That file is not part of this
+  work and was neither committed nor deleted here.
+
+Not built, not checked:
+
+- "The balloon needs to grow more." The picture already has the stage's
+  whole height; what stays small is the balloon inside it
+  (`balloonSize()` in Balloon.tsx: 0.45 before the first pump, 0.56 after
+  three pumps on Easy). That file is being changed for the flat start by
+  another chat, so the numbers went there instead of a second edit here.
+- Stake shows a step's cash-out and chance when it is tapped. Not in the
+  approved plan, not built.
+- Chromium only. The rows use container queries, `:has()` and a mask; none
+  has been tried in Safari or on a real iPhone.
