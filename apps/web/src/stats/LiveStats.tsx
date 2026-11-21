@@ -110,7 +110,7 @@ export function LiveStats({ live, inPlay }: LiveStatsProps) {
       </div>
 
       <dl className="ls-figures">
-        <div title="Paid out minus bets and Patches, since this page opened or Reset">
+        <div title="Paid out minus bets and Patches, for the rounds ended since this page opened or Reset">
           <dt>Profit</dt>
           <dd className={stats.netCents > 0 ? 'win' : undefined}>
             {formatSignedCents(stats.netCents)}

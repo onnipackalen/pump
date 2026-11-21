@@ -125,8 +125,8 @@ export function App() {
   const sessionMs = useSessionClock(state.session?.startedAt ?? null);
 
   const round = state.round;
-  // This visit's live stats, counted from the round as the screen shows it.
-  const liveStats = useLiveStats(round, state.beats);
+  // This visit's live stats, counted from the game as the screen shows it.
+  const liveStats = useLiveStats(state);
   // How the balloons before this round ended, so each new pump sets up
   // from the picture that was in its place (game/setUp.ts).
   const setUp = useSetUpFrom(round);

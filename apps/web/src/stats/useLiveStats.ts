@@ -1,12 +1,11 @@
 import { useCallback, useId, useState } from 'react';
-import type { RoundView } from '../api/contract';
-import type { Beat } from '../game/useGame';
 import {
   resetLiveStats,
   START_WATCH,
   watchShown,
   type LiveStats,
   type LiveWatch,
+  type ShownGame,
 } from './liveTally';
 
 export interface LiveStatsControl {
@@ -27,8 +26,8 @@ export interface LiveStatsControl {
 /**
  * The live stats of this visit, and whether their panel is open.
  *
- * `round` and `beats` are the game's state as the screen draws it (useGame's
- * shown state), so a round is counted only once its end is on screen (see
+ * `shown` is the game's state as the screen draws it (useGame's shown
+ * state), so a round is counted only once its end is on screen (see
  * watchShown). It keeps counting while the panel is closed, and while the
  * stats or verify page is showing.
  *
@@ -37,13 +36,13 @@ export interface LiveStatsControl {
  * refresh that had already finished is never counted, as it was not played
  * in this visit.
  */
-export function useLiveStats(round: RoundView | null, beats: readonly Beat[]): LiveStatsControl {
+export function useLiveStats(shown: ShownGame): LiveStatsControl {
   const [watch, setWatch] = useState<LiveWatch>(START_WATCH);
   // Counted while rendering, so the figures change in the same frame as the
   // balance and the round's Net, never a frame later. watchShown returns the
   // same object once nothing is new, so this settles after one extra pass
   // (React's pattern for keeping information from earlier renders).
-  const next = watchShown(watch, round, beats);
+  const next = watchShown(watch, shown);
   if (next !== watch) setWatch(next);
 
   const [open, setOpen] = useState(false);

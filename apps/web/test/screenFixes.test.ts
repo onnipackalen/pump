@@ -298,6 +298,7 @@ describe('E3: starting over like the first load', () => {
       outcomes: [null],
       held: [false],
       winShownFor: 'old-round',
+      endedElsewhere: 'old-round',
       starting: false,
       notice: null,
       session: { startedAt: 1, startBalanceCents: 900 },
@@ -312,6 +313,7 @@ describe('E3: starting over like the first load', () => {
     expect(fresh.revealed).toEqual([]);
     expect(fresh.pending).toEqual([]);
     expect(fresh.winShownFor).toBeNull();
+    expect(fresh.endedElsewhere).toBeNull();
     expect(fresh.wallet).toEqual({ balanceCents: 1_000_000 });
     expect(fresh.fairness?.clientSeed).toBe('new');
     expect(fresh.session).toEqual({ startedAt: 12_345, startBalanceCents: 1_000_000 });

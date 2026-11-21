@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { BalloonView, RoundView } from '../src/api/contract';
-import type { Beat } from '../src/game/useGame';
+import type { BalloonView, RoundSummary, RoundView } from '../src/api/contract';
+import { shownRound } from '../src/game/useGame';
 import { formatSignedCents } from '../src/money';
 import {
   addRound,
+  addSummary,
   LINE_GROUPS,
   LINE_POINTS_IN_FULL,
   NO_LIVE_STATS,
@@ -12,6 +13,8 @@ import {
   thinLine,
   watchShown,
   type LiveStats,
+  type LiveWatch,
+  type ShownGame,
 } from '../src/stats/liveTally';
 import { balloon, round } from './fixtures';
 
@@ -204,73 +207,220 @@ describe('resetLiveStats', () => {
   });
 });
 
+describe('addSummary', () => {
+  /** A round's line in the history list, as the server sends it. */
+  const line = (id: string, more: Partial<RoundSummary> = {}): RoundSummary => ({
+    id,
+    difficultyId: 'easy',
+    balloonCount: 1,
+    betCents: 100,
+    patchesCents: 0,
+    payoutCents: 0,
+    refundedCents: 0,
+    serverSeedHash: 'hash',
+    nonce: 0,
+    finishedAt: '2026-11-20T00:05:00.000Z',
+    seedRevealed: false,
+    ...more,
+  });
+
+  it('gives the same figures as the round itself', () => {
+    const r = round(
+      [
+        balloon({ status: 'cashed', betCents: 200, payoutCents: 330, patchesCents: 45, rung: 3 }),
+        balloon({ status: 'popped', betCents: 100, patchesCents: 12, rung: 1 }),
+      ],
+      { id: 'a' },
+    );
+    const fromLine = addSummary(
+      NO_LIVE_STATS,
+      line('a', { balloonCount: 2, betCents: 300, patchesCents: 57, payoutCents: 330 }),
+    );
+    const fromRound = addRound(NO_LIVE_STATS, r);
+    expect(fromLine).toEqual(fromRound);
+    expect([...fromLine.counted]).toEqual(['a']);
+  });
+
+  it('counts a round once, whichever way it comes in', () => {
+    const once = addRound(NO_LIVE_STATS, cashed('a', 100, 250));
+    expect(addSummary(once, line('a', { payoutCents: 250 }))).toBe(once);
+  });
+
+  it('does not count a round with no bet played', () => {
+    expect(addSummary(NO_LIVE_STATS, line('a', { betCents: 0, refundedCents: 100 }))).toBe(
+      NO_LIVE_STATS,
+    );
+  });
+});
+
 describe('watchShown', () => {
   const inPlay = (id: string) => round([balloon({ status: 'active', rung: 1 })], { id });
-  const idle: readonly Beat[] = ['idle'];
+  /** The game as the screen draws it: a round, no history list, no refusal. */
+  const screen = (r: RoundView | null, more: Partial<ShownGame> = {}): ShownGame => ({
+    round: r,
+    history: [],
+    endedElsewhere: null,
+    ...more,
+  });
+  const watchAll = (frames: readonly ShownGame[], from: LiveWatch = START_WATCH): LiveWatch =>
+    frames.reduce(watchShown, from);
 
-  it('counts a round seen in play once its end shows with its motion', () => {
-    let watch = watchShown(START_WATCH, inPlay('a'), idle);
+  it('counts a round seen in play once its end shows', () => {
+    let watch = watchShown(START_WATCH, screen(inPlay('a')));
     expect(watch.stats.rounds).toBe(0);
-    watch = watchShown(watch, popped('a', 100), ['popped']);
+    watch = watchShown(watch, screen(popped('a', 100)));
     expect(watch.stats.rounds).toBe(1);
     expect(watch.stats.losses).toBe(1);
   });
 
-  it('counts each end beat: pop, top and cash-out', () => {
-    for (const beat of ['popped', 'top', 'cashed'] as const) {
-      const watch = watchShown(watchShown(START_WATCH, inPlay('a'), idle), cashed('a', 100, 200), [
-        beat,
+  describe('a round of two balloons whose answers come out of order', () => {
+    // A is pumped; its press is still running when B's cash-out answer comes
+    // back carrying the whole round, already over: A popped.
+    const twoInPlay = round(
+      [balloon({ status: 'active', rung: 1, drawIndex: 1 }), balloon({ status: 'active', rung: 2, drawIndex: 2 })],
+      { id: 'a' },
+    );
+    const [aAsPressed] = twoInPlay.balloons;
+    const over = round(
+      [
+        balloon({ status: 'popped', rung: 1, drawIndex: 2 }),
+        balloon({ status: 'cashed', rung: 2, drawIndex: 2, payoutCents: 150 }),
+      ],
+      { id: 'a' },
+    );
+
+    it('counts nothing while A is still in its press', () => {
+      // The real round is over, but the screen still draws A as pressed.
+      const shown = shownRound(over, [aAsPressed ?? null, null]);
+      expect(shown?.status).toBe('active');
+      const watch = watchAll([screen(twoInPlay), screen(shown)]);
+      expect(watch.stats).toBe(NO_LIVE_STATS);
+    });
+
+    it("counts it once, when A's own answer shows its pop", () => {
+      const watch = watchAll([
+        screen(twoInPlay),
+        screen(shownRound(over, [aAsPressed ?? null, null])),
+        // A's answer: its press is over, so the round shows as it is.
+        screen(shownRound(over, [null, null])),
+        screen(shownRound(over, [null, null])),
       ]);
-      expect(watch.stats.rounds).toBe(1);
-    }
+      expect(watch.stats).toMatchObject({ rounds: 1, losses: 1, wageredCents: 200, netCents: -50 });
+    });
+
+    it("counts it when A's answer is lost and the round shows over as a still picture", () => {
+      // The request for A failed twice: the screen lets go of A's press with
+      // no motion (every beat idle), keeps the finished round, and catches up.
+      const watch = watchAll([
+        screen(twoInPlay),
+        screen(shownRound(over, [aAsPressed ?? null, null])),
+        screen(shownRound(over, [null, null])),
+      ]);
+      expect(watch.stats).toMatchObject({ rounds: 1, netCents: -50 });
+    });
   });
 
-  it('counts nothing while the round still shows in play', () => {
-    // A balloon still in its press is drawn as pressed, so the round shows
-    // as in play even if the server has already ended it.
-    const watch = watchShown(START_WATCH, inPlay('a'), ['press']);
+  it('does not count a round that came to the screen over, in a refusal', () => {
+    // The 24-hour rule closed it, or it ended elsewhere: useGame marks it.
+    const watch = watchAll([
+      screen(inPlay('a')),
+      screen(cashed('a', 100, 120), { endedElsewhere: 'a' }),
+      screen(cashed('a', 100, 120), { endedElsewhere: 'a' }),
+    ]);
     expect(watch.stats).toBe(NO_LIVE_STATS);
   });
 
   it('does not count a finished round never seen in play here', () => {
-    expect(watchShown(START_WATCH, popped('a', 100), ['popped'])).toBe(START_WATCH);
-    const other = watchShown(START_WATCH, inPlay('b'), idle);
-    expect(watchShown(other, popped('a', 100), ['popped'])).toBe(other);
+    expect(watchShown(START_WATCH, screen(popped('a', 100)))).toBe(START_WATCH);
+    const other = watchShown(START_WATCH, screen(inPlay('b')));
+    expect(watchShown(other, screen(popped('a', 100))).stats).toBe(NO_LIVE_STATS);
   });
 
-  it('does not count a round that ended with no motion (the 24-hour rule)', () => {
-    const watch = watchShown(START_WATCH, inPlay('a'), idle);
-    expect(watchShown(watch, cashed('a', 100, 120), ['idle'])).toBe(watch);
-    expect(watchShown(watch, cashed('a', 100, 120), ['survived'])).toBe(watch);
+  it('counts a round already in play when the page opened in full, its bet too', () => {
+    // Restored after a refresh: the bet was placed before this page opened.
+    // The figures are per round, so the round counts as the round it was.
+    const watch = watchAll([screen(inPlay('a')), screen(cashed('a', 100, 101))]);
+    expect(watch.stats).toMatchObject({ rounds: 1, wageredCents: 100, netCents: 1, wins: 1 });
   });
 
   it('counts a round once over many renders', () => {
-    let watch = watchShown(START_WATCH, inPlay('a'), idle);
+    let watch = watchShown(START_WATCH, screen(inPlay('a')));
     const end = cashed('a', 100, 150);
-    watch = watchShown(watch, end, ['cashed']);
+    watch = watchShown(watch, screen(end));
     const counted = watch;
     // Later renders: the beat settles to idle, a fresh copy of the round comes in.
-    expect(watchShown(watch, end, ['cashed'])).toBe(counted);
-    expect(watchShown(watch, { ...end }, ['idle'])).toBe(counted);
+    expect(watchShown(watch, screen(end))).toBe(counted);
+    expect(watchShown(watch, screen({ ...end }))).toBe(counted);
     expect(watch.stats.rounds).toBe(1);
   });
 
   it('counts each auto-play round as it shows', () => {
-    let watch = START_WATCH;
-    const steps: [RoundView, Beat][] = [
-      [inPlay('a'), 'idle'],
-      [popped('a', 100), 'popped'],
-      [inPlay('b'), 'idle'],
-      [cashed('b', 100, 300), 'cashed'],
-      [inPlay('c'), 'press'],
-      [cashed('c', 100, 300), 'top'],
-    ];
-    for (const [r, beat] of steps) watch = watchShown(watch, r, [beat]);
+    const watch = watchAll([
+      screen(inPlay('a')),
+      screen(popped('a', 100)),
+      screen(inPlay('b')),
+      screen(cashed('b', 100, 300)),
+      screen(inPlay('c')),
+      screen(cashed('c', 100, 300)),
+    ]);
     expect(watch.stats).toMatchObject({ rounds: 3, wins: 2, losses: 1, netCents: 300 });
   });
 
+  describe('a round that left the screen before its end showed', () => {
+    // Its last answer was lost twice; catching up found no round in play, so
+    // the screen dropped it. The history list then carries its line.
+    const lineOf = (id: string, more: Partial<RoundSummary> = {}): RoundSummary => ({
+      id,
+      difficultyId: 'easy',
+      balloonCount: 1,
+      betCents: 100,
+      patchesCents: 0,
+      payoutCents: 101,
+      refundedCents: 0,
+      serverSeedHash: 'hash',
+      nonce: 0,
+      finishedAt: '2026-11-20T00:05:00.000Z',
+      seedRevealed: false,
+      ...more,
+    });
+
+    it('is counted from its line in the history list, once', () => {
+      const gone = watchAll([screen(inPlay('a')), screen(null)]);
+      expect(gone.stats).toBe(NO_LIVE_STATS);
+      const back = watchAll([screen(null, { history: [lineOf('a')] })], gone);
+      expect(back.stats).toMatchObject({ rounds: 1, wageredCents: 100, netCents: 1, wins: 1 });
+      // Later lists carry it again: still once.
+      expect(watchShown(back, screen(null, { history: [lineOf('a')] }))).toBe(back);
+    });
+
+    it('still counts it if the next round starts before the list comes', () => {
+      const watch = watchAll([
+        screen(inPlay('a')),
+        screen(null),
+        screen(inPlay('b')),
+        screen(popped('b', 50), { history: [lineOf('b', { payoutCents: 0, betCents: 50 }), lineOf('a')] }),
+      ]);
+      expect(watch.stats).toMatchObject({ rounds: 2, wageredCents: 150, netCents: -49 });
+    });
+
+    it('is left out when its line shows the 24-hour rule', () => {
+      const gone = watchAll([screen(inPlay('a')), screen(null)]);
+      // A bet handed back: only the 24-hour rule does that.
+      const refunded = lineOf('a', { refundedCents: 300 });
+      expect(watchShown(gone, screen(null, { history: [refunded] })).stats).toBe(NO_LIVE_STATS);
+      // Or the round lasted a whole day: the rule closed it, not the player.
+      const dayLong = lineOf('a', { finishedAt: '2026-11-21T00:00:00.000Z' });
+      expect(watchShown(gone, screen(null, { history: [dayLong] })).stats).toBe(NO_LIVE_STATS);
+    });
+
+    it('settles: once nothing is new, the same object comes back', () => {
+      const gone = watchAll([screen(inPlay('a')), screen(null)]);
+      expect(watchShown(gone, screen(null))).toBe(gone);
+    });
+  });
+
   it('ignores an empty screen', () => {
-    expect(watchShown(START_WATCH, null, [])).toBe(START_WATCH);
+    expect(watchShown(START_WATCH, screen(null))).toBe(START_WATCH);
   });
 });
 
