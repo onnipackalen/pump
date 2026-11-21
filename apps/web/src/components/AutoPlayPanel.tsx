@@ -7,6 +7,7 @@ import {
 } from '../game/autoPlay';
 import type { AutoPlayStatus } from '../game/useAutoPlay';
 import { formatSignedCents } from '../money';
+import { GuardedButton } from './GuardedButton';
 
 interface AutoPlayPanelProps {
   /** Length of the chosen difficulty's ladder: the most pumps a balloon can take. */
@@ -107,7 +108,7 @@ export function AutoPlayPanel({
           {stopping ? 'Stopping…' : 'Stop'}
         </button>
       ) : (
-        <button
+        <GuardedButton
           type="button"
           className="btn btn-primary"
           disabled={check.settings === null || !betsValid || roundActive || starting}
@@ -116,12 +117,12 @@ export function AutoPlayPanel({
           }}
         >
           Start auto-play
-        </button>
+        </GuardedButton>
       )}
 
       {/* One status line that stays on the page in both views, so screen
           readers announce changes to it, including why a run stopped.
-          While running it sits above Stop (see .auto-progress in styles). */}
+          While running it sits under Stop (see .auto-progress in styles). */}
       <p
         className={showsResult ? 'auto-progress note auto-summary' : 'auto-progress'}
         data-running={running}

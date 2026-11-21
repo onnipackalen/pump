@@ -1,5 +1,5 @@
 import type { BalloonView } from '../api/contract';
-import type { PanelActivity } from '../game/controls';
+import { BET_GUARD_MS, type PanelActivity } from '../game/controls';
 import { nextPumpGainCents } from '../game/patchGain';
 import type { CSSProperties } from 'react';
 import { formatCents, formatChance, formatMultiplier } from '../money';
@@ -74,16 +74,22 @@ function SlotDot({ balloon }: { readonly balloon: BalloonView | null }) {
 }
 
 /**
- * The control panel during a round: the next pump's numbers for the picked
- * balloon, its Cash out and Patch + Pump, and one big button. One set of
+ * The control panel during a round: one big button, the picked balloon's
+ * Cash out and Patch + Pump, and the next pump's numbers. One set of
  * buttons for the whole round, so they stay large and in the same place
  * however many balloons there are.
  *
+ * The big button comes first, in exactly the box the Bet button had (the
+ * user: "Bet and pump must be on top of each other"), so the player presses
+ * Bet and keeps pressing in the same place to pump. It ignores a press that
+ * began before it appeared or within BET_GUARD_MS after, so the second tap
+ * of a double-tap on Bet never pumps.
+ *
  * With two or three balloons, Cash out and Patch + Pump carry the picked
  * balloon's colour dot (it is also marked on the stage by a soft beam and a
- * bar), and Cash out all sits beside the big button. Which buttons exist is
- * fixed for the whole round, so nothing moves under a finger when a balloon
- * ends; only labels change.
+ * bar), and Cash out all comes after them. Which buttons exist is fixed for
+ * the whole round, so nothing moves under a finger when a balloon ends;
+ * only labels change.
  *
  * While two or more balloons are in play, each has its own Pump button
  * under it (BalloonCard), and the big button is Pump all. Once only one is
@@ -143,42 +149,40 @@ export function RoundControls({
   const gain = balloon && patchPrice !== null ? nextPumpGainCents(balloon) : null;
   const priceText = patchPrice === null ? '—' : formatCents(patchPrice);
   const gainText = gain === null ? null : `for +${formatCents(gain)}`;
-  // Each amount shrinks to fit the button by its length (see .patch-price).
+  // Each amount shrinks to fit the button by its length (see .patch-price
+  // and .cash-amount).
   const chars = (text: string): CSSProperties => ({ '--chars': text.length }) as CSSProperties;
   const patchHint =
     patchPrice !== null && gain !== null && cashOut !== null
       ? `Costs ${formatCents(patchPrice)}. If the pump holds, ${name ?? 'the balloon'} goes from ${formatCents(cashOut)} to ${formatCents(cashOut + gain)}. If it would pop, the Patch keeps it at ${formatCents(cashOut)}. (Shift+P)`
       : `Buy a Patch for the next pump${name ? ` of ${name}` : ''}, then pump (Shift+P). If it would pop, the Patch is used up and the balloon stays.`;
 
+  // The big button: Pump all while two or more balloons are in play, plain
+  // Pump with one. The same element all round (a round's balloon count is
+  // fixed), so its guard starts once, when the round appears.
+  const pumpLabel = multi && liveCount > 1 ? 'Pump all' : 'Pump';
+  const pumpTitle = !multi
+    ? 'Pump (Space). Hold to keep pumping.'
+    : liveCount > 1
+      ? 'Pump every balloon still in play (A). Hold to keep pumping.'
+      : 'Pump the balloon still in play (A). Hold to keep pumping.';
+
   return (
     <section className="round" aria-label="Round controls">
-      {/* No name on screen; a screen reader still hears which balloon these are. */}
-      <dl
-        className="readouts"
-        aria-label={balloon ? `Balloon ${balloon.index + 1}` : 'No balloon picked'}
-      >
-        <div>
-          <dt title="The multiplier after the next pump, if it survives">Next</dt>
-          <dd>{next ? formatMultiplier(next.multiplierHundredths) : '—'}</dd>
-        </div>
-        <div>
-          <dt title="Every balloon's bet in this round, plus any Patches bought">Total bet</dt>
-          <dd>{formatCents(totalBetCents)}</dd>
-        </div>
-        <div>
-          <dt title="Pumps survived, out of the most this bet can reach">Rung</dt>
-          <dd>{balloon ? `${balloon.rung}/${balloon.topRung}` : '—'}</dd>
-        </div>
-        {/* The brief asks for the chance that the next pump pops the balloon.
-            The user wants it quiet: last in the row, small and grey, with
-            no warning colours. */}
-        <div className="readout-quiet">
-          <dt title="The chance that the next pump pops this balloon">Pop chance</dt>
-          <dd>{next ? formatChance(next.popChance) : '—'}</dd>
-        </div>
-      </dl>
-
       <div className="round-actions">
+        {/* First, in the Bet button's box. Never greyed out while a pump is
+            on its way, so a hold doesn't flash; a press that comes too soon
+            is ignored by the game. */}
+        <HoldButton
+          className="btn btn-primary"
+          guardMs={BET_GUARD_MS}
+          disabled={multi ? liveCount === 0 : balloon === null}
+          onHoldStart={multi ? onPumpAllHold : onPumpHold}
+          onPress={multi ? onPumpAll : onPump}
+          title={pumpTitle}
+        >
+          {pumpLabel}
+        </HoldButton>
         <button
           type="button"
           className="btn btn-outline btn-two"
@@ -199,7 +203,9 @@ export function RoundControls({
             {multi && <SlotDot balloon={balloon} />}
             Cash out
           </span>
-          <strong>{cashOutText}</strong>
+          <strong className="cash-amount" style={chars(cashOutText)}>
+            {cashOutText}
+          </strong>
         </button>
         {/* A filled panel with the tape icon, so it can't be taken for Cash
             out (a plain outline) or Pump (solid pearl). */}
@@ -230,47 +236,47 @@ export function RoundControls({
             {gainText ?? '\u00a0'}
           </span>
         </button>
-        {/* The Pump buttons are never greyed out while a pump is on its
-            way, so a hold doesn't flash; a press that comes too soon is
-            ignored by the game. */}
-        {multi ? (
-          <div className="round-all">
-            <button
-              type="button"
-              className="btn btn-outline btn-two"
-              disabled={cashable.length === 0 || allQueued}
-              onClick={onCashOutAll}
-              title="Cash out every balloon still in play that has been pumped"
-            >
-              <span>Cash out all</span>
-              <strong>{cashAllText}</strong>
-            </button>
-            <HoldButton
-              className="btn btn-primary"
-              disabled={liveCount === 0}
-              onHoldStart={onPumpAllHold}
-              onPress={onPumpAll}
-              title={
-                liveCount > 1
-                  ? 'Pump every balloon still in play (A). Hold to keep pumping.'
-                  : 'Pump the balloon still in play (A). Hold to keep pumping.'
-              }
-            >
-              {liveCount > 1 ? 'Pump all' : 'Pump'}
-            </HoldButton>
-          </div>
-        ) : (
-          <HoldButton
-            className="btn btn-primary"
-            disabled={balloon === null}
-            onHoldStart={onPumpHold}
-            onPress={onPump}
-            title="Pump (Space). Hold to keep pumping."
+        {multi && (
+          <button
+            type="button"
+            className="btn btn-outline btn-two cash-all"
+            disabled={cashable.length === 0 || allQueued}
+            onClick={onCashOutAll}
+            title="Cash out every balloon still in play that has been pumped"
           >
-            Pump
-          </HoldButton>
+            <span>Cash out all</span>
+            <strong className="cash-amount" style={chars(cashAllText)}>
+              {cashAllText}
+            </strong>
+          </button>
         )}
       </div>
+
+      {/* No name on screen; a screen reader still hears which balloon these are. */}
+      <dl
+        className="readouts"
+        aria-label={balloon ? `Balloon ${balloon.index + 1}` : 'No balloon picked'}
+      >
+        <div>
+          <dt title="The multiplier after the next pump, if it survives">Next</dt>
+          <dd>{next ? formatMultiplier(next.multiplierHundredths) : '—'}</dd>
+        </div>
+        <div>
+          <dt title="Every balloon's bet in this round, plus any Patches bought">Total bet</dt>
+          <dd>{formatCents(totalBetCents)}</dd>
+        </div>
+        <div>
+          <dt title="Pumps survived, out of the most this bet can reach">Rung</dt>
+          <dd>{balloon ? `${balloon.rung}/${balloon.topRung}` : '—'}</dd>
+        </div>
+        {/* The brief asks for the chance that the next pump pops the balloon.
+            The user wants it quiet: last in the row, small and grey, with
+            no warning colours. */}
+        <div className="readout-quiet">
+          <dt title="The chance that the next pump pops this balloon">Pop chance</dt>
+          <dd>{next ? formatChance(next.popChance) : '—'}</dd>
+        </div>
+      </dl>
     </section>
   );
 }

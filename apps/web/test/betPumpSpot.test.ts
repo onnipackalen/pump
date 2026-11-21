@@ -1,5 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import type { BalloonView } from '../src/api/contract';
+import { AutoPlayPanel } from '../src/components/AutoPlayPanel';
+import { RoundControls } from '../src/components/RoundControls';
 import { BET_GUARD_MS, pressCounts, pressGuard } from '../src/game/controls';
+import { balloon } from './fixtures';
 
 /*
  * "Bet and pump must be on top of each other": the big Pump button takes the
@@ -8,6 +15,8 @@ import { BET_GUARD_MS, pressCounts, pressGuard } from '../src/game/controls';
  * accident. The boxes themselves were measured in a browser at ten screen
  * sizes (see docs/worklog.md).
  */
+
+const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 describe('the guard on a button that appears in the Bet and Pump spot', () => {
   const G = BET_GUARD_MS;
@@ -133,3 +142,129 @@ describe('the guard on a button that appears in the Bet and Pump spot', () => {
   });
 });
 
+describe('the round panel: the big button first, in the Bet button\'s place', () => {
+  const live = balloon({
+    rung: 1,
+    drawIndex: 1,
+    multiplierHundredths: 160,
+    cashOutCents: 160,
+    next: { popChance: { num: 42, den: 100 }, multiplierHundredths: 277, patchPriceCents: 75 },
+  });
+
+  function panel(balloons: readonly BalloonView[]): string {
+    const noop = (): void => undefined;
+    return renderToStaticMarkup(
+      createElement(RoundControls, {
+        balloon: balloons[0] ?? null,
+        balloons,
+        multi: balloons.length > 1,
+        pending: false,
+        activity: balloons.map(() => 'free' as const),
+        onPump: noop,
+        onPumpHold: noop,
+        onPatchPump: noop,
+        onCashOut: noop,
+        onCashOutAll: noop,
+        liveCount: balloons.filter((b) => b.status === 'active').length,
+        onPumpAll: noop,
+        onPumpAllHold: noop,
+      }),
+    );
+  }
+
+  /** Each button's class and text, top to bottom. */
+  function buttons(html: string): { cls: string; text: string }[] {
+    return [...html.matchAll(/<button[^>]*class="([^"]*)"[^>]*>(.*?)<\/button>/g)].map((m) => ({
+      cls: m[1] ?? '',
+      text: (m[2] ?? '').replace(/<[^>]+>/g, ''),
+    }));
+  }
+
+  it('with one balloon: Pump, then Cash out and Patch + Pump, then the numbers', () => {
+    const html = panel([live]);
+    const list = buttons(html);
+    expect(list.map((b) => b.text.split('$')[0])).toEqual(['Pump', 'Cash out', 'Patch + Pump']);
+    expect(list[0]?.cls).toContain('btn-primary');
+    // The numbers come after every button.
+    expect(html.indexOf('<dl')).toBeGreaterThan(html.lastIndexOf('</button>'));
+    // The big button is the first thing in the panel, as Bet is in the bet panel.
+    expect(html).toMatch(/^<section class="round"[^>]*><div class="round-actions"><button[^>]*btn-primary/);
+  });
+
+  it('with two or three balloons: Pump all, Cash out, Patch + Pump, then Cash out all', () => {
+    for (const count of [2, 3]) {
+      const all = Array.from({ length: count }, (_, index) => ({ ...live, index }));
+      const list = buttons(panel(all));
+      expect(list.map((b) => b.text.split('$')[0])).toEqual([
+        'Pump all',
+        'Cash out',
+        'Patch + Pump',
+        'Cash out all',
+      ]);
+    }
+  });
+
+  it('says plain Pump once one balloon of several is left, in the same first place', () => {
+    const list = buttons(panel([live, { ...live, index: 1, status: 'popped' }]));
+    expect(list[0]?.text).toBe('Pump');
+  });
+
+  it('keeps Patch + Pump unlike Pump and Cash out: its own fill, tape icon and stitches', () => {
+    const list = buttons(panel([live, { ...live, index: 1 }]));
+    const [pump, cashOut, patch, cashAll] = list;
+    expect(pump?.cls).toContain('btn-primary');
+    expect(cashOut?.cls).toContain('btn-outline');
+    expect(cashAll?.cls).toContain('btn-outline');
+    expect(patch?.cls).toContain('btn-patch');
+    expect(patch?.cls).not.toContain('btn-outline');
+    expect(panel([live])).toContain('class="patch-icon"');
+    expect(css).toMatch(/\.btn-patch::before \{[^}]*dashed/);
+  });
+});
+
+describe('the CSS that keeps the boxes the same', () => {
+  /** The rules inside the upright-screen block. */
+  const upright = css.slice(css.indexOf('@media (orientation: portrait)'), css.indexOf('/* -', css.indexOf('@media (orientation: portrait)')));
+
+  it('keeps the phone sheet\'s handle space in a round and during auto-play, so Pump and Stop sit where Bet and Start were', () => {
+    expect(upright).toMatch(
+      /\.controls:has\(> \.round\)::before,\s*\.controls:has\(\.auto-progress\[data-running='true'\]\)::before \{\s*visibility: hidden;/,
+    );
+    expect(upright).not.toMatch(/::before \{\s*display: none/);
+  });
+
+  it('never lets the big button grow past the Bet button\'s height', () => {
+    expect(css).not.toMatch(/round-actions \{[^}]*grid-template-rows/);
+    expect(css).toMatch(/\.round-actions > \.btn-primary \{\s*grid-column: 1 \/ -1;/);
+  });
+
+  it('puts the auto-play progress under Stop, not above it', () => {
+    expect(css).not.toMatch(/\.auto-progress\[data-running='true'\] \{[^}]*order:/);
+  });
+});
+
+describe('auto-play: Stop where Start was', () => {
+  it('puts Stop first in the panel while it runs, with the progress line after it', () => {
+    const noop = (): void => undefined;
+    const html = renderToStaticMarkup(
+      createElement(AutoPlayPanel, {
+        maxPumps: 10,
+        roundBetCents: 100,
+        betsValid: true,
+        roundActive: false,
+        starting: false,
+        status: {
+          running: true,
+          stopping: false,
+          settings: { rounds: 10, targetPumps: 3, stopOnProfitCents: null, stopOnLossCents: null },
+          progress: { roundsPlayed: 2, netCents: -150 },
+          stopReason: null,
+        },
+        onStart: noop,
+        onStop: noop,
+      }),
+    );
+    expect(html).toMatch(/^<section class="auto"[^>]*><button[^>]*btn-stop/);
+    expect(html.indexOf('auto-progress')).toBeGreaterThan(html.indexOf('btn-stop'));
+  });
+});

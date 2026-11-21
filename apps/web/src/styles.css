@@ -47,9 +47,11 @@
   --action-h: calc(var(--tap) + 10px);
   /* Upright screens: the height kept free under the stage for the round
      panel (see the upright rule). It must be at least as tall as the round
-     panel at this size, or a round would scroll. Measured: the panel needs
-     181, 171 and 150 px at the three sizes of --tap; what is spare goes to
-     the big Pump button. The size check measures it again. */
+     panel at this size, or a round would scroll. Measured with Pump in the
+     Bet button's box: the panel needs 189, 177 and 153 px at the three
+     sizes of --tap (the same with one balloon or three); what is spare is
+     left under the numbers, since Pump keeps Bet's height. The size check
+     measures it again. */
   --round-room: 192px;
   --main-max: 30px; /* largest size of the multiplier under a balloon */
   --sub-max: 14px; /* largest size of the line under it */
@@ -291,8 +293,9 @@ body {
   }
   /*
    * The handle: the small bar a phone puts on anything that can be pulled
-   * up. Only while there is something to pull: not in a round and not while
-   * auto-play runs, when the panel is exactly its room.
+   * up. Only seen while there is something to pull: not in a round and not
+   * while auto-play runs, when the panel is exactly its room. It keeps its
+   * place even then, so Pump and Stop sit exactly where Bet and Start were.
    */
   .controls::before {
     content: '';
@@ -306,15 +309,18 @@ body {
   }
   .controls:has(> .round)::before,
   .controls:has(.auto-progress[data-running='true'])::before {
-    display: none;
+    visibility: hidden;
   }
-  /* The round panel takes up all of its room: the big button grows. */
-  .controls > .round {
-    flex: 1 1 auto;
+  /* With two or three balloons there is no room for Cash out all on a row
+     of its own under the stage, so it joins Cash out and Patch + Pump,
+     last in the row. Patch + Pump keeps the widest cell for its three
+     lines; it sits between the two outline buttons, so neither Cash out is
+     next to the other. */
+  .round-actions:has(> .cash-all) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr);
   }
-  .controls > .round > .round-actions {
-    flex: 1 1 auto;
-    grid-template-rows: auto minmax(calc(var(--tap) + 6px), 1fr);
+  .round-actions > .cash-all {
+    grid-column: auto;
   }
 }
 
@@ -1038,7 +1044,8 @@ input {
 
 /*
  * One status line for auto-play, always in the page so screen readers hear
- * it change: progress while it runs (shown above Stop), the result after.
+ * it change: progress while it runs (shown under Stop, so Stop sits exactly
+ * where Start auto-play was), the result after.
  */
 .auto-progress {
   margin: 0;
@@ -1046,7 +1053,6 @@ input {
 }
 
 .auto-progress[data-running='true'] {
-  order: -1;
   text-align: center;
 }
 
@@ -1055,8 +1061,10 @@ input {
 }
 
 /*
- * Round: the picked balloon's numbers, then its buttons. The big one is
- * Pump with one balloon and Pump all with two or three.
+ * Round: the big button first, in exactly the box the Bet button had, so
+ * the player bets and pumps in the same place. It is Pump with one balloon
+ * and Pump all with two or three, and it keeps Bet's height (it never
+ * grows). Under it the picked balloon's buttons, then its numbers.
  */
 
 /* The round panel's width decides how tight the numbers sit (see below). */
@@ -1140,20 +1148,38 @@ input {
   gap: 6px;
 }
 
-.round-actions .btn-primary {
+.round-actions > .btn-primary {
   grid-column: 1 / -1;
 }
 
-/* With 2-3 balloons: Cash out all beside a still-large Pump all. */
-.round-all {
+/* With 2-3 balloons: Cash out all on its own row under them (on an upright
+   screen it joins their row instead, see the upright rule). */
+.cash-all {
   grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-  gap: 6px;
 }
 
-.round-all .btn-primary {
-  grid-column: auto;
+/* The cash-out amounts take the largest size that fits by their length,
+   as the Patch price does, so "$3,270.00" fits a third of a small phone. */
+.round-actions > .btn-outline {
+  container-type: inline-size;
+}
+
+.round-actions .cash-amount {
+  white-space: nowrap;
+  font-size: min(15px, 150cqw / max(var(--chars, 6), 1));
+}
+
+/* A narrow Patch + Pump (a third of a small phone): its colour dot goes
+   (the stage marks the picked balloon too) and the name gets a little
+   smaller, so the name stays on one line and the button keeps its height. */
+@container (max-width: 111px) {
+  .btn-patch .btn-name {
+    gap: 3px;
+    font-size: 11px;
+  }
+  .btn-patch .btn-name .dot {
+    display: none;
+  }
 }
 
 /* --------------------------------------------------------------- Settings */
@@ -1482,12 +1508,6 @@ th {
   }
   .segment {
     font-size: 12px;
-  }
-  .round-actions {
-    grid-template-columns: 1fr 1fr 1.4fr;
-  }
-  .round-actions .btn-primary {
-    grid-column: auto;
   }
 }
 
