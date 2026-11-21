@@ -119,6 +119,16 @@ export class DemoClient implements GameClient {
     return this.finished.slice(0, limit).map((r) => this.summary(r));
   }
 
+  /**
+   * The stats are added up by the server (apps/server/src/services/stats.ts).
+   * This stand-in keeps nothing between visits, so it does not copy that
+   * code: it says so, and the stats page shows the message.
+   */
+  async getStats(): Promise<never> {
+    await sleep(this.latencyMs);
+    return fail({ code: 'not_found', message: 'Stats need the server. The in-browser demo keeps none.' });
+  }
+
   // Each action below awaits only its pretend network delay, then does all
   // of its checks and changes with no await in between, like the server's
   // single transaction.

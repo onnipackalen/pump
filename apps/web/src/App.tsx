@@ -30,17 +30,20 @@ import { formatCents, formatElapsed, formatSignedCents, parseDollarsToCents } fr
 import { useMotionSetting } from './motion';
 import { cuesFor } from './sound/cues';
 import { soundBoard } from './sound/SoundBoard';
+import { StatsPage } from './stats/StatsPage';
 
 const config = GAME_CONFIG;
 
 /** How the next round is played: by hand, or by auto-play. */
 type Mode = 'manual' | 'auto';
 
-/** Which screen is showing. The verify page lives at #verify. */
-type View = 'game' | 'verify';
+/** Which screen is showing. The verify page lives at #verify, the stats at #stats. */
+type View = 'game' | 'verify' | 'stats';
 
 function viewFromHash(): View {
-  return window.location.hash === '#verify' ? 'verify' : 'game';
+  if (window.location.hash === '#verify') return 'verify';
+  if (window.location.hash === '#stats') return 'stats';
+  return 'game';
 }
 
 /** Every game event goes to the speaker; cuesFor decides what it sounds like. */
@@ -214,8 +217,13 @@ export function App() {
   const closeVerify = (): void => {
     window.location.hash = '';
   };
+  /** Opens the stats page. Back returns to the game. */
+  const openStats = (): void => {
+    setSettingsOpen(false);
+    window.location.hash = 'stats';
+  };
 
-  // The browser's own Back and Forward move between the game and #verify.
+  // The browser's own Back and Forward move between the game, #verify and #stats.
   useEffect(() => {
     const onHashChange = (): void => setView(viewFromHash());
     window.addEventListener('hashchange', onHashChange);
@@ -255,8 +263,8 @@ export function App() {
         if (autoRunning) autoPlay.stop();
         return;
       }
-      // The verify page is for reading: no key there plays the game.
-      if (view === 'verify') return;
+      // The verify and stats pages are for reading: no key there plays the game.
+      if (view !== 'game') return;
       if (event.key === 'm' || event.key === 'M') {
         if (!event.repeat) toggleSound();
         return;
@@ -390,13 +398,27 @@ export function App() {
                 Verify
               </button>
             </div>
+            <div className="card settings-row">
+              <span>Your results</span>
+              <button type="button" className="btn btn-small" onClick={openStats}>
+                Stats
+              </button>
+            </div>
             <History config={config} rounds={state.history} onVerify={openVerify} />
             <GameInfo config={config} autoPlay={market.autoPlay} />
           </SettingsMenu>
         </div>
       </header>
 
-      {view === 'verify' ? (
+      {view === 'stats' ? (
+        <StatsPage
+          client={gameClient}
+          config={config}
+          latestRoundId={state.history[0]?.id ?? null}
+          onVerify={openVerify}
+          onBack={closeVerify}
+        />
+      ) : view === 'verify' ? (
         <VerifyPage
           client={gameClient}
           config={config}
