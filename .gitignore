@@ -23,5 +23,8 @@ coverage/
 # OS and editor noise
 .DS_Store
 
+# Python's cache, left behind by the fairness reference script
+__pycache__/
+
 # Local AI tooling: worktrees and launch settings that hold paths on this machine
 .claude/

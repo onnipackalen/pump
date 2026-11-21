@@ -3,7 +3,7 @@ interface SoundToggleProps {
   readonly onToggle: () => void;
 }
 
-/** The sound on/off button. Icons from graphics/icons (sound-on, sound-off). */
+/** The sound on/off button. Its two icons (sound on, sound off) are drawn here; this is their original. */
 export function SoundToggle({ muted, onToggle }: SoundToggleProps) {
   return (
     <button

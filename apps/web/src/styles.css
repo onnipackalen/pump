@@ -149,55 +149,45 @@ body {
   background: var(--panel);
 }
 
-/* Upright phones: the stage on top, the panel under the thumb. */
 /*
- * Upright phones may scroll. When everything fits, the page is still exactly
- * one screen. When the panel is taller than the room left (three bets on a
- * small phone), the page grows and scrolls down to it. Before, the panel was
- * squeezed into a box that scrolled on its own with no scrollbar, and a
- * swipe on the page did nothing, so Bet looked out of reach after a round.
- * Sideways scrolling stays off.
+ * Upright phones: the stage on top, the panel under the thumb. Still one
+ * screen that never scrolls, like every other size.
+ *
+ * The panel takes the height it needs and the stage gets the rest, so the
+ * balloons shrink to make room. Two things keep that from going wrong on a
+ * small phone with three bets:
+ *
+ * - When no balloon has a Pump button (before a round, after it, and while
+ *   auto-play runs) the button row under the balloons is closed, and the
+ *   pictures get its height. It was an empty strip exactly when the bet
+ *   panel is at its tallest. During a round the row never comes and goes:
+ *   it is there as long as one balloon is in play.
+ * - The stage never gets smaller than its two lines of numbers and a small
+ *   picture. Only if even that does not fit (no real phone in the size
+ *   check) does the panel scroll inside itself, as a last resort.
  */
 @media (max-width: 760px) and (orientation: portrait) {
-  html {
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
-  body {
-    overflow: visible;
-  }
-  body,
-  #root {
-    height: auto;
-    min-height: 100%;
-  }
-  .app {
-    height: auto;
-    min-height: 100vh;
-    min-height: 100dvh;
-    /* The scene is drawn wider than the screen: clip it sideways only, so
-       the page can't be dragged left and right. */
-    overflow-x: hidden;
-    overflow-x: clip;
-    overflow-y: visible;
-  }
   .layout {
-    flex: 1 0 auto;
     flex-direction: column;
     padding: 0 8px 8px;
   }
   .stage {
-    flex: 1 0 auto;
-    min-height: 240px;
+    min-height: calc(var(--label-h) + 56px);
+  }
+  .stage:not(:has(.slot-pump)) {
+    --action-h: 0px;
+  }
+  .stage:not(:has(.slot-pump)) .slot-action {
+    padding: 0;
+    overflow: hidden;
   }
   .controls {
     order: 0;
-    flex: none;
+    flex: 0 1 auto;
     align-self: stretch;
     width: auto;
     min-height: 0;
     max-height: none;
-    overflow: visible;
   }
 }
 
@@ -920,17 +910,12 @@ input {
   white-space: nowrap;
 }
 
-.readouts [data-risk='1'] {
-  color: var(--risk-1);
-}
-.readouts [data-risk='2'] {
-  color: var(--risk-2);
-}
-.readouts [data-risk='3'] {
-  color: var(--risk-3);
-}
-.readouts [data-risk='4'] {
-  color: var(--risk-4);
+/* The pop chance: required by the brief, kept quiet at the user's wish.
+   Small, grey, normal weight, no warning colours. */
+.readouts .readout-quiet dd {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .round-actions {

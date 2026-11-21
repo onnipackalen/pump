@@ -177,9 +177,26 @@
   stroke-linecap: round;
   opacity: 0.3;
 }
+/* The air pocket: a pale core inside a wall of hose colour, so it reads
+ * as the hose itself swelling where the air is. Hidden until a press. */
 .pump-balloon .pb-air {
   fill: #ece6da;
+  stroke: #56627e;
+  stroke-width: 2.2;
   opacity: 0;
+  /* How fat the pocket is. The keyframes never read the swell: they set the
+   * path (translate, rotate) and the shape (transform), and this scale sits
+   * between the two. The answer changes data-strain in the same frame as
+   * the beat, so a change of swell waits until the pocket has gone in and
+   * is hidden. The entry is then the same size as the wait before it,
+   * whatever the answer. */
+  scale: var(--pb-air-swell);
+  transition: scale 0s linear calc(var(--pb-air-in-ms) + 60ms);
+}
+/* A press takes its swell at once (the pocket is still hidden in its first
+ * frame), even if it comes right after an answer. */
+.pump-balloon[data-beat="press"] .pb-air {
+  transition: none;
 }
 
 /* Number plate on the pump */
@@ -208,14 +225,34 @@
  *
  * Your code sets data-beat on the balloon svg element:
  *   "press"    on tap, the same for every outcome. The pump handle
- *              pushes down and a puff of air runs up the hose into the
- *              knot. Keep it until the server has answered AND at least
- *              300 ms have passed since the tap.
+ *              pushes down and a pocket of air runs up the hose to the
+ *              neck. Keep it until the server has answered AND the press
+ *              length has passed since the tap (see "Press length").
  *   "survive"  when the pump survived. Set the new --balloon-scale in
  *              the same update. It can stay set afterwards; every
  *              animation ends at rest.
  *   "pop"      when the pump popped (see the Pop section below).
  * Never grow the balloon before the answer is in.
+ *
+ * The air pocket, step by step:
+ *   1. Rush. The handle pushes down and the pocket leaves the pump. It
+ *      speeds up along the hose, then slows a touch under the neck. This
+ *      takes exactly the press length, so it reaches the neck at the
+ *      earliest moment an answer may be shown.
+ *   2. Wait. If the answer is not in yet, the pocket stays under the neck
+ *      and glows on and off, and the balloon trembles a little. This loops for as
+ *      long as "press" is set. It looks the same whatever the answer
+ *      will be.
+ *   3. Enter. The answer beat ("survive", "blocked", "pop", or the top)
+ *      pushes the pocket through the neck in 90 ms, in the same frame as
+ *      the balloon grows or pops. So the result is never seen before the
+ *      pocket goes in, and never long after.
+ *
+ * Press length. It grows with data-strain, which is the PUBLISHED chance
+ * that this pump pops and nothing else: 300, 360, 420, 480 ms for strain
+ * 0, 1, 2, 3. The same four numbers are in game/risk.ts (PRESS_MS), which
+ * the game waits on; a test checks that the two lists match. A riskier
+ * pump is slower and the swell in the hose is bigger.
  *
  * Rhythm. A held Pump button sends the next "press" about 250 ms after
  * each "survive". So everything in the answer is over, or as good as
@@ -225,24 +262,61 @@
  * ------------------------------------------------------------------- */
 
 .pump-balloon {
-  --pb-stroke-ms: 280ms;
+  --pb-press-ms: 300ms; /* strain 0, and a balloon with no strain set */
   --pb-return-ms: 220ms;
-  --pb-press-ms: 300ms;
+  --pb-air-in-ms: 90ms;     /* the pocket going in through the neck */
+  --pb-air-wait-ms: 420ms;  /* one glow while it waits for the answer */
+  --pb-air-swell: 1;        /* how fat the pocket makes the hose */
   --pb-grow-ms: 240ms;
   --pb-spring-ms: 340ms;
   --pb-value-ms: 220ms;
 }
 
-/* Tap: the handle pushes down and air runs up the hose. The balloon only
- * braces a little as the air arrives (2%). It never grows yet. */
+/* Press length and swell for each strain level. Keep the four lengths the
+ * same as PRESS_MS in game/risk.ts (test/pressTiming.test.ts checks). */
+.pump-balloon[data-strain="1"] {
+  --pb-press-ms: 360ms;
+  --pb-air-swell: 1.07;
+}
+.pump-balloon[data-strain="2"] {
+  --pb-press-ms: 420ms;
+  --pb-air-swell: 1.14;
+  --pb-air-wait-ms: 360ms;
+}
+.pump-balloon[data-strain="3"] {
+  --pb-press-ms: 480ms;
+  --pb-air-swell: 1.22;
+  --pb-air-wait-ms: 300ms;
+}
+
+/* Tap. The handle pushes down over the first 70% of the press and stays
+ * down. The pocket leaves the pump as the handle starts to move, so the
+ * push is seen to drive it. */
 .pump-balloon[data-beat="press"] .pb-handle {
-  animation: pb-stroke-down var(--pb-stroke-ms) cubic-bezier(0.45, 0, 0.2, 1) forwards;
+  animation: pb-stroke-down calc(var(--pb-press-ms) * 0.7) cubic-bezier(0.3, 0, 0.3, 1) forwards;
 }
+/* Two animations in a row: the rush, then the wait. The wait only starts
+ * when the rush is over, and loops until the beat changes. */
 .pump-balloon[data-beat="press"] .pb-air {
-  animation: pb-air var(--pb-press-ms) linear forwards;
+  animation:
+    pb-air var(--pb-press-ms) linear forwards,
+    pb-air-wait var(--pb-air-wait-ms) ease-in-out var(--pb-press-ms) infinite;
 }
+/* The balloon takes a small breath in as the air arrives (2%), then holds
+ * it. While it waits it trembles by a third of a unit. The tremble uses
+ * the separate translate property, so the held breath is not disturbed.
+ * It never grows yet. */
 .pump-balloon[data-beat="press"] .pb-squash {
-  animation: pb-press var(--pb-press-ms) ease-in-out forwards;
+  animation:
+    pb-press var(--pb-press-ms) ease-in-out forwards,
+    pb-press-wait 130ms linear var(--pb-press-ms) infinite;
+}
+
+/* The answer: the pocket goes in through the neck. The same for every
+ * answer. It starts in the pose the rush ends in, which the wait never
+ * leaves, and at the swell the press had (see .pb-air above). */
+.pump-balloon:is([data-beat="survive"], [data-beat="blocked"], [data-beat="pop"], [data-stroke="up"]) .pb-air {
+  animation: pb-air-in var(--pb-air-in-ms) cubic-bezier(0.5, 0, 0.9, 0.6);
 }
 
 /* The answer: the handle comes back up. A pump that reaches the top
@@ -292,61 +366,174 @@
   }
 }
 
-/* The puff follows the hose from the pump to the knot. */
+/* The rush. The pocket forms at the pump (first 10%), then follows the
+ * hose and stops just under the neck. The points are worked out from the
+ * hose curve: close together at the start, far apart in the middle (fast),
+ * close again near the neck (slowing). It is long and thin when fast,
+ * round and fat when slow, and always turned the way the hose runs. */
 @keyframes pb-air {
   0% {
     opacity: 0;
-    transform: translate(116.0px, 295.0px);
+    translate: 116.0px 295.0px;
+    rotate: 0deg;
+    transform: scale(0.3, 0.3);
   }
-  12.0% {
+  10.0% {
     opacity: 0.95;
-    transform: translate(116.0px, 295.0px);
+    translate: 116.0px 295.0px;
+    rotate: 0.0deg;
+    transform: scale(0.93, 0.88);
   }
-  21.5% {
+  16.0% {
     opacity: 0.95;
-    transform: translate(106.3px, 293.1px);
+    translate: 114.0px 294.9px;
+    rotate: 3.5deg;
+    transform: scale(0.99, 0.86);
   }
-  31.0% {
+  22.0% {
     opacity: 0.95;
-    transform: translate(99.8px, 286.0px);
+    translate: 111.0px 294.6px;
+    rotate: 10.4deg;
+    transform: scale(1.04, 0.85);
   }
-  40.5% {
+  28.0% {
     opacity: 0.95;
-    transform: translate(97.6px, 276.3px);
+    translate: 107.1px 293.4px;
+    rotate: 23.3deg;
+    transform: scale(1.09, 0.84);
   }
-  50.0% {
+  34.0% {
     opacity: 0.95;
-    transform: translate(97.5px, 266.5px);
+    translate: 102.9px 290.7px;
+    rotate: 44.2deg;
+    transform: scale(1.13, 0.82);
   }
-  59.5% {
+  40.0% {
     opacity: 0.95;
-    transform: translate(98.2px, 256.4px);
+    translate: 99.7px 285.9px;
+    rotate: 66.6deg;
+    transform: scale(1.17, 0.81);
   }
-  69.0% {
+  46.0% {
     opacity: 0.95;
-    transform: translate(99.1px, 246.5px);
+    translate: 98.0px 279.7px;
+    rotate: 81.0deg;
+    transform: scale(1.19, 0.81);
   }
-  78.5% {
+  52.0% {
     opacity: 0.95;
-    transform: translate(99.7px, 236.6px);
+    translate: 97.5px 272.9px;
+    rotate: 88.7deg;
+    transform: scale(1.21, 0.80);
+  }
+  58.0% {
+    opacity: 0.95;
+    translate: 97.6px 265.7px;
+    rotate: 92.7deg;
+    transform: scale(1.22, 0.80);
+  }
+  64.0% {
+    opacity: 0.95;
+    translate: 98.0px 258.6px;
+    rotate: 94.5deg;
+    transform: scale(1.21, 0.80);
+  }
+  70.0% {
+    opacity: 0.95;
+    translate: 98.6px 251.7px;
+    rotate: 94.9deg;
+    transform: scale(1.19, 0.81);
+  }
+  76.0% {
+    opacity: 0.95;
+    translate: 99.1px 245.4px;
+    rotate: 94.5deg;
+    transform: scale(1.15, 0.82);
+  }
+  82.0% {
+    opacity: 0.95;
+    translate: 99.5px 240.1px;
+    rotate: 93.7deg;
+    transform: scale(1.10, 0.83);
   }
   88.0% {
     opacity: 0.95;
-    transform: translate(100.0px, 227.0px);
+    translate: 99.8px 235.9px;
+    rotate: 92.8deg;
+    transform: scale(1.04, 0.85);
   }
-  100% {
-    opacity: 0;
-    transform: translate(100.0px, 223.0px);
+  94.0% {
+    opacity: 0.95;
+    translate: 99.9px 232.9px;
+    rotate: 92.0deg;
+    transform: scale(0.98, 0.87);
+  }
+  100.0% {
+    opacity: 0.95;
+    translate: 100.0px 231.0px;
+    rotate: 91.4deg;
+    transform: scale(0.93, 0.88);
   }
 }
 
+/* The wait: the pocket glows under the neck. Colour only: it must never
+ * move or resize the pocket, because the answer can land at any point of
+ * the loop and the entry always starts from the pose the rush ends in. */
+@keyframes pb-air-wait {
+  0%,
+  100% {
+    fill: #ece6da;
+    stroke: #56627e;
+  }
+  50% {
+    fill: #ffffff;
+    stroke: #98a5c6;
+  }
+}
+
+/* The answer: up through the neck and gone. The neck is drawn over it, so
+ * it is seen to go inside. */
+@keyframes pb-air-in {
+  0% {
+    opacity: 0.95;
+    translate: 100px 231px;
+    rotate: 91.4deg;
+    transform: scale(0.93, 0.88);
+  }
+  70% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    translate: 100px 214px;
+    rotate: 90deg;
+    transform: scale(1.3, 0.5);
+  }
+}
+
+/* The breath in: nothing until the pocket nears the neck, then a 2%
+ * brace that is held. pb-spring (the survive answer) starts from it. */
 @keyframes pb-press {
   0%,
-  65% {
+  70% {
     transform: scale(1, 1);
   }
   100% {
     transform: scale(1.02, 0.98);
+  }
+}
+
+/* The tremble while the answer is late. */
+@keyframes pb-press-wait {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  25% {
+    translate: 0.35px 0;
+  }
+  75% {
+    translate: -0.35px 0;
   }
 }
 
@@ -386,7 +573,7 @@
 /* ---------------------------------------------------------------------
  * Pop
  *
- * After the same press and 300 ms hold, your code sets data-beat to:
+ * After the same press and hold, your code sets data-beat to:
  *   "pop"     when the pump popped. The body and its neck vanish at
  *             once, 8 pieces fly out and fall, and the hose, with
  *             nothing left to hold it up, drops to the floor.
