@@ -3,16 +3,15 @@ import './balloon.css';
 import './balloon-app.css';
 
 /**
- * The balloon picture, copied from graphics/balloon/balloon.svg (the
- * "Game graphics list" chat owns the art). Keep the markup and class names
- * as they are there; balloon.css drives every layer. The markup here still
- * matches graphics/; balloon.css is now ahead of it (see the note at its top).
+ * The balloon picture. This file and balloon.css are the originals of the
+ * art; there is no other copy. balloon.css drives every layer by its class
+ * name, so the markup and the class names must stay in step with it.
  *
  * This component only sets attributes. Which ones the game uses, and when,
  * is decided in BalloonCard.
  */
 
-/** data-beat values, from graphics/README.md. */
+/** data-beat values: each is one moment the art can show. */
 export type BalloonBeat =
   | 'press'
   | 'survive'

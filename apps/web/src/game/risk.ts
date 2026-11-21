@@ -13,3 +13,22 @@ export function riskStep({ num, den }: Fraction): 1 | 2 | 3 | 4 {
   if (num * 100 < den * 60) return 3;
   return 4;
 }
+
+/**
+ * How long a pump's "press" lasts at each risk step, in milliseconds. The
+ * air pocket takes exactly this long to run up the hose, and balloon.css
+ * has the same four numbers (--pb-press-ms for data-strain 0 to 3); a test
+ * checks that the two lists match.
+ */
+export const PRESS_MS = [300, 360, 420, 480] as const;
+
+/**
+ * The shortest time a pump is shown as "press" before its answer may be
+ * shown: longer the riskier the pump. It reads only the pop chance the
+ * player is shown for that pump, never a draw, so it is the same whatever
+ * the pump's result will be. With no published chance it is the shortest.
+ */
+export function pressMs(popChance: Fraction | null | undefined): number {
+  if (!popChance) return PRESS_MS[0];
+  return PRESS_MS[riskStep(popChance) - 1] ?? PRESS_MS[0];
+}
