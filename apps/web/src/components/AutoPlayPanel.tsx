@@ -96,8 +96,11 @@ export function AutoPlayPanel({
 
   return (
     <section className="auto" aria-label="Auto-play" ref={panelRef}>
+      {/* Each its own button (the keys), so each has its own guard,
+          started when it appears. */}
       {running ? (
-        <button
+        <GuardedButton
+          key="stop"
           ref={stopRef}
           type="button"
           className="btn btn-stop"
@@ -106,9 +109,10 @@ export function AutoPlayPanel({
           title="Stop auto-play (Esc)"
         >
           {stopping ? 'Stopping…' : 'Stop'}
-        </button>
+        </GuardedButton>
       ) : (
         <GuardedButton
+          key="start"
           type="button"
           className="btn btn-primary"
           disabled={check.settings === null || !betsValid || roundActive || starting}

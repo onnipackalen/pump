@@ -17,12 +17,14 @@ export const SWITCH_PAUSE_MS = 500;
  * as the balloon pops would land on the Bet button that takes its place.
  * Either is a gamble the player did not choose.
  *
- * So a button that appears in that spot (Pump, Bet, Start auto-play)
- * ignores any press that began before it appeared or less than this long
- * after. 350 ms is longer than the gap between the two taps of a
- * double-tap, and short enough that a player who means to press again
- * never notices. (To be lined up with the start animation's SET_UP_MS.)
- * Stop is never held back: stopping must always work at once.
+ * So a button that appears in that spot (Pump, Bet, Start auto-play, and
+ * Stop, which takes Start's place) ignores any press that began before it
+ * appeared or less than this long after. 350 ms is longer than the gap
+ * between the two taps of a double-tap, and short enough that a player who
+ * means to press again never notices. (To be lined up with the start
+ * animation's SET_UP_MS.) On Stop it means the second click of a
+ * double-click on Start can't stop the run it just began; Esc always stops
+ * at once.
  *
  * "Appeared" means could be seen, not only put in the page: Start
  * auto-play stays in the page, hidden, while a round is finished by hand,
@@ -139,7 +141,7 @@ export function holdClickActs(
   return guard === null || guard.click(0, event.timeStamp, now);
 }
 
-/** A GuardedButton (Bet, Start auto-play), a finger or mouse going down: noted for its click. */
+/** A GuardedButton (Bet, Start, Stop), a finger or mouse going down: noted for its click. */
 export function guardedDown(
   guard: PressGuard | null,
   event: Pick<PressEvent, 'timeStamp'>,

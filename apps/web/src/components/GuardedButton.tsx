@@ -10,11 +10,12 @@ interface GuardedButtonProps
 }
 
 /**
- * A button that starts a round (Bet, Start auto-play). It sits where the big
- * Pump button is during a round, so it ignores a click whose press began
- * before it could be seen or less than BET_GUARD_MS after: a quick tap on
- * Pump as the balloon pops, or a tap that began on Pump and lifted here,
- * must never place a bet.
+ * A button that takes another's place in the Bet and Pump spot (Bet, Start
+ * auto-play, Stop). It ignores a click whose press began before it could be
+ * seen or less than BET_GUARD_MS after: a quick tap on Pump as the balloon
+ * pops, or a tap that began on Pump and lifted here, must never place a
+ * bet, and the second click of a double-click on Start must not stop the
+ * run it just began.
  */
 export function GuardedButton({ onClick, ref, ...rest }: GuardedButtonProps) {
   const { guard, ref: buttonRef } = useShownGuard(BET_GUARD_MS, ref);

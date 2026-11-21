@@ -267,7 +267,7 @@ describe('what the buttons do with each event (the code they run)', () => {
     expect(holdClickActs(null, click(0, 0), 0)).toBe(true);
   });
 
-  it('Bet and Start auto-play (GuardedButton) act on a click whose press began on them, past the guard', () => {
+  it('Bet, Start and Stop (GuardedButton) act on a click whose press began on them, past the guard', () => {
     const guard = pressGuard(G);
     guard.shown(5000);
     // A tap that began on Pump and lifted here: nothing went down on this button.
@@ -361,8 +361,24 @@ describe('the guard is on the buttons that share the Bet and Pump spot', () => {
     expect(tag(html, 'Bet $')).toContain(guarded);
   });
 
-  it('Start auto-play', () => {
+  it('Start auto-play, and Stop, which takes its place', () => {
     expect(tag(auto(false), 'Start auto-play')).toContain(guarded);
+    expect(tag(auto(true), 'Stop')).toContain(guarded);
+  });
+});
+
+describe('Stop, in Start\'s place: the second click of a double-click on Start', () => {
+  it('does not stop the run that the first click began', () => {
+    const G = BET_GUARD_MS;
+    const stop = pressGuard(G);
+    // The first click on Start at 1000 begins the run; Stop appears there.
+    stop.shown(1000);
+    // The second click of the double-click, 90 ms later.
+    expect(stop.pointerDown(1090, 1090)).toBe(false);
+    expect(stop.click(2, 1120, 1120)).toBe(false);
+    // A Stop the player means works once the guard is over (Esc works at once).
+    expect(stop.pointerDown(1000 + G, 1000 + G)).toBe(true);
+    expect(stop.click(1, 1000 + G + 60, 1000 + G + 60)).toBe(true);
   });
 });
 
