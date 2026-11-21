@@ -8,6 +8,7 @@ import { BetPanel, shownTopRung, typedBetCents } from './components/BetPanel';
 import { FairnessPanel } from './components/FairnessPanel';
 import { GameInfo } from './components/GameInfo';
 import { History } from './components/History';
+import { PrivateWinsRow } from './components/PrivateWinsRow';
 import { RoundControls } from './components/RoundControls';
 import { SettingsMenu } from './components/SettingsMenu';
 import { SoundToggle } from './components/SoundToggle';
@@ -437,6 +438,7 @@ export function App() {
                 {motion.animationsOn ? 'On' : 'Off'}
               </button>
             </div>
+            <PrivateWinsRow client={gameClient} open={settingsOpen} />
             {state.fairness && (
               <FairnessPanel
                 fairness={state.fairness}

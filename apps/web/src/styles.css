@@ -1350,6 +1350,11 @@ input {
   background: var(--stage);
 }
 
+/* "Keep my wins private": a settings row with room for a failure under it. */
+.private-wins-failure {
+  margin: 0 14px 10px;
+}
+
 .info summary {
   font-weight: 600;
   cursor: pointer;
