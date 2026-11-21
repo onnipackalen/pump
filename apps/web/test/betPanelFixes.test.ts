@@ -237,3 +237,32 @@ describe('(c) the auto-play panel says what the pump count reaches', () => {
     expect(html).toContain('data-top="true"');
   });
 });
+
+describe('a capped bet keeps its whole amount in view', () => {
+  // In the box, "Top 100.00×" squeezed the input on a narrow card until a
+  // $1,000 bet read as "$ 100". The cap now sits on its own line under it.
+  it('draws the cap under the bet box, not inside it, and ties it to the input', () => {
+    expect(capped).toBeDefined();
+    const difficulty = capped ?? GAME_CONFIG.difficulties[0];
+    if (!difficulty) return;
+    const html = renderToStaticMarkup(
+      createElement(
+        BetPanel,
+        panel(GAME_CONFIG, {
+          difficultyId: difficulty.id,
+          bets: [centsToInput(limits.maxBetCents), '1.00'],
+        }),
+      ),
+    );
+    const label = /<label class="field field-money">(.*?)<\/label>/.exec(html)?.[1] ?? '';
+    expect(label).not.toContain('Top ');
+    expect(label).toContain('aria-describedby="bet-cap-0"');
+    const top = topRungForBet(difficulty.ladder, limits.maxBetCents, limits.maxPayoutCents);
+    expect(html).toContain(
+      `<p class="note cap" id="bet-cap-0"`,
+    );
+    expect(html).toContain(`>Top ${formatMultiplier(difficulty.ladder[top - 1] ?? 0)}</p>`);
+    // The $1 bet is not capped: no cap line and no description for it.
+    expect(html).not.toContain('bet-cap-1');
+  });
+});

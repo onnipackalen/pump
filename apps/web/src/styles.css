@@ -970,8 +970,9 @@ input {
 }
 
 /* A bet's lower top, when the max payout caps it. Sits inside the bet box. */
+/* A bet's capped top, on its own line under the bet box. */
 .cap {
-  flex: none;
+  margin: 2px 0 0;
   color: var(--risk);
   font-size: 12px;
   font-variant-numeric: tabular-nums;

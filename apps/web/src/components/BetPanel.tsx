@@ -135,17 +135,9 @@ export function BetPanel({
                     value={text}
                     disabled={disabled}
                     aria-invalid={error !== null}
+                    aria-describedby={capped ? `bet-cap-${index}` : undefined}
                     onChange={(event) => setBet(index, event.target.value)}
                   />
-                  {capped && (
-                    // The payout cap is shown before the round starts, never hidden.
-                    <span
-                      className="cap"
-                      title={`At this bet the balloon tops out at rung ${top} of ${ladder.length}, because one balloon pays at most ${formatCents(limits.maxPayoutCents)}.`}
-                    >
-                      Top {formatMultiplier(multiplierAt(ladder, top))}
-                    </span>
-                  )}
                 </label>
                 <button
                   type="button"
@@ -172,6 +164,18 @@ export function BetPanel({
                   2×
                 </button>
               </div>
+              {capped && (
+                // The payout cap is shown before the round starts, never hidden.
+                // It sits under the box, not in it: in the box it squeezed the
+                // input on a narrow card until a $1,000 bet read as "$ 100".
+                <p
+                  className="note cap"
+                  id={`bet-cap-${index}`}
+                  title={`At this bet the balloon tops out at rung ${top} of ${ladder.length}, because one balloon pays at most ${formatCents(limits.maxPayoutCents)}.`}
+                >
+                  Top {formatMultiplier(multiplierAt(ladder, top))}
+                </p>
+              )}
               {error !== null && <p className="note error">{error}</p>}
             </li>
           );
