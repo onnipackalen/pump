@@ -913,3 +913,13 @@ ladder (32 rungs, first rung 1.01x). Easy B stays on record in the entry
 "hostile review of the ladders and the Patch" and was not applied. Still
 open, and the lead's call: whether to limit Patch prices, and whether to
 stop selling a Patch that costs at least what its step can win.
+
+## 2026-11-20: Patch prices stay without a limit
+
+The lead chose no limit on Patch prices (first clicked the $1,000 cap, then
+corrected it to no limit). The Patch rule in CLAUDE.md is unchanged, and so
+is the engine. The idea of not selling a Patch that costs at least what its
+step can win was offered twice and not taken up, so it is not being done.
+What the review found stays true and is shown in the open: the largest
+single Patch is $25,773.20 (Hard, $500 bet, pump 13), and the price is on
+the button before the player buys.
