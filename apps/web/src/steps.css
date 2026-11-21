@@ -30,6 +30,8 @@
   --step-w: 62px;
   --step-h: 26px;
   --step-gap: 6px;
+  /* How the row slides one place along when its balloon climbs a step. */
+  --step-slide: 280ms cubic-bezier(0.22, 0.7, 0.2, 1);
   /* How far the row fades out at an edge it runs past. */
   --step-fade: 24px;
 }
@@ -64,7 +66,7 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  transition: transform 280ms cubic-bezier(0.22, 0.7, 0.2, 1);
+  transition: transform var(--step-slide);
 }
 
 .step {
@@ -83,6 +85,10 @@
   font-variant-numeric: tabular-nums;
   line-height: 1;
   white-space: nowrap;
+  /* The room for the amount moves along with the row (see the upright
+     rules): the same time and curve as the row's own slide, so the two
+     add up to one movement. */
+  transition: margin-left var(--step-slide);
 }
 
 .step[data-step='passed'] {
@@ -197,12 +203,13 @@
         -1 *
           clamp(
             0px,
-            (var(--lead) - var(--step-keep)) * var(--step-pitch) - var(--step-fade),
+            (var(--at) - 1 - var(--step-keep)) * var(--step-pitch) - var(--step-fade),
             var(--steps) * var(--step-pitch) - var(--step-gap) + var(--step-fade) - 100cqw
           )
       )
     );
   }
+  /* The place before the first step is only needed under the amount. */
   .step-start {
     display: none;
   }
@@ -217,12 +224,26 @@
  * balloon, in their band, where a slot is wide enough to have room beside
  * them (one balloon on a phone; one or two on a tablet).
  *
- * The big multiplier under the balloon is the current step, so its place in
- * the row is left empty (the anchor, as wide as those two lines) and the
- * row is kept with that place in the middle. Passed steps go off to the
- * left, the coming ones wait on the right, and each pump slides them one
- * place along. The row is cut away around the middle, so a step slides in
- * under the amount and out the other side instead of across it.
+ * The big multiplier under the balloon is the current step. The row is cut
+ * away around it (a hole in the middle, as wide as that multiplier), and
+ * the row is kept so that the current step lies hidden in the hole, the
+ * passed steps end at its left edge and the coming ones start at its right
+ * edge. Every pump, the first one too, slides the row one place along: the
+ * next step goes in under the amount and the step before comes out on the
+ * other side.
+ *
+ * How: every place in the row is one step wide, with one more place in
+ * front for "before the first pump". The row is moved so the current place
+ * sits just inside the hole's left edge, and the step after it is pushed
+ * right by the rest of the hole's width. On a pump that push moves on to
+ * the following step while the row slides a place left, in the same time
+ * and on the same curve, so on screen every step simply moves one place.
+ *
+ * The hole follows the big multiplier only. The small line under it
+ * changes length all the time (a bet, a cash-out value, "Patch stopped a
+ * pop"), and the steps never reach it: a step is no taller than the big
+ * line it sits on. The hole is never narrower than a five-character
+ * multiplier, so it does not move when the first pump turns "—" into one.
  *
  * It shows only for a balloon that can still be pumped: once it has popped
  * or cashed out, the band is the result's alone.
@@ -231,14 +252,11 @@
   @container slot (min-width: 300px) {
     .steps {
       --step-w: 56px;
-      --step-h: 24px;
-      /* The width of the two lines: the wider of them, plus some air. */
-      --step-hole: calc(
-        max(
-            var(--main-chars) * var(--main-max) * 0.62,
-            var(--sub-chars) * var(--sub-max) * 0.58
-          ) + 18px
-      );
+      /* No taller than the big line (its size x 1.1), less a little air. */
+      --step-h: min(24px, var(--main-max) * 1.1 - 2px);
+      /* The width of the big multiplier (a bold digit is about 0.62 of
+         its size wide), plus some air. */
+      --step-hole: calc(max(var(--main-chars), 5) * var(--main-max) * 0.62 + 18px);
       position: absolute;
       right: 0;
       bottom: var(--action-h);
@@ -291,14 +309,17 @@
  */
 @media (orientation: portrait) {
   @container (min-width: 300px) {
+    /* The current place just inside the hole's left edge. */
     .steps-track {
-      transform: translateX(
-        calc(50cqw - var(--lead) * var(--step-pitch) - var(--step-hole) / 2)
-      );
+      transform: translateX(calc(50cqw - var(--step-hole) / 2 - var(--at) * var(--step-pitch)));
     }
-    .step[data-anchor='true'] {
-      width: var(--step-hole);
+    /* Before the first pump: an empty place, where no step is yet. */
+    .step-start {
       visibility: hidden;
+    }
+    /* The rest of the hole, between the current step and the next one. */
+    .step[data-anchor='true'] + .step {
+      margin-left: calc(var(--step-hole) - var(--step-w));
     }
   }
 }
@@ -341,11 +362,11 @@
 
 /* Animations off: the row is simply in its new place (motion.ts). */
 @media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion='full']) .steps-track {
+  :root:not([data-motion='full']) :is(.steps-track, .step) {
     transition: none;
   }
 }
 
-:root[data-motion='reduce'] .steps-track {
+:root[data-motion='reduce'] :is(.steps-track, .step) {
   transition: none;
 }

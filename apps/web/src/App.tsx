@@ -15,7 +15,6 @@ import { VerifyPage } from './components/VerifyPage';
 import type { AutoPlaySettings } from './game/autoPlay';
 import { checkBets, type BetSetup } from './game/betSetup';
 import { controlTarget, panelActivity, showOwnPump, SWITCH_PAUSE_MS } from './game/controls';
-import { topRungForBet } from './game/rules';
 import { useAutoPlay } from './game/useAutoPlay';
 import { useGame, type GameEvent } from './game/useGame';
 import { useHoldPump } from './game/useHoldPump';
@@ -512,26 +511,15 @@ export function App() {
                       afterRoundShown={afterRoundShown}
                     />
                   ))
-                : setup.bets.map((text, index) => {
-                    const betCents =
-                      check.errors[index] === null ? parseDollarsToCents(text) : null;
-                    const ladder = setupDifficulty?.ladder ?? [];
-                    return (
-                      <PreviewCard
-                        key={index}
-                        slot={index + 1}
-                        betCents={betCents}
-                        ladder={ladder}
-                        // The steps above this bet's top are shown as out of
-                        // reach before the round starts (the payout cap).
-                        topRung={
-                          betCents === null
-                            ? ladder.length
-                            : topRungForBet(ladder, betCents, config.limits.maxPayoutCents)
-                        }
-                      />
-                    );
-                  })}
+                : setup.bets.map((text, index) => (
+                    <PreviewCard
+                      key={index}
+                      slot={index + 1}
+                      betCents={check.errors[index] === null ? parseDollarsToCents(text) : null}
+                      ladder={setupDifficulty?.ladder ?? []}
+                      maxPayoutCents={config.limits.maxPayoutCents}
+                    />
+                  ))}
             </div>
           )}
         </section>

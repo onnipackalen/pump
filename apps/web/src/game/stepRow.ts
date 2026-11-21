@@ -77,6 +77,20 @@ export function stepRow(input: StepRowInput): readonly Step[] {
 }
 
 /**
+ * The row in one short line, for a screen reader: the step the next pump
+ * goes for and the top this bet can reach. Null for a balloon that cannot
+ * be pumped any more: its two lines under the picture already say how it
+ * ended.
+ */
+export function stepWords(input: StepRowInput): string | null {
+  const { ladder, rung, topRung, status } = input;
+  if (!inPlay(status) || rung >= topRung) return null;
+  const next = formatMultiplier(multiplierAt(ladder, rung + 1));
+  const top = formatMultiplier(multiplierAt(ladder, topRung));
+  return `${status === 'preview' ? 'First step' : 'Next'} ${next}. Top at this bet ${top}.`;
+}
+
+/**
  * The step the row keeps in view: the one the balloon is on, or the one it
  * popped on. 0 before the first pump, when it is on no step yet.
  */
