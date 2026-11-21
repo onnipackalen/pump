@@ -84,6 +84,43 @@ function wholeOption(name: string, fallback: number): number {
   return value;
 }
 
+/** Every option this script takes. */
+const OPTIONS = ['url', 'db', 'players', 'rounds'] as const;
+
+/**
+ * Stops the run when an option it was given did not arrive, instead of
+ * quietly hammering a fresh server of its own and saying PASS. That happens
+ * when the options are not after `--`: npm then keeps them for itself (it
+ * warns "Unknown cli config" and puts them in npm_config_<name>). A
+ * misspelt option, or --db without --url, would be ignored the same way.
+ */
+function checkOptions(): void {
+  const unknown = process.argv
+    .slice(2)
+    .filter((arg) => !OPTIONS.some((name) => arg.startsWith(`--${name}=`)));
+  if (unknown.length > 0) {
+    throw new Error(
+      `Unknown option ${unknown.join(' ')}. The options are --url=, --db=, --players= and --rounds=.`,
+    );
+  }
+  const keptByNpm = OPTIONS.filter(
+    (name) => process.env[`npm_config_${name}`] !== undefined && option(name) === undefined,
+  );
+  if (keptByNpm.length > 0) {
+    throw new Error(
+      `npm kept --${keptByNpm.join(', --')} for itself, so the hammer never got ${
+        keptByNpm.length > 1 ? 'them' : 'it'
+      }. Put the options after --, like this: npm run hammer -- --url=http://localhost:3000 --db=data/pump.db`,
+    );
+  }
+  if (option('db') !== undefined && option('url') === undefined) {
+    throw new Error(
+      '--db is the database of the server given by --url. Without --url the hammer starts its own server on a fresh database.',
+    );
+  }
+}
+
+checkOptions();
 const PLAYERS = wholeOption('players', 20);
 const ROUNDS = wholeOption('rounds', 8);
 
