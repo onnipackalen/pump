@@ -30,6 +30,12 @@
  *    words are at or above limit, the next block (block 1, 2, ...) is read.
  * 6. Decide (the engine, not here). The pump survives if roll < num.
  *
+ * After the round (draw.ts revealDrawerFor): once a round is over, each
+ * balloon cashed out below its top rung shows where it would have popped. The
+ * engine plays it on with plain pumps, using this same recipe at the next
+ * draw indexes (from the balloon's draw count up), until a pump pops or it
+ * reaches its top rung. Those draws decide nothing and move no money.
+ *
  * Checking a seed (hash.ts): its fingerprint is SHA-256 of its 64 characters
  * as ASCII, in lowercase hex.
  *
@@ -40,7 +46,14 @@
  * rules; the rules never import this module (test/fair/boundary.test.ts).
  */
 export { asciiBytes } from './ascii';
-export { drawerFor, drawRoll, type DrawInputs, type Drawer } from './draw';
+export {
+  drawerFor,
+  drawRoll,
+  revealDrawerFor,
+  type DrawInputs,
+  type Drawer,
+  type RevealDrawer,
+} from './draw';
 export { bytesToHex, hashServerSeed, hmacSha256, verifyServerSeedHash } from './hash';
 export { drawMessage, type DrawMessageParts } from './message';
 export {

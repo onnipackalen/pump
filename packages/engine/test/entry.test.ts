@@ -34,6 +34,7 @@ describe('@pump/engine package', () => {
         'isClientSeed',
         'isServerSeed',
         'readWords',
+        'revealDrawerFor',
         'rollFromWord',
         'sampleRoll',
         'verifyRound',
