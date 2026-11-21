@@ -775,3 +775,53 @@ from its own build, not from the server.
 Note for later: migration 1 was edited in place to add the cap column.
 That was safe only because no database existed anywhere. Once a live
 site has a database, schema changes must be new migration steps.
+
+## 2026-11-20: pumps on the floor, bigger pictures on phones (branch `one-screen-layout`)
+
+Two fixes to the game screen after a hostile review, both CSS, both in the
+stage and background rules only. On the branch `one-screen-layout`; not in
+main until the user says so.
+
+- The pumps stand on the floor line again. The floor's height counted the
+  two lines of numbers under a balloon but not the Pump button row that was
+  added under them later, so the pumps stood among the hills and the horizon
+  ran under the money line. The row's height is now one shared value
+  (`--action-h`) that the row and the floor both use.
+- Balloon pictures are bigger where the slot is narrow. A picture was capped
+  at its slot's width. The art keeps empty room at its sides for a balloon
+  at full size, so a picture may now be one and a half slots wide. At
+  375x812 with three balloons a picture went from 117x187 to 175x281 px, and
+  the empty sky above it from 260 px (32% of the screen) to 166 px (20%).
+  Pictures take no clicks, so a tap still picks the slot under the finger.
+
+Checked on the real server, at 19 sizes from 1920x1080 to 320x568 and
+sideways, in four states with three balloons (a live round, a finished
+round, the bet screen with every bet capped, the Auto tab). At every size
+the pump's base is 4 to 14 px below the horizon, no art passes the screen
+edge and no text is cut. Also checked: all three balloons forced to full
+size (they just touch), two popped balloons beside a live one (the limp
+hoses don't cross a neighbour's pump), and taps on the strips where a
+neighbour's empty picture corner lies over a slot (the right slot is
+picked each time).
+
+Turned out wrong, and how it was caught:
+
+- The floor line was tied to one row's height by hand. When another chat
+  added a second row, nothing made the floor follow. Caught by the hostile
+  review's screenshots. The size check from the earlier session could not
+  have caught it: it looked for scrolling and cut text, not for where the
+  pump stands. It now measures the gap between the pump's base and the
+  horizon.
+
+Found and left alone, because they are not these two fixes:
+
+- Since 6c28a85 upright phones may scroll. Measured on this branch: the bet
+  screen with three balloons scrolls at 375x667 (the page is 689 px tall)
+  and at 320x568 (610 px), and the Auto tab with three capped bets scrolls
+  on every phone up to 390x844. That goes against the no-scroll rule this
+  layout was built on. It needs the user's call, so it was not changed.
+- An upright tablet (768x1024) still gets the side-by-side layout, so half
+  its stage is empty sky. Moving the upright breakpoint up would fix it, but
+  that rule now also carries the scrolling above.
+- The 20% of sky left on a phone can only be used by taller art (a longer
+  hose, say). That belongs to the graphics.
