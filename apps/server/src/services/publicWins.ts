@@ -71,11 +71,46 @@ function toPublicWin(row: PublicWinRow): PublicWin {
 
 export type PublicWinsService = ReturnType<typeof publicWinsService>;
 
+/** The rows of the three lists as read, with player ids, and the answer made from them. */
+interface Kept {
+  readonly from: number;
+  readonly until: number;
+  readonly rows: Record<'recent' | 'biggest' | 'luckiest', readonly PublicWinRow[]>;
+  readonly answer: PublicWinsResponse;
+}
+
+function answerFrom(rows: Kept['rows']): PublicWinsResponse {
+  return {
+    enabled: true,
+    recent: rows.recent.map(toPublicWin),
+    biggest: rows.biggest.map(toPublicWin),
+    luckiest: rows.luckiest.map(toPublicWin),
+  };
+}
+
 export function publicWinsService(runtime: Runtime, rounds: RoundsRepository) {
-  let kept: { readonly from: number; readonly until: number; readonly answer: PublicWinsResponse } | null =
-    null;
+  let kept: Kept | null = null;
 
   return {
+    /**
+     * Takes one player's wins out of the answer that is being reused, at
+     * once. Called when a player chooses to keep their wins private: the
+     * database already leaves them out of every later read, and this covers
+     * the seconds until the next one. It reads nothing, so it cannot be used
+     * to make the server read the rounds more often.
+     */
+    hide(playerId: string): void {
+      if (kept === null) return;
+      const without = (list: readonly PublicWinRow[]): PublicWinRow[] =>
+        list.filter((row) => row.playerId !== playerId);
+      const rows = {
+        recent: without(kept.rows.recent),
+        biggest: without(kept.rows.biggest),
+        luckiest: without(kept.rows.luckiest),
+      };
+      kept = { from: kept.from, until: kept.until, rows, answer: answerFrom(rows) };
+    },
+
     /** The three lists, or empty lists if the feature is switched off. */
     list(): PublicWinsResponse {
       // Switched off: read nothing, send nothing.
@@ -84,17 +119,12 @@ export function publicWinsService(runtime: Runtime, rounds: RoundsRepository) {
       const asked = runtime.now().getTime();
       if (kept !== null && asked >= kept.from && asked < kept.until) return kept.answer;
 
-      const lists = rounds.publicWins(PUBLIC_WINS_PER_LIST);
-      const answer: PublicWinsResponse = {
-        enabled: true,
-        recent: lists.recent.map(toPublicWin),
-        biggest: lists.biggest.map(toPublicWin),
-        luckiest: lists.luckiest.map(toPublicWin),
-      };
+      const rows = rounds.publicWins(PUBLIC_WINS_PER_LIST);
+      const answer = answerFrom(rows);
       // Counted from the END of the read, and longer after a slow read.
       const read = runtime.now().getTime();
       const rest = Math.max(PUBLIC_WINS_FRESH_MS, PUBLIC_WINS_REST_FACTOR * (read - asked));
-      kept = { from: asked, until: read + rest, answer };
+      kept = { from: asked, until: read + rest, rows, answer };
       return answer;
     },
   };

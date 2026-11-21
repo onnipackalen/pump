@@ -305,7 +305,8 @@ export function roundsRepository(db: Db) {
   // bets played plus Patches, with refunded bets left out, exactly as the
   // stats page does. The top multiplier is read from the round's own stored
   // ladder (a JSON list): rung k is item k - 1. A round can only have paid
-  // out through a cashed balloon, so a win always has one.
+  // out through a cashed balloon, so a win always has one. A player who
+  // keeps their wins private has none of them listed, past ones included.
   //
   // The wins are worked out once (the MATERIALIZED part) and the three lists
   // are cut from that one result, so the finished rounds are read once, not
@@ -326,8 +327,9 @@ export function roundsRepository(db: Db) {
                       THEN json_extract(r.ladder, '$[' || (b.rung - 1) || ']') END)
                                   AS top_hundredths
       FROM rounds r
+      JOIN players p ON p.id = r.player_id
       JOIN balloons b ON b.round_id = r.id
-      WHERE r.status = 'finished'
+      WHERE r.status = 'finished' AND p.wins_private = 0
       GROUP BY r.id
       HAVING paid_cents > staked_cents + patch_cents
     )

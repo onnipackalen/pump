@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { text } from '../src/db/rows';
 import { featuresFromEnv } from '../src/features';
 import { roundsRepository } from '../src/repositories/rounds';
+import { reconcile } from '../src/services/reconcile';
 import {
   PUBLIC_WINS_FRESH_MS,
   PUBLIC_WINS_PER_LIST,
@@ -337,6 +338,63 @@ describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => 
     expect(later.answer.luckiest[0]?.playerTag).not.toBe(first.answer.luckiest[0]?.playerTag);
   });
 
+  it('leaves a player out at once when they keep their wins private, past wins too, and shows them again when they change their mind', async () => {
+    const world = testWorld(config);
+    const a = await join(world);
+    await cashOutAt(world, a, easy, 1000, 3);
+    await cashOutAt(world, a, easy, 500, 2);
+    const d = await join(world);
+    await cashOutAt(world, d, easy, 100, 2);
+    const settings = (player: Player, winsPrivate?: boolean) =>
+      world.app.inject({
+        method: winsPrivate === undefined ? 'GET' : 'PUT',
+        url: '/api/settings',
+        cookies: player.seat.cookies,
+        ...(winsPrivate === undefined
+          ? {}
+          : { headers: { 'idempotency-key': `private-${String(winsPrivate)}-${player.id}` }, payload: { winsPrivate } }),
+      });
+    const tagsShown = async (): Promise<string[]> => {
+      const { answer } = await publicWins(world);
+      return [...answer.recent, ...answer.biggest, ...answer.luckiest].map((win) => win.playerTag);
+    };
+    const tagA = playerTag(a.id, DAY_ONE);
+    const tagD = playerTag(d.id, DAY_ONE);
+
+    // Everyone starts with their wins shown.
+    expect((await settings(a)).json()).toEqual({ winsPrivate: false });
+    expect(new Set(await tagsShown())).toEqual(new Set([tagA, tagD]));
+    expect((await publicWins(world)).answer.recent).toHaveLength(3);
+
+    // A keeps their wins private. With no time passed at all (the answer in
+    // use is the one made a moment ago), both of A's wins are already gone
+    // from all three lists, and D's is still there.
+    const made = await settings(a, true);
+    expect(made.statusCode).toBe(200);
+    expect(made.json()).toEqual({ winsPrivate: true });
+    expect(new Set(await tagsShown())).toEqual(new Set([tagD]));
+    expect((await settings(a)).json()).toEqual({ winsPrivate: true });
+    // D's choice is their own: it was not changed.
+    expect((await settings(d)).json()).toEqual({ winsPrivate: false });
+
+    // It stays that way when the lists are read again, also for a win A
+    // makes from now on.
+    await cashOutAt(world, a, easy, 700, 2);
+    world.runtime.advance(5_000);
+    expect(new Set(await tagsShown())).toEqual(new Set([tagD]));
+    expect((await publicWins(world)).answer.recent).toHaveLength(1);
+    // A's own figures are not touched by it.
+    const stats = await world.app.inject({ method: 'GET', url: '/api/stats', cookies: a.seat.cookies });
+    expect(stats.json()).toMatchObject({ rounds: 3 });
+
+    // A shows them again: all three are back the next time the lists are read.
+    expect((await settings(a, false)).json()).toEqual({ winsPrivate: false });
+    world.runtime.advance(5_000);
+    const back = (await publicWins(world)).answer.recent;
+    expect(back).toHaveLength(4);
+    expect(back.filter((win) => win.playerTag === tagA)).toHaveLength(3);
+  });
+
   it('is empty when it is switched off, whatever has been won', async () => {
     const world = testWorld(config, { publicWins: false });
     const a = await join(world);
@@ -416,6 +474,62 @@ describe('what counts as a public win, on rounds made by hand', () => {
       biggest: [],
       luckiest: [],
     });
+  });
+});
+
+describe('the choice to keep wins private', () => {
+  const put = (world: TestWorld, cookies: Record<string, string>, payload: object, key?: string) =>
+    world.app.inject({
+      method: 'PUT',
+      url: '/api/settings',
+      cookies,
+      headers: key === undefined ? {} : { 'idempotency-key': key },
+      payload,
+    });
+
+  it('belongs to a player: without their cookie it can be neither read nor changed', async () => {
+    const world = testWorld();
+
+    const read = await world.app.inject({ method: 'GET', url: '/api/settings' });
+    const changed = await put(world, {}, { winsPrivate: true }, 'key-1');
+
+    expect(read.statusCode).toBe(401);
+    expect(changed.statusCode).toBe(401);
+    expect(changed.json()).toMatchObject({ error: { code: 'no_session' } });
+    expect(count(world.db, 'players')).toBe(0);
+  });
+
+  it('is a change like any other: it needs a key, a well-formed body, and is applied once', async () => {
+    const world = testWorld();
+    const { cookies } = await firstVisit(world.app);
+
+    // No key, a wrong type, and a field that does not belong are all refused.
+    expect((await put(world, cookies, { winsPrivate: true })).statusCode).toBe(400);
+    expect((await put(world, cookies, { winsPrivate: 'yes' }, 'key-a')).statusCode).toBe(400);
+    expect((await put(world, cookies, { winsPrivate: true, more: 1 }, 'key-b')).statusCode).toBe(400);
+    expect(text(world.db.prepare('SELECT CAST(wins_private AS TEXT) AS v FROM players').get() ?? {}, 'v')).toBe('0');
+
+    const first = await put(world, cookies, { winsPrivate: true }, 'key-c');
+    const repeat = await put(world, cookies, { winsPrivate: true }, 'key-c');
+    expect(first.statusCode).toBe(200);
+    expect(repeat.body).toBe(first.body);
+    // The same key for another request is refused, as everywhere.
+    const reused = await put(world, cookies, { winsPrivate: false }, 'key-c');
+    expect(reused.statusCode).toBe(422);
+    expect(reused.json()).toMatchObject({ error: { code: 'key_reused' } });
+    expect(text(world.db.prepare('SELECT CAST(wins_private AS TEXT) AS v FROM players').get() ?? {}, 'v')).toBe('1');
+  });
+
+  it('moves no money and leaves the wallet reconciled', async () => {
+    const world = testWorld();
+    const { cookies } = await firstVisit(world.app);
+    const ledgerBefore = count(world.db, 'ledger');
+
+    await put(world, cookies, { winsPrivate: true }, 'key-1');
+    await put(world, cookies, { winsPrivate: false }, 'key-2');
+
+    expect(count(world.db, 'ledger')).toBe(ledgerBefore);
+    expect(reconcile(world.db).problems).toEqual([]);
   });
 });
 

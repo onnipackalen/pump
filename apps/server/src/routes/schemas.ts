@@ -13,6 +13,11 @@ export const historyQuery = z.object({
   limit: z.coerce.number().int().min(1).max(HISTORY_MAX_LIMIT).default(HISTORY_DEFAULT_LIMIT),
 });
 
+/** PUT /api/settings */
+export const settingsBody = z.strictObject({
+  winsPrivate: z.boolean(),
+});
+
 /** PUT /api/fairness/client-seed */
 export const clientSeedBody = z.strictObject({
   clientSeed: z.string().refine(isClientSeed, {
