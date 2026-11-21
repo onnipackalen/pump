@@ -1757,3 +1757,39 @@ the other's round. The fix is the one the pump set-up entry above found
 for a different reason: run the check in its own tab on `127.0.0.1`,
 which is a different player from `localhost`. The script now also waits
 for a button and says which one is missing, instead of clicking nothing.
+
+## 2026-11-20: live stats beside the game
+
+Built on `live-stats`: a chart button in the top bar, next to the session
+net, opens this visit's Profit, Wagered, Wins, Losses and profit line,
+with Reset and Close. Closed at the start of every visit, kept in memory
+only (a refresh starts it afresh, as Stake's does).
+
+- The figures come from `stats/liveTally.ts`, pure and tested: a round is
+  added once by its id, refunded bets are left out as on the stats page,
+  a round of refunds only is not a round, Patches count as wagered, and a
+  round that breaks even is neither a win nor a loss. Reset keeps the ids,
+  so a round counted before it can't come back.
+- A round counts when the screen shows its end (the round as drawn, with
+  a pop, top or cash-out beat), so nothing shows before the balloon does,
+  and only if it was seen in play on this screen: a round closed by the
+  24-hour rule while the player was away is left out.
+- Computer: its own card in the side column under the controls, laid over
+  the layout so the stage keeps its size. Upright phone: the top of the
+  sheet, pushing the bet panel down, short enough that Bet stays in sight;
+  it steps aside in a round and during auto-play, when the round panel
+  needs all the room. Sideways phones and windows under 560px tall: no
+  room, so the button is hidden.
+- The stats page's chart got a `compact` prop instead of a copy.
+
+What went wrong, and how it was caught:
+- `liveStats.ts` and `LiveStats.tsx` are one name on macOS's disk; the
+  compiler picked up the wrong file. Caught by `npm run typecheck`; the
+  tally module is `liveTally.ts` now.
+- The opener first took a React ref through the hook's result object;
+  the React lint rule flagged every read of that object as a ref read
+  during render. Caught by `npm run lint`; the opener is found by its id.
+- The live check could not be done: the `live-stats` server was started
+  before this worktree had a build, so it serves the API only (its log
+  says so, and the page is a 404). It reads the build folder only when it
+  starts, and stopping it was not allowed from this session.
