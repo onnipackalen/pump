@@ -68,7 +68,8 @@ interface PanelProps {
 }
 
 /**
- * The panel itself: a heading, three tabs and one table.
+ * The panel itself: a heading, three tabs and one table. Nothing at all
+ * while the server says the lists are off, whatever else the answer holds.
  *
  * Tabs as the ARIA pattern has them: one tab stop, the arrow keys (and Home,
  * End) move between the tabs. No live region: the lists change every few
@@ -110,6 +111,7 @@ export function PublicWinsPanel({
     tabs.current[to]?.focus();
   };
 
+  if (!wins.enabled) return null;
   return (
     <section
       ref={sectionRef}

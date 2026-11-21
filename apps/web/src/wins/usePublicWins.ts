@@ -31,7 +31,7 @@ function tabIsVisible(): boolean {
 }
 
 export interface PublicWinsControl {
-  /** The latest lists while the server has them switched on; null while unknown or off. */
+  /** The server's latest answer; null before the first. The panel shows nothing for an off answer. */
   readonly wins: PublicWinsResponse | null;
   /** Goes on the section, so the lists are asked for only while it is on screen. */
   readonly sectionRef: (element: HTMLElement) => () => void;
@@ -66,8 +66,7 @@ export function usePublicWins(client: GameClient, latestRoundId: string | null):
       setWatch((w) => sent(w, Date.now()));
       client.getPublicWins().then(
         (answer) => {
-          // Switched off: nothing of the lists stays on screen.
-          setWins(answer.enabled ? answer : null);
+          setWins(answer);
           setWatch((w) => answered(w, answer.enabled));
         },
         // The lists shown stay as they were; the rule tries again later.

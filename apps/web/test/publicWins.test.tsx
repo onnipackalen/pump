@@ -258,11 +258,17 @@ describe('Public wins panel', () => {
     expect(html).not.toContain('<table');
   });
 
-  it('shows nothing at all before the server has answered (and so while it says off)', () => {
+  it('shows nothing at all before the server has answered', () => {
     const html = renderToStaticMarkup(
       <PublicWins client={new DemoClient(GAME_CONFIG, 0)} config={GAME_CONFIG} latestRoundId={null} shown />,
     );
     expect(html).toBe('');
+  });
+
+  it('shows nothing at all while the server says off, whatever the lists hold', () => {
+    const off: PublicWinsResponse = { enabled: false, recent: [win()], biggest: [win()], luckiest: [win()] };
+    for (const which of WINS_TABS) expect(panel(off, which.list)).toBe('');
+    expect(panel({ ...off, enabled: true })).not.toBe('');
   });
 
   it('waits off the page while an upright sheet is down, and only then', () => {
