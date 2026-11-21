@@ -577,8 +577,24 @@ summary:focus-visible,
  * No dashed edge or stripes: those read as "locked", and this button works.
  */
 .btn-patch {
+  position: relative;
   border: 1.5px solid #8a8f9a;
   background: var(--panel-raised);
+}
+
+/*
+ * A row of stitches just inside the solid edge, like a patch sewn on. The
+ * stitches set its shape apart from Cash out's plain outline (the user
+ * found the two too easy to mix up), and the edge stays solid, because a
+ * dashed outer edge with stripes read as a locked button.
+ */
+.btn-patch::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1.5px dashed rgba(244, 242, 238, 0.55);
+  border-radius: 7px;
+  pointer-events: none;
 }
 
 .btn-patch:hover:not(:disabled) {
