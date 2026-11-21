@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   checkAutoPlayForm,
+  describeHeld,
   describeStop,
+  totalBetCents,
+  type AutoPlayField,
   type AutoPlayForm,
   type AutoPlaySettings,
+  type BetChangeKind,
+  type BetLimits,
 } from '../game/autoPlay';
 import type { AutoPlayStatus } from '../game/useAutoPlay';
-import { formatSignedCents } from '../money';
+import { formatCents, formatSignedCents } from '../money';
 
 interface AutoPlayPanelProps {
   /** Length of the chosen difficulty's ladder: the most pumps a balloon can take. */
@@ -14,6 +20,13 @@ interface AutoPlayPanelProps {
   /** Total of the bets in the bet panel, and whether they are all valid. */
   readonly roundBetCents: number;
   readonly betsValid: boolean;
+  /** The bet limits, for saying where a changed bet was held. */
+  readonly limits: BetLimits;
+  /**
+   * Whether this market lets auto-play change the bets (market.ts). Off: no
+   * On win or On loss settings, and every round uses the bets entered.
+   */
+  readonly betSizing: boolean;
   /** A round is in play that the player started by hand. */
   readonly roundActive: boolean;
   /** A round the player started by hand is on its way to the server. */
@@ -28,10 +41,16 @@ const initialForm: AutoPlayForm = {
   targetPumps: '3',
   stopOnProfit: '',
   stopOnLoss: '',
+  // The bets stay as entered unless the player chooses otherwise. No
+  // percent is filled in for them: the game never suggests one.
+  onWin: 'reset',
+  onWinPercent: '',
+  onLoss: 'reset',
+  onLossPercent: '',
 };
 
 interface FieldSpec {
-  readonly name: keyof AutoPlayForm;
+  readonly name: 'rounds' | 'targetPumps' | 'stopOnProfit' | 'stopOnLoss';
   /** Short, shown inside the box. */
   readonly label: string;
   /** Full, for the tooltip, the error line and screen readers. */
@@ -46,16 +65,37 @@ const FIELDS: readonly FieldSpec[] = [
   { name: 'stopOnLoss', label: 'Stop loss', full: 'Stop at loss', money: true },
 ];
 
+interface SizingSpec {
+  readonly kind: 'onWin' | 'onLoss';
+  readonly percent: 'onWinPercent' | 'onLossPercent';
+  readonly label: string;
+}
+
+const SIZING: readonly SizingSpec[] = [
+  { kind: 'onWin', percent: 'onWinPercent', label: 'On win' },
+  { kind: 'onLoss', percent: 'onLossPercent', label: 'On loss' },
+];
+
+/** Every field that can be wrong, in screen order, with its name for the error line. */
+const ERROR_NAMES: readonly (readonly [AutoPlayField, string])[] = [
+  ...FIELDS.map((field) => [field.name, field.full] as const),
+  ['onWinPercent', 'On win'],
+  ['onLossPercent', 'On loss'],
+];
+
 /**
- * Auto-play: a number of rounds, a target pump count, and stop limits.
- * It uses the bets in the bet panel above it. While it runs, this shows
- * only the progress and the Stop button. The rules are spelled out in
- * settings, under Game info.
+ * Auto-play: a number of rounds, a target pump count, stop limits, and what
+ * happens to the bets after a win or a loss. It starts from the bets in the
+ * bet panel below it. While it runs, this shows the progress with the
+ * round's bet, and Stop. The rules are spelled out in settings, under Game
+ * info.
  */
 export function AutoPlayPanel({
   maxPumps,
   roundBetCents,
   betsValid,
+  limits,
+  betSizing,
   roundActive,
   starting,
   status,
@@ -63,13 +103,14 @@ export function AutoPlayPanel({
   onStop,
 }: AutoPlayPanelProps) {
   const [form, setForm] = useState<AutoPlayForm>(initialForm);
-  const check = checkAutoPlayForm(form, maxPumps, roundBetCents);
-  const { running, stopping, progress, settings, stopReason } = status;
-  const firstWrong = FIELDS.find((field) => check.errors[field.name] !== null);
+  const check = checkAutoPlayForm(form, maxPumps, roundBetCents, betSizing);
+  const { running, stopping, progress, settings, stopReason, bets } = status;
+  const firstWrong = ERROR_NAMES.find(([name]) => check.errors[name] !== null);
 
   const panelRef = useRef<HTMLElement>(null);
   const stopRef = useRef<HTMLButtonElement>(null);
   const statusRef = useRef<HTMLParagraphElement>(null);
+  const percentRefs = useRef<Partial<Record<SizingSpec['kind'], HTMLInputElement | null>>>({});
   const wasRunning = useRef(running);
 
   // The Start and Stop buttons swap places, so focus would fall to the page.
@@ -86,12 +127,21 @@ export function AutoPlayPanel({
     else statusRef.current?.focus();
   }, [running]);
 
+  const chooseChange = (spec: SizingSpec, kind: BetChangeKind): void => {
+    // The percent box appears with "Increase": type straight into it. It is
+    // drawn at once (flushSync), so it can take focus before the next key.
+    flushSync(() => setForm({ ...form, [spec.kind]: kind }));
+    if (kind === 'increase') percentRefs.current[spec.kind]?.focus();
+  };
+
   const net = (
     <strong className={progress.netCents > 0 ? 'win' : undefined}>
       {formatSignedCents(progress.netCents)}
     </strong>
   );
   const showsResult = !running && stopReason !== null;
+  const roundBets = bets === null ? null : totalBetCents(bets);
+  const held = running && bets !== null ? describeHeld(bets, limits) : null;
 
   return (
     <section className="auto" aria-label="Auto-play" ref={panelRef}>
@@ -131,12 +181,27 @@ export function AutoPlayPanel({
       >
         {running && settings ? (
           <>
-            Round {Math.min(progress.roundsPlayed + 1, settings.rounds)} of {settings.rounds} · net{' '}
-            {net}
+            Round {Math.min(progress.roundsPlayed + 1, settings.rounds)} of {settings.rounds}
+            {roundBets !== null && (
+              <>
+                {' · '}
+                <span
+                  title={
+                    bets && bets.betsCents.length > 1
+                      ? `Bets this round: ${bets.betsCents.map((b) => formatCents(b)).join(', ')}`
+                      : 'Bet this round'
+                  }
+                >
+                  bet {formatCents(roundBets)}
+                </span>
+              </>
+            )}
+            {' · '}net {net}
+            {held !== null && <span className="auto-held">{held}</span>}
           </>
         ) : stopReason !== null ? (
           <>
-            {describeStop(stopReason, progress)} Net {net}.
+            {describeStop(stopReason, progress, roundBets ?? roundBetCents)} Net {net}.
           </>
         ) : null}
       </p>
@@ -147,7 +212,7 @@ export function AutoPlayPanel({
         <>
           {firstWrong && (
             <p className="note error">
-              {firstWrong.full}: {check.errors[firstWrong.name]}
+              {firstWrong[1]}: {check.errors[firstWrong[0]]}
             </p>
           )}
           <div className="auto-grid">
@@ -167,6 +232,63 @@ export function AutoPlayPanel({
               </label>
             ))}
           </div>
+          {betSizing && (
+            <div className="auto-sizing">
+              {SIZING.map((spec) => {
+                const increase = form[spec.kind] === 'increase';
+                return (
+                  <div key={spec.kind} className="auto-sizing-row" role="group" aria-label={spec.label}>
+                    <span className="field-label" aria-hidden="true">
+                      {spec.label}
+                    </span>
+                    <div
+                      className="segmented"
+                      role="radiogroup"
+                      aria-label={`${spec.label}: the bets`}
+                    >
+                      {(['reset', 'increase'] as const).map((kind) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          role="radio"
+                          aria-checked={form[spec.kind] === kind}
+                          className="segment"
+                          title={
+                            kind === 'reset'
+                              ? `${spec.label}, go back to the bets you entered`
+                              : `${spec.label}, raise every bet by a percent, rounded down to the cent`
+                          }
+                          onClick={() => chooseChange(spec, kind)}
+                        >
+                          {kind === 'reset' ? 'Reset' : 'Increase'}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="field field-pct" data-off={!increase}>
+                      <input
+                        ref={(el) => {
+                          percentRefs.current[spec.kind] = el;
+                        }}
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        aria-label={`${spec.label}: increase every bet by this percent`}
+                        value={form[spec.percent]}
+                        disabled={!increase}
+                        aria-invalid={check.errors[spec.percent] !== null}
+                        onChange={(event) =>
+                          setForm({ ...form, [spec.percent]: event.target.value })
+                        }
+                      />
+                      <span className="muted" aria-hidden="true">
+                        %
+                      </span>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
     </section>

@@ -982,6 +982,35 @@ input {
   display: none;
 }
 
+/* A bet change held at a bet limit: its own small line under the progress. */
+.auto-held {
+  display: block;
+  color: var(--risk);
+  font-size: 12px;
+}
+
+/* On win and On loss: a name, Reset or Increase, and the percent. */
+.auto-sizing {
+  display: grid;
+  gap: var(--gap);
+}
+
+.auto-sizing-row {
+  display: grid;
+  grid-template-columns: 4.2em minmax(0, 1fr) 5.6em;
+  align-items: center;
+  gap: 6px;
+}
+
+.field-pct {
+  padding: 0 8px;
+}
+
+/* With Reset there is no percent: the box keeps its place, so nothing moves. */
+.field-pct[data-off='true'] {
+  visibility: hidden;
+}
+
 /*
  * Round: the picked balloon's numbers, then its buttons. The big one is
  * Pump with one balloon and Pump all with two or three.

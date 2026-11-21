@@ -6,13 +6,15 @@ interface GameInfoProps {
   readonly config: GameConfig;
   /** Whether this market offers auto-play. */
   readonly autoPlay: boolean;
+  /** Whether auto-play may change the bets after a win or a loss here. */
+  readonly autoBetSizing: boolean;
 }
 
 /**
  * The rules, limits and keys, in settings. This is where the sentences
  * live, so the game screen needs none. Every number is read from config.
  */
-export function GameInfo({ config, autoPlay }: GameInfoProps) {
+export function GameInfo({ config, autoPlay, autoBetSizing }: GameInfoProps) {
   const { limits } = config;
   return (
     <details className="card panel info">
@@ -54,6 +56,15 @@ export function GameInfo({ config, autoPlay }: GameInfoProps) {
             out. It buys no Patches and never starts a round that could take you past your loss
             limit. Up to {MAX_AUTO_ROUNDS} rounds. Stopping mid-round leaves the balloons for you to
             finish.
+          </li>
+        )}
+        {autoPlay && autoBetSizing && (
+          <li>
+            After a round that pays more than it cost, auto-play does what On win says; after any
+            other round, what On loss says. Reset goes back to the bets you entered. Increase
+            raises every bet by that percent, rounded down to the cent and kept between{' '}
+            {formatCents(limits.minBetCents)} and {formatCents(limits.maxBetCents)}. The next
+            round&apos;s bets count toward your loss limit before it starts.
           </li>
         )}
       </ul>

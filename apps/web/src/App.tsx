@@ -159,6 +159,8 @@ export function App() {
   const setupDifficulty =
     config.difficulties.find((d) => d.id === setup.difficultyId) ?? config.difficulties[0];
   const autoOffered = market.autoPlay && setupDifficulty !== undefined && state.phase === 'ready';
+  // Whether auto-play may change the bets after a win or a loss (market.ts).
+  const autoBetSizing = market.autoPlay && market.autoBetSizing;
   // What the panel shows: Stop while auto-play runs, the round's buttons
   // during a round played by hand, and the bet otherwise.
   const panel = autoRunning ? 'auto-running' : roundActive ? 'round' : 'bet';
@@ -227,6 +229,7 @@ export function App() {
       difficultyId: setup.difficultyId,
       betsCents: check.betsCents,
       balanceCents: balance,
+      limits: config.limits,
     });
   };
 
@@ -427,7 +430,11 @@ export function App() {
               </button>
             </div>
             <History config={config} rounds={state.history} onVerify={openVerify} />
-            <GameInfo config={config} autoPlay={market.autoPlay} />
+            <GameInfo
+              config={config}
+              autoPlay={market.autoPlay}
+              autoBetSizing={autoBetSizing}
+            />
           </SettingsMenu>
         </div>
       </header>
@@ -568,6 +575,8 @@ export function App() {
                   maxPumps={setupDifficulty.ladder.length}
                   roundBetCents={check.totalCents}
                   betsValid={check.betsCents !== null}
+                  limits={config.limits}
+                  betSizing={autoBetSizing}
                   roundActive={roundActive && !autoRunning}
                   starting={state.starting && !autoRunning}
                   status={autoPlay.status}
