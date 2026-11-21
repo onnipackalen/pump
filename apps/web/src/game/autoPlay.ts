@@ -25,7 +25,7 @@
 
 import type { Limits } from '@pump/engine';
 import type { RoundView } from '../api/contract';
-import { formatCents, parseDollarsToCents } from '../money';
+import { formatCents, formatMultiplier, parseDollarsToCents } from '../money';
 import { roundWinTier } from './winTier';
 
 export const MAX_AUTO_ROUNDS = 1000;
@@ -349,6 +349,43 @@ export function describeStop(
 export function targetMultiplier(ladder: readonly number[], targetPumps: number): number | null {
   if (!Number.isSafeInteger(targetPumps) || targetPumps < 1) return null;
   return ladder[targetPumps - 1] ?? null;
+}
+
+/** What the pump count reaches, as the auto-play panel says it. */
+export interface PumpReach {
+  /** Under the Pumps box: "= 1.18×", or "top 7 = 100.00×" when topped out. */
+  readonly short: string;
+  /** In full, for the tooltip and screen readers. */
+  readonly full: string;
+  /** The count is past the top these bets can reach. */
+  readonly toppedOut: boolean;
+}
+
+/**
+ * What a pump count reaches on a ladder, for bets whose top is `topRung`
+ * (the max payout can hold it below the ladder's top; see shownTopRung).
+ * A balloon at its top cashes out by itself, so a count past it stops
+ * there, and this says so rather than show a multiplier no balloon at
+ * these bets can reach. Null for a count the ladder doesn't have.
+ */
+export function pumpReach(
+  ladder: readonly number[],
+  targetPumps: number,
+  topRung: number,
+  difficultyLabel: string,
+): PumpReach | null {
+  if (targetMultiplier(ladder, targetPumps) === null) return null;
+  const toppedOut = targetPumps > topRung;
+  const reach = targetMultiplier(ladder, toppedOut ? topRung : targetPumps);
+  if (reach === null) return null;
+  const x = formatMultiplier(reach);
+  return toppedOut
+    ? {
+        short: `top ${topRung} = ${x}`,
+        full: `${targetPumps} pumps, but at these bets a balloon tops out at ${topRung} pumps = ${x} on ${difficultyLabel} (the max payout), and cashes out there`,
+        toppedOut,
+      }
+    : { short: `= ${x}`, full: `${targetPumps} pumps = ${x} on ${difficultyLabel}`, toppedOut };
 }
 
 /** Whether a bet change field is set to reset or to increase. */

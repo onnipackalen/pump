@@ -399,6 +399,7 @@ describe('checkAutoPlayForm: On win and On loss', () => {
 describe('the auto-play panel: auto-bet', () => {
   const base = {
     ladder: GAME_CONFIG.difficulties[0]?.ladder ?? [],
+    topRung: GAME_CONFIG.difficulties[0]?.ladder.length ?? 0,
     difficultyLabel: 'Easy',
     roundBetCents: 300,
     betsValid: true,

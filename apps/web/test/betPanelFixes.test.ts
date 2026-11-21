@@ -11,7 +11,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { AutoPlayPanel } from '../src/components/AutoPlayPanel';
 import { BetPanel, shownTopRung } from '../src/components/BetPanel';
-import { targetMultiplier } from '../src/game/autoPlay';
+import { pumpReach, targetMultiplier } from '../src/game/autoPlay';
 import { checkBets, type BetSetup } from '../src/game/betSetup';
 import { centsToInput, formatChance, formatMultiplier } from '../src/money';
 
@@ -144,38 +144,96 @@ describe('(c) targetMultiplier: what the pump count reaches', () => {
   });
 });
 
+describe('(c) pumpReach: what the count reaches at the bets entered', () => {
+  it('within the top: the multiplier at that rung, on every count of every difficulty', () => {
+    for (const d of GAME_CONFIG.difficulties) {
+      for (let n = 1; n <= d.ladder.length; n += 1) {
+        const x = formatMultiplier(multiplierAt(d.ladder, n));
+        expect(pumpReach(d.ladder, n, d.ladder.length, d.label)).toEqual({
+          short: `= ${x}`,
+          full: `${n} pumps = ${x} on ${d.label}`,
+          toppedOut: false,
+        });
+      }
+    }
+  });
+
+  it('past the top the max payout holds a bet to: says the top, never a higher multiplier', () => {
+    for (const d of GAME_CONFIG.difficulties) {
+      const top = topRungForBet(d.ladder, limits.maxBetCents, limits.maxPayoutCents);
+      for (let n = 1; n <= d.ladder.length; n += 1) {
+        const reach = pumpReach(d.ladder, n, top, d.label);
+        const shown = formatMultiplier(multiplierAt(d.ladder, Math.min(n, top)));
+        expect(reach?.toppedOut).toBe(n > top);
+        expect(reach?.short).toBe(n > top ? `top ${top} = ${shown}` : `= ${shown}`);
+        if (n > top) {
+          expect(reach?.full).toContain(`tops out at ${top} pumps = ${shown} on ${d.label}`);
+          expect(reach?.short).not.toContain(formatMultiplier(multiplierAt(d.ladder, n)));
+        }
+      }
+    }
+  });
+
+  it('is nothing for a count the ladder does not have', () => {
+    const d = GAME_CONFIG.difficulties[0];
+    if (!d) throw new Error('no difficulty');
+    expect(pumpReach(d.ladder, 0, d.ladder.length, d.label)).toBeNull();
+    expect(pumpReach(d.ladder, d.ladder.length + 1, d.ladder.length, d.label)).toBeNull();
+  });
+});
+
 describe('(c) the auto-play panel says what the pump count reaches', () => {
-  it('on every difficulty, for the 3 pumps the form starts with', () => {
+  const props = (difficulty: (typeof GAME_CONFIG.difficulties)[number], topRung: number) => ({
+    ladder: difficulty.ladder,
+    topRung,
+    difficultyLabel: difficulty.label,
+    roundBetCents: 100,
+    betsValid: true,
+    limits,
+    betSizing: true,
+    roundActive: false,
+    starting: false,
+    status: {
+      running: false,
+      stopping: false,
+      settings: null,
+      progress: { roundsPlayed: 0, netCents: 0 },
+      bets: null,
+      handCashOuts: null,
+      stopReason: null,
+    },
+    round: null,
+    onStart: () => undefined,
+    onStop: () => undefined,
+    onCashOut: () => undefined,
+  });
+  /** The line under the Pumps box, as seen (the hidden full text left out). */
+  const reachLine = (html: string): string => {
+    const match = /<span class="field-reach"[^>]*><span aria-hidden="true">(.*?)<\/span>/.exec(html);
+    return match?.[1] ?? '';
+  };
+
+  it('under the Pumps box, not in it, for the 3 pumps the form starts with', () => {
     for (const difficulty of GAME_CONFIG.difficulties) {
       const html = renderToStaticMarkup(
-        createElement(AutoPlayPanel, {
-          ladder: difficulty.ladder,
-          difficultyLabel: difficulty.label,
-          roundBetCents: 100,
-          betsValid: true,
-          limits,
-          betSizing: true,
-          roundActive: false,
-          starting: false,
-          status: {
-            running: false,
-            stopping: false,
-            settings: null,
-            progress: { roundsPlayed: 0, netCents: 0 },
-            bets: null,
-            handCashOuts: null,
-            stopReason: null,
-          },
-          round: null,
-          onStart: () => undefined,
-          onStop: () => undefined,
-          onCashOut: () => undefined,
-        }),
+        createElement(AutoPlayPanel, props(difficulty, difficulty.ladder.length)),
       );
       const reach = formatMultiplier(multiplierAt(difficulty.ladder, 3));
-      // Inside the Pumps box: "Pumps 3 = 1.18×", and in full for the tooltip.
-      expect(html).toContain(`= ${reach}`);
+      expect(reachLine(html)).toBe(`= ${reach}`);
+      // In full for the tooltip and screen readers.
       expect(html).toContain(`3 pumps = ${reach} on ${difficulty.label}`);
+      // The Pumps box holds its name and the count only, so the count has room.
+      const box = /<label class="field" title="Pumps per balloon[^"]*">(.*?)<\/label>/.exec(html);
+      expect(box?.[1]).toBeDefined();
+      expect(box?.[1]).not.toContain('field-reach');
     }
+  });
+
+  it('says the top when the bets top out below the count', () => {
+    const difficulty = GAME_CONFIG.difficulties[0];
+    if (!difficulty) throw new Error('no difficulty');
+    const html = renderToStaticMarkup(createElement(AutoPlayPanel, props(difficulty, 2)));
+    expect(reachLine(html)).toBe(`top 2 = ${formatMultiplier(multiplierAt(difficulty.ladder, 2))}`);
+    expect(html).toContain('data-top="true"');
   });
 });

@@ -51,6 +51,16 @@ export function shownTopRung(
 }
 
 /**
+ * The bets as typed, in cents, one per balloon; null for one not typed in
+ * right yet. What shownTopRung reads, here and in the auto-play panel.
+ */
+export function typedBetCents(setup: BetSetup, check: BetCheck): (number | null)[] {
+  return setup.bets.map((text, i) =>
+    (check.errors[i] ?? null) === null ? parseDollarsToCents(text) : null,
+  );
+}
+
+/**
  * A mouse press on a small button must not take focus, as on HoldButton:
  * then Enter still means "bet" (App's Enter needs nothing focused), instead
  * of pressing ½ or 2× again.
@@ -74,10 +84,7 @@ export function BetPanel({
   if (!difficulty) return null;
   const ladder = difficulty.ladder;
   // The info line's top: the one the entered bets can reach (shownTopRung).
-  const typedCents = setup.bets.map((text, i) =>
-    (check.errors[i] ?? null) === null ? parseDollarsToCents(text) : null,
-  );
-  const topRung = shownTopRung(ladder, typedCents, limits.maxPayoutCents);
+  const topRung = shownTopRung(ladder, typedBetCents(setup, check), limits.maxPayoutCents);
   const topCapped = topRung < ladder.length;
   const counts = Array.from({ length: limits.maxBalloons }, (_, i) => i + 1);
   const many = setup.bets.length > 1;

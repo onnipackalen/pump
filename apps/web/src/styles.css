@@ -989,13 +989,35 @@ input {
   font-size: 12px;
 }
 
-/* What the pump count reaches on the chosen difficulty: "= 1.18×". */
+/*
+ * The Pumps box, and under it what the count reaches on the chosen
+ * difficulty: "= 1.18×", or "top 7 = 100.00×" when the max payout holds
+ * the bets lower. Under the box, not in it: in the box it took the room the
+ * typed count needed on a narrow card. The line always keeps its height,
+ * so the form doesn't jump while the count is retyped; it may wrap.
+ */
+.field-cell {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  min-width: 0;
+}
+
 .field-reach {
-  flex: none;
+  min-height: 1.25em;
+  padding: 0 8px;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.25;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Topped out: the same colour as a bet's own "Top" in its box. */
+.field-reach[data-top='true'] {
+  color: var(--risk);
+  cursor: help;
 }
 
 /* On win and On loss: a name, Reset or Increase, and the percent. */

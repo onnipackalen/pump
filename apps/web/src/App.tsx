@@ -4,7 +4,7 @@ import { gameClient } from './api';
 import type { RoundView } from './api/contract';
 import { AutoPlayPanel } from './components/AutoPlayPanel';
 import { BalloonCard, PreviewCard } from './components/BalloonCard';
-import { BetPanel } from './components/BetPanel';
+import { BetPanel, shownTopRung, typedBetCents } from './components/BetPanel';
 import { FairnessPanel } from './components/FairnessPanel';
 import { GameInfo } from './components/GameInfo';
 import { History } from './components/History';
@@ -161,6 +161,11 @@ export function App() {
   const autoOffered = market.autoPlay && setupDifficulty !== undefined && state.phase === 'ready';
   // Whether auto-play may change the bets after a win or a loss (market.ts).
   const autoBetSizing = market.autoPlay && market.autoBetSizing;
+  // The top the entered bets can reach, the same one the bet panel's info
+  // line shows: the auto-play panel says where its pump count stops.
+  const autoTopRung = setupDifficulty
+    ? shownTopRung(setupDifficulty.ladder, typedBetCents(setup, check), config.limits.maxPayoutCents)
+    : 0;
   // What the panel shows: Stop while auto-play runs, the round's buttons
   // during a round played by hand, and the bet otherwise.
   const panel = autoRunning ? 'auto-running' : roundActive ? 'round' : 'bet';
@@ -582,6 +587,7 @@ export function App() {
               <div hidden={!(panel === 'auto-running' || (panel === 'bet' && mode === 'auto'))}>
                 <AutoPlayPanel
                   ladder={setupDifficulty.ladder}
+                  topRung={autoTopRung}
                   difficultyLabel={setupDifficulty.label}
                   roundBetCents={check.totalCents}
                   betsValid={check.betsCents !== null}

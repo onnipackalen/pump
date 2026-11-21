@@ -6,7 +6,7 @@ import {
   describeHeld,
   describeStop,
   handCashOutsFor,
-  targetMultiplier,
+  pumpReach,
   totalBetCents,
   type AutoPlayField,
   type AutoPlayForm,
@@ -15,11 +15,17 @@ import {
   type BetLimits,
 } from '../game/autoPlay';
 import type { AutoPlayStatus } from '../game/useAutoPlay';
-import { formatCents, formatMultiplier, formatSignedCents } from '../money';
+import { formatCents, formatSignedCents } from '../money';
 
 interface AutoPlayPanelProps {
   /** The chosen difficulty's ladder: its length is the most pumps a balloon can take. */
   readonly ladder: readonly number[];
+  /**
+   * The highest rung the entered bets can reach, as the bet panel's info
+   * line shows it (shownTopRung). The max payout can hold it below the
+   * ladder's top; a balloon there cashes out by itself.
+   */
+  readonly topRung: number;
   /** The chosen difficulty's name, for screen readers ("on Easy"). */
   readonly difficultyLabel: string;
   /** Total of the bets in the bet panel, and whether they are all valid. */
@@ -104,6 +110,7 @@ const ERROR_NAMES: readonly (readonly [AutoPlayField, string])[] = [
  */
 export function AutoPlayPanel({
   ladder,
+  topRung,
   difficultyLabel,
   roundBetCents,
   betsValid,
@@ -121,9 +128,11 @@ export function AutoPlayPanel({
   const check = checkAutoPlayForm(form, ladder.length, roundBetCents, betSizing);
   const { running, stopping, progress, settings, stopReason, bets } = status;
   const firstWrong = ERROR_NAMES.find(([name]) => check.errors[name] !== null);
-  // What the pump count reaches on the chosen difficulty: "= 1.18×".
-  const reach = targetMultiplier(ladder, check.errors.targetPumps === null ? Number(form.targetPumps) : 0);
-  const reachText = reach === null ? null : `= ${formatMultiplier(reach)}`;
+  // What the pump count reaches, shown under the Pumps box (pumpReach).
+  const reach =
+    check.errors.targetPumps === null
+      ? pumpReach(ladder, Number(form.targetPumps), topRung, difficultyLabel)
+      : null;
 
   const panelRef = useRef<HTMLElement>(null);
   const stopRef = useRef<HTMLButtonElement>(null);
@@ -243,16 +252,12 @@ export function AutoPlayPanel({
           )}
           <div className="auto-grid">
             {FIELDS.map((field) => {
-              const reaches = field.name === 'targetPumps' && reachText !== null;
-              return (
+              const pumps = field.name === 'targetPumps';
+              const box = (
                 <label
                   key={field.name}
                   className="field"
-                  title={
-                    reaches
-                      ? `${field.full}: ${form.targetPumps.trim()} pumps ${reachText} on ${difficultyLabel}`
-                      : field.full
-                  }
+                  title={pumps && reach !== null ? `${field.full}: ${reach.full}` : field.full}
                 >
                   <span className="field-label">{field.label}</span>
                   <input
@@ -260,19 +265,31 @@ export function AutoPlayPanel({
                     inputMode={field.money ? 'decimal' : 'numeric'}
                     autoComplete="off"
                     aria-label={field.full}
-                    aria-describedby={reaches ? 'auto-reach' : undefined}
+                    aria-describedby={pumps && reach !== null ? 'auto-reach' : undefined}
                     value={form[field.name]}
                     aria-invalid={check.errors[field.name] !== null}
                     placeholder={field.money ? 'off' : undefined}
                     onChange={(event) => setForm({ ...form, [field.name]: event.target.value })}
                   />
-                  {/* What the count reaches on this difficulty: "3 = 1.18×". */}
-                  {reaches && (
-                    <span className="field-reach" id="auto-reach">
-                      {reachText}
-                    </span>
-                  )}
                 </label>
+              );
+              if (!pumps) return box;
+              // Under the box, not in it, so the typed count always has room.
+              // The line keeps its place while the count is being retyped.
+              return (
+                <div key={field.name} className="field-cell">
+                  {box}
+                  <span
+                    className="field-reach"
+                    id="auto-reach"
+                    data-top={reach?.toppedOut ?? false}
+                    title={reach?.full}
+                  >
+                    <span aria-hidden="true">{reach?.short}</span>
+                    {/* Screen readers get it in full. */}
+                    {reach !== null && <span className="visually-hidden">{reach.full}</span>}
+                  </span>
+                </div>
               );
             })}
           </div>
