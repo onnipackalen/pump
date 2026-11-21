@@ -240,6 +240,12 @@
 .pump-balloon .pb-pump-grip {
   fill: #c3c9d6;
 }
+/* The difficulty's rings round the foot of the barrel. --pb-level is set
+ * on the balloon by your code (Balloon.tsx, game/level.ts); the grip's
+ * grey if not. Never animated. */
+.pump-balloon .pb-level-ring {
+  fill: var(--pb-level, #c3c9d6);
+}
 .pump-balloon .pb-hose-tube {
   fill: none;
   stroke: #56627e;

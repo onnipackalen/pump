@@ -947,6 +947,24 @@ input {
   background: #7b4fd6;
 }
 
+/* A difficulty's colour on its button (game/level.ts): the same colour as
+   the rings on the pump, so the player learns which is which. It sits
+   under the name, out of the text's way: beside it, "Medium" no longer
+   fits the panel's narrowest buttons (70 px on a wide screen). */
+.segment:has(> .level-dot) {
+  position: relative;
+  padding-bottom: 6px;
+}
+.level-dot {
+  position: absolute;
+  bottom: 5px;
+  left: calc(50% - 3px);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--level-colour, #c3c9d6);
+}
+
 .row {
   display: flex;
   align-items: center;

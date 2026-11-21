@@ -41,9 +41,30 @@ export type BalloonBeat =
   | 'cashout'
   | 'cashed';
 
+/**
+ * The difficulty, as the pump shows it: rings round the foot of the barrel
+ * in the difficulty's colour, one ring per level (game/level.ts picks both).
+ */
+export interface BalloonLevel {
+  /** The difficulty's id, set as data-level. */
+  readonly id: string;
+  /** Any CSS colour. */
+  readonly colour: string;
+  /** How many rings: 0 to LEVEL_RINGS.length. */
+  readonly marks: number;
+}
+
+/**
+ * Where the rings go, from the bottom up: 2 tall, 1.2 apart, all of them
+ * on the barrel between the pump's foot and its number dial.
+ */
+const LEVEL_RINGS = [299.2, 296, 292.8, 289.6] as const;
+
 export interface BalloonProps {
   /** 1, 2 or 3: picks the colour and the number on the pump. */
   readonly slot: number;
+  /** The difficulty, shown on the pump. Leave it out to show none. */
+  readonly level?: BalloonLevel | undefined;
   /** 0.45 before the first pump, 1 at the balloon's top rung. */
   readonly scale: number;
   readonly beat?: BalloonBeat | undefined;
@@ -96,6 +117,7 @@ const BODY_PATH =
 
 export function Balloon({
   slot,
+  level,
   scale,
   beat,
   strain,
@@ -109,7 +131,12 @@ export function Balloon({
   idle,
   value,
 }: BalloonProps) {
-  const style = { '--balloon-scale': scale.toFixed(4) } as CSSProperties;
+  const style = {
+    '--balloon-scale': scale.toFixed(4),
+    ...(level ? { '--pb-level': level.colour } : {}),
+  } as CSSProperties;
+  const marks = level ? Math.max(0, Math.min(level.marks, LEVEL_RINGS.length)) : 0;
+  const rings = LEVEL_RINGS.slice(0, marks);
   const lying = hoseLies({ beat, first, idle });
   const hose = useHoseMotion(lying, beat);
   const line = lying ? FLAT_LINE : STAND_LINE;
@@ -119,6 +146,7 @@ export function Balloon({
       viewBox="0 0 200 320"
       className="pump-balloon"
       data-slot={slot}
+      data-level={level?.id}
       data-beat={beat}
       data-strain={strain}
       data-patch={patch}
@@ -225,6 +253,17 @@ export function Balloon({
           <rect className="pb-pump-nozzle" x="115" y="291" width="20" height="8" rx="2" />
           <rect className="pb-pump-cap" x="130" y="242" width="24" height="5" rx="2.5" />
           <rect className="pb-pump-barrel" x="132" y="245" width="20" height="60" rx="4" />
+          {/* level: the difficulty, as rings round the foot of the barrel in
+               its own colour: one for the first difficulty, up to four, so
+               it is never told by colour alone. Under the shine, so they
+               wrap the barrel like it. Nothing here moves. */}
+          {rings.length > 0 && (
+            <g className="pb-level">
+              {rings.map((y) => (
+                <rect key={y} className="pb-level-ring" x="132" y={y} width="20" height="2" />
+              ))}
+            </g>
+          )}
           <rect className="pb-pump-shine" x="135" y="249" width="3.5" height="52" rx="1.75" />
           {/* tag: the slot number, on the pump's gauge dial. */}
           <g className="pb-tag">

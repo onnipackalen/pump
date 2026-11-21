@@ -3,6 +3,7 @@ import type { MouseEvent } from 'react';
 import type { BetCheck, BetSetup } from '../game/betSetup';
 import { withBalloonCount } from '../game/betSetup';
 import { multiplierAt, popChance, topRungForBet } from '../game/rules';
+import { LevelDot } from './LevelDot';
 import {
   centsToInput,
   formatCents,
@@ -225,6 +226,7 @@ export function BetPanel({
             disabled={disabled}
             onClick={() => onChange({ ...setup, difficultyId: d.id })}
           >
+            <LevelDot difficultyId={d.id} />
             {d.label}
           </button>
         ))}
