@@ -282,14 +282,6 @@
 .pump-balloon[data-beat="press"] .pb-air {
   transition: none;
 }
-/* The pocket is not shown: the user asked for the flashing dot to go. It
- * was a pale dot that ran up the hose and pulsed while the game waited
- * for the answer. The handle stroke and the balloon's breath still carry
- * each pump, and the pocket's timings (--pb-air-*) still pace the press
- * and the answer, so nothing else moves. */
-.pump-balloon .pb-air {
-  display: none;
-}
 
 /* Number plate on the pump */
 .pump-balloon .pb-tag-card {
