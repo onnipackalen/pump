@@ -42,6 +42,8 @@ export interface StoredRound {
   readonly startedAt: string;
   readonly lastActionAt: string;
   readonly finishedAt: string | null;
+  /** The payout cap per balloon when the round started. */
+  readonly maxPayoutCents: number;
   readonly round: Round;
 }
 
@@ -62,6 +64,8 @@ export interface NewRound {
   readonly serverSeedId: number;
   readonly clientSeed: string;
   readonly nonce: number;
+  /** The payout cap per balloon in force now, kept with the round. */
+  readonly maxPayoutCents: number;
   readonly round: Round;
   readonly at: string;
 }
@@ -150,7 +154,8 @@ export type RoundsRepository = ReturnType<typeof roundsRepository>;
 
 export function roundsRepository(db: Db) {
   const ROUND_COLUMNS = `
-    r.id, r.player_id, r.status, r.difficulty_id, r.rtp_bp, r.ladder, r.server_seed_id,
+    r.id, r.player_id, r.status, r.difficulty_id, r.rtp_bp, r.ladder, r.max_payout_cents,
+    r.server_seed_id,
     r.client_seed, r.nonce, r.started_at, r.last_action_at, r.finished_at,
     s.seed_hash, s.revealed_at
   `;
@@ -191,9 +196,9 @@ export function roundsRepository(db: Db) {
     ORDER BY last_action_at
   `);
   const insertRound = db.prepare(`
-    INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder,
+    INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
                         server_seed_id, client_seed, nonce, started_at, last_action_at)
-    VALUES (:id, :playerId, 'active', :difficultyId, :rtpBp, :ladder,
+    VALUES (:id, :playerId, 'active', :difficultyId, :rtpBp, :ladder, :maxPayoutCents,
             :serverSeedId, :clientSeed, :nonce, :at, :at)
   `);
   const insertBalloon = db.prepare(`
@@ -248,6 +253,7 @@ export function roundsRepository(db: Db) {
       startedAt: text(row, 'started_at'),
       lastActionAt: text(row, 'last_action_at'),
       finishedAt: nullableText(row, 'finished_at'),
+      maxPayoutCents: int(row, 'max_payout_cents'),
       round: {
         difficultyId: text(row, 'difficulty_id'),
         rtpBp: int(row, 'rtp_bp'),
@@ -292,6 +298,7 @@ export function roundsRepository(db: Db) {
         difficultyId: round.round.difficultyId,
         rtpBp: round.round.rtpBp,
         ladder: JSON.stringify(round.round.ladder),
+        maxPayoutCents: round.maxPayoutCents,
         serverSeedId: round.serverSeedId,
         clientSeed: round.clientSeed,
         nonce: round.nonce,

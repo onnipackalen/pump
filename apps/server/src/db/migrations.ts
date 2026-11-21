@@ -107,8 +107,9 @@ const MIGRATIONS: readonly Migration[] = [
       BEGIN SELECT RAISE(ABORT, 'server seeds are never deleted'); END;
 
       ------------------------------------------------------------------
-      -- Rounds. Each keeps its own copy of the RTP and ladder it was
-      -- played with, so it still verifies after the configuration changes.
+      -- Rounds. Each keeps its own copy of the RTP, ladder and payout cap
+      -- it was played with, so it still verifies after the configuration
+      -- changes.
       ------------------------------------------------------------------
       CREATE TABLE rounds (
         id             TEXT PRIMARY KEY,
@@ -117,6 +118,9 @@ const MIGRATIONS: readonly Migration[] = [
         difficulty_id  TEXT NOT NULL,
         rtp_bp         INTEGER NOT NULL,
         ladder         TEXT NOT NULL,
+        -- The payout cap per balloon when the round started. Each balloon's
+        -- top rung was worked out from it, so checking a round needs it.
+        max_payout_cents INTEGER NOT NULL CHECK (max_payout_cents > 0),
         server_seed_id INTEGER NOT NULL REFERENCES server_seeds(id),
         client_seed    TEXT NOT NULL,
         nonce          INTEGER NOT NULL CHECK (nonce >= 0),
@@ -167,10 +171,11 @@ const MIGRATIONS: readonly Migration[] = [
       CREATE TRIGGER rounds_fixed BEFORE UPDATE ON rounds
       WHEN NEW.id <> OLD.id OR NEW.player_id <> OLD.player_id
         OR NEW.difficulty_id <> OLD.difficulty_id OR NEW.rtp_bp <> OLD.rtp_bp
-        OR NEW.ladder <> OLD.ladder OR NEW.server_seed_id <> OLD.server_seed_id
+        OR NEW.ladder <> OLD.ladder OR NEW.max_payout_cents <> OLD.max_payout_cents
+        OR NEW.server_seed_id <> OLD.server_seed_id
         OR NEW.client_seed <> OLD.client_seed OR NEW.nonce <> OLD.nonce
         OR NEW.started_at <> OLD.started_at
-      BEGIN SELECT RAISE(ABORT, 'a round keeps the seeds, RTP and ladder it started with'); END;
+      BEGIN SELECT RAISE(ABORT, 'a round keeps the seeds, RTP, ladder and cap it started with'); END;
 
       CREATE TRIGGER rounds_no_delete BEFORE DELETE ON rounds
       BEGIN SELECT RAISE(ABORT, 'rounds are never deleted'); END;

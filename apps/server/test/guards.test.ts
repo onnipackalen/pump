@@ -9,6 +9,7 @@ import { cashOutByHand, count, insertActiveRound, testRuntime } from './helpers'
 // or a careless script would. The database itself must refuse each one.
 
 const AT = '2026-01-01T00:00:00.000Z';
+const CAP = String(GAME_CONFIG.limits.maxPayoutCents);
 let db: Db;
 
 /** A player with a grant of 1,000 cents and one active seed, written correctly. */
@@ -223,9 +224,9 @@ describe('rounds', () => {
   it('refuses a round on a nonce the seed did not just hand out', () => {
     const insert = (nonce: number): void => {
       db.exec(
-        `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder,
+        `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
                              server_seed_id, client_seed, nonce, started_at, last_action_at)
-         SELECT 'round-x', 'p1', 'active', 'easy', ${String(GAME_CONFIG.rtpBp)}, '[101]',
+         SELECT 'round-x', 'p1', 'active', 'easy', ${String(GAME_CONFIG.rtpBp)}, '[101]', ${CAP},
                 id, 'seed', ${String(nonce)}, '${AT}', '${AT}'
          FROM server_seeds WHERE player_id = 'p1'`,
       );
@@ -244,9 +245,9 @@ describe('rounds', () => {
     db.exec("UPDATE server_seeds SET next_nonce = 1 WHERE player_id = 'p2'");
     expect(() =>
       db.exec(
-        `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder,
+        `INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
                              server_seed_id, client_seed, nonce, started_at, last_action_at)
-         SELECT 'round-x', 'p1', 'active', 'easy', ${String(GAME_CONFIG.rtpBp)}, '[101]',
+         SELECT 'round-x', 'p1', 'active', 'easy', ${String(GAME_CONFIG.rtpBp)}, '[101]', ${CAP},
                 id, 'seed', 0, '${AT}', '${AT}'
          FROM server_seeds WHERE player_id = 'p2'`,
       ),

@@ -229,6 +229,17 @@ export type BalloonAction =
   | { readonly kind: 'pump'; readonly patch: boolean }
   | { readonly kind: 'cashOut' };
 
+/** The draw that decided one pump, as the server recorded it. */
+export interface DrawRecordView {
+  /** The balloon's draw index this pump used. */
+  readonly drawIndex: number;
+  /** The roll was drawn from 0 to den - 1. */
+  readonly den: number;
+  /** The pump survived if roll < num. */
+  readonly num: number;
+  readonly roll: number;
+}
+
 /** One balloon of a finished round: what was done to it, and how it ended. */
 export interface VerifiableBalloon {
   readonly betCents: number;
@@ -240,6 +251,8 @@ export interface VerifiableBalloon {
    * has no actions.
    */
   readonly actions: readonly BalloonAction[];
+  /** The draw of every pump on this balloon, in order, as recorded. */
+  readonly draws: readonly DrawRecordView[];
   /** How it ended, as recorded and paid. The verify page checks these. */
   readonly status: BalloonStatus;
   readonly rung: number;
@@ -258,6 +271,8 @@ export interface VerifiableRound {
   readonly difficultyId: string;
   readonly rtpBp: number;
   readonly ladder: readonly number[];
+  /** The payout cap per balloon the round was played under, in cents. */
+  readonly maxPayoutCents: number;
   readonly serverSeed: string;
   readonly serverSeedHash: string;
   readonly clientSeed: string;

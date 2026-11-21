@@ -254,6 +254,7 @@ describe('checking a finished round', () => {
       difficultyId: 'tiny',
       rtpBp: CONFIG.rtpBp,
       ladder: TINY.ladder,
+      maxPayoutCents: CONFIG.limits.maxPayoutCents,
       serverSeed: rotated.revealed.serverSeed,
       serverSeedHash: round.serverSeedHash,
       clientSeed: round.clientSeed,
@@ -265,6 +266,19 @@ describe('checking a finished round', () => {
       [{ kind: 'pump', patch: false }, { kind: 'cashOut' }],
       [],
     ]);
+
+    // Each pump comes with the draw that decided it, numbered 0, 1, 2, ...
+    expect(verifiable.balloons.map((balloon) => balloon.draws.map((draw) => draw.drawIndex))).toEqual([
+      [0, 1],
+      [0],
+      [],
+    ]);
+    for (const balloon of verifiable.balloons) {
+      for (const draw of balloon.draws) {
+        expect(draw.roll).toBeGreaterThanOrEqual(0);
+        expect(draw.roll).toBeLessThan(draw.den);
+      }
+    }
 
     const replayed = replay(verifiable);
     verifiable.balloons.forEach((recorded, index) => {

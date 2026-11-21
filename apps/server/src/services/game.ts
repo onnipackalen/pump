@@ -228,6 +228,7 @@ export function gameService(
         serverSeedId: seed.id,
         clientSeed: player.clientSeed,
         nonce: seeds.takeNonce(seed.id),
+        maxPayoutCents: runtime.config.limits.maxPayoutCents,
         round: started.round,
         at,
       });
@@ -365,6 +366,7 @@ export function gameService(
         difficultyId: stored.round.difficultyId,
         rtpBp: stored.round.rtpBp,
         ladder: stored.round.ladder,
+        maxPayoutCents: stored.maxPayoutCents,
         serverSeed,
         serverSeedHash: stored.serverSeedHash,
         clientSeed: stored.clientSeed,
@@ -376,6 +378,10 @@ export function gameService(
           actions: actions
             .filter((entry) => entry.balloonIndex === balloonIndex)
             .map((entry) => entry.action),
+          // The draw that decided each pump, as recorded when it happened.
+          draws: actions
+            .filter((entry) => entry.balloonIndex === balloonIndex)
+            .flatMap((entry) => (entry.draw ? [entry.draw] : [])),
           status: balloon.status,
           rung: balloon.rung,
           drawIndex: balloon.drawIndex,
