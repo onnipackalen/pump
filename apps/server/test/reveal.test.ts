@@ -744,3 +744,36 @@ describe.each(RTPS)('a database from before reveals existed, at RTP %i', (rtpBp)
     expect(check.problems.join(' ')).toMatch(/server shows nothing/);
   });
 });
+
+describe('a database made by the branch before reveals were merged', () => {
+  it('is refused with a plain message before anything in it is changed', () => {
+    const db = openDatabase(':memory:');
+    migrate(db, 1);
+    // That code's step 2 had another name, and added the cap column that
+    // step 1 now holds, but not the reveal mark this code expects.
+    db.exec(`
+      CREATE TABLE balloon_reveals (round_id TEXT NOT NULL, balloon_index INTEGER NOT NULL) STRICT;
+      INSERT INTO schema_migrations (id, name, applied_at)
+        VALUES (2, 'reveals at round end, and the payout cap per round', '2026-11-20T00:00:00.000Z');
+    `);
+    const tablesBefore = db.prepare('SELECT name, sql FROM sqlite_schema ORDER BY name').all();
+
+    expect(() => migrate(db)).toThrow(
+      /step 2 is "reveals at round end, and the payout cap per round".*Delete the database file/,
+    );
+    expect(db.prepare('SELECT name, sql FROM sqlite_schema ORDER BY name').all()).toEqual(tablesBefore);
+    expect(count(db, 'schema_migrations')).toBe(2);
+  });
+});
+
+describe('a database this code made', () => {
+  it('opens again and again, with each step applied once', () => {
+    const db = openDatabase(':memory:');
+    migrate(db);
+    expect(() => {
+      migrate(db);
+      migrate(db);
+    }).not.toThrow();
+    expect(count(db, 'schema_migrations')).toBe(2);
+  });
+});

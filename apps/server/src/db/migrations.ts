@@ -1,10 +1,15 @@
 import type { Db } from './database';
-import { int } from './rows';
+import { text } from './rows';
 import { immediate } from './transaction';
 
 /**
  * The database schema, as a list of steps that only ever grows. Each step
- * runs once, in order, and is recorded in schema_migrations.
+ * runs once, in order, and is recorded in schema_migrations with its name.
+ * A step's name is part of that record: never rename one that has shipped.
+ * migrate() refuses a database whose recorded step has another name than
+ * the code's, because unreleased code (an earlier version of a branch) made
+ * that step differently, and skipping it by its number alone would leave
+ * the tables in a shape this code does not expect.
  *
  * The rules that keep money safe are written here as constraints and
  * triggers, so the database itself refuses a bad write even if the code
@@ -584,15 +589,29 @@ export function migrate(db: Db, upTo = Number.POSITIVE_INFINITY): void {
       ) STRICT
     `);
   });
-  const isApplied = db.prepare('SELECT COUNT(*) AS n FROM schema_migrations WHERE id = :id');
+  const recordedName = db.prepare('SELECT name FROM schema_migrations WHERE id = :id');
   const record = db.prepare(
     'INSERT INTO schema_migrations (id, name, applied_at) VALUES (:id, :name, :at)',
   );
+  // Every step already recorded is checked first, so a database made by
+  // other code is refused before anything in it is changed.
+  for (const migration of MIGRATIONS) {
+    const row = recordedName.get({ id: migration.id });
+    if (row === undefined) continue;
+    const name = text(row, 'name');
+    if (name !== migration.name) {
+      throw new Error(
+        `This database's step ${String(migration.id)} is "${name}", but this server's step ` +
+          `${String(migration.id)} is "${migration.name}". The database was made by other, ` +
+          'unreleased code, so its tables are not the ones this server expects. Nothing was ' +
+          'changed. Delete the database file (and its -wal and -shm files) to start afresh.',
+      );
+    }
+  }
   for (const migration of MIGRATIONS) {
     if (migration.id > upTo) break;
     immediate(db, () => {
-      const row = isApplied.get({ id: migration.id });
-      if (row !== undefined && int(row, 'n') > 0) return;
+      if (recordedName.get({ id: migration.id }) !== undefined) return;
       db.exec(migration.sql);
       record.run({ id: migration.id, name: migration.name, at: new Date().toISOString() });
     });
