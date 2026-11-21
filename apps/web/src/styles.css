@@ -578,22 +578,63 @@ summary:focus-visible,
  */
 .btn-patch {
   position: relative;
+  /* So the amounts can size themselves to the button (cqw below). */
+  container-type: inline-size;
   border: 1.5px solid #8a8f9a;
   background: var(--panel-raised);
 }
 
 /*
- * A row of stitches just inside the solid edge, like a patch sewn on. The
- * stitches set its shape apart from Cash out's plain outline (the user
- * found the two too easy to mix up), and the edge stays solid, because a
- * dashed outer edge with stripes read as a locked button.
+ * Three lines: the name, the price, and what the pump adds if it holds
+ * ("for +$0.09"), so the two amounts can be weighed. A little tighter than
+ * the other buttons, so three lines take no more room than their two. Each
+ * amount takes the largest size that fits by its length, as the balloon
+ * labels do (150cqw / characters leaves a little air), so a $1,000 bet's
+ * five-figure amounts never spill out.
+ */
+.btn-patch.btn-two {
+  line-height: 1.05;
+}
+
+.btn-patch .patch-price {
+  display: block;
+  white-space: nowrap;
+  font-size: min(15px, 150cqw / max(var(--chars, 6), 1));
+}
+
+.btn-patch .patch-gain {
+  display: block;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: min(10.5px, 165cqw / max(var(--chars, 6), 1));
+  font-weight: 600;
+}
+
+/* Short screens have lower buttons: a smaller tape icon and no top and
+   bottom padding keep the three lines inside them. */
+@media (max-height: 720px) {
+  .btn-patch.btn-two {
+    padding-block: 0;
+  }
+
+  .btn-patch .patch-icon {
+    width: 13px;
+    height: 13px;
+  }
+}
+
+/*
+ * Stitches down both ends, just inside the solid edge, like the ends of a
+ * strip of tape. They set its shape apart from Cash out's plain outline
+ * (the user found the two too easy to mix up), and the edge stays solid,
+ * because a dashed outer edge with stripes read as a locked button. Only
+ * the ends, so the three lines of text keep the full height.
  */
 .btn-patch::before {
   content: '';
   position: absolute;
-  inset: 3px;
-  border: 1.5px dashed rgba(244, 242, 238, 0.55);
-  border-radius: 7px;
+  inset: 5px 3px;
+  border-inline: 1.5px dashed rgba(244, 242, 238, 0.55);
   pointer-events: none;
 }
 
