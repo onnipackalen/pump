@@ -129,6 +129,8 @@ without touching the game's math. All of them are listed here.
 | Switch | Where | What it turns off |
 |---|---|---|
 | `VITE_MARKET` | Set when the web app is built, e.g. `VITE_MARKET=gb npm run build`. The rules per market are in `apps/web/src/market.ts`. | `autoPlay`: the Auto tab. `autoBetSizing`: auto-play's "On win" / "On loss" bet changes (the bets then stay as the player entered them). |
+| `PUBLIC_WINS` | Set when the server starts (`"on"` or `"off"`; on Render it is in `render.yaml`). On a host it is off unless set to `"on"`; run from the repo it is on. The server logs `public wins: ON` or `OFF` at every start. | The public lists of other players' wins (`GET /api/wins`); the screen hides them when they are off. Details under "The API". |
+| Keep my wins private | Each player, in the game's settings menu (`PUT /api/settings`). | That player's wins, past ones too, in the public lists. |
 
 Known markets: no value means `default` (everything on); `gb` (or `uk`) has
 auto-play off. A value the file does not know switches every listed feature
