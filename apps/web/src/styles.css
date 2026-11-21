@@ -887,10 +887,16 @@ input {
  * Pump with one balloon and Pump all with two or three.
  */
 
+/* The round panel's width decides how tight the numbers sit (see below). */
+.round {
+  container-type: inline-size;
+}
+
 .readouts {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 8px;
+  gap: 2px 8px;
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
@@ -916,6 +922,44 @@ input {
   color: var(--muted);
   font-size: 13px;
   font-weight: 500;
+}
+
+/*
+ * A narrow phone with big numbers ("100.00×", "$1,000.00") ran the row past
+ * the right edge and cut off the pop chance. Under 330 px the numbers sit
+ * tighter, which fits every case on a 320 px phone; if something still
+ * doesn't fit, the row wraps rather than cutting anything off. (After the
+ * rules above, so it wins.)
+ */
+@container (max-width: 330px) {
+  .readouts {
+    column-gap: 4px;
+  }
+  .readouts dt {
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+  .readouts dd {
+    font-size: 15px;
+  }
+  .readouts .readout-quiet dd {
+    font-size: 12px;
+  }
+}
+
+/* The 320 px phone's panel (about 278 px inside) with the widest numbers it
+   can show ("5,000.00×" next to "$3,000.00"): one step tighter, so it
+   still fits on one line and the page keeps its one-screen fit. */
+@container (max-width: 290px) {
+  .readouts dt {
+    font-size: 9px;
+  }
+  .readouts dd {
+    font-size: 14px;
+  }
+  .readouts .readout-quiet dd {
+    font-size: 11px;
+  }
 }
 
 .round-actions {
