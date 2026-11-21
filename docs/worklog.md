@@ -2021,3 +2021,39 @@ growth: Easy 0.56 / 0.63 / 0.68 / 0.76 after 1 / 3 / 5 / 10 pumps (was
 0.51 / 0.56 / 0.60 / 0.69), Expert 0.64 after one. Full size is still
 the top rung only, so the biggest balloon, its top at y = 22 and three
 balloons side by side at their biggest are unchanged.
+
+## 2026-11-21: the difficulty on the pump
+
+From the user's competitor notes, item 6: "Level on the pump ... Don't
+want red dots, but some small colour that shows the level." Stake puts
+four dots on its pump's foot, one red; this is our own take.
+
+What was built:
+- Each difficulty has a colour (apps/web/src/game/level.ts, keyed by its
+  id; display only, the engine never sees it). Easy is lime #8ac157,
+  Medium aqua #74ddee, Hard orchid #d07ed5, Expert gold #f6d156. They were
+  picked by measuring how far each is (in OKLab) from every colour that
+  already means something here: the win mint, the pop grey, the warning
+  orange, the error red and the three balloon colours. Also from each
+  other, with colour blindness simulated too. Each is at least 3 to 1
+  against the pump's barrel. A difficulty added later still draws, in
+  the pump's own light grey, until it is given a colour.
+- The pump shows it as thin rings round the foot of its barrel, under
+  the number dial: one ring on Easy, up to four on Expert. So the level
+  never rests on colour alone. It shows before a bet too, and changes
+  with the difficulty switch. Nothing moves; no timing changed.
+- The Easy / Medium / Hard / Expert switch has a small dot of the same
+  colour under each name, so the player learns which is which.
+
+What turned out wrong, and how it was caught:
+- The dot first sat beside the name. On a wide screen those buttons are
+  only 70 px wide, and "Medium" wrapped with its dot on a line of its
+  own. Caught in a static render of the screen; the dot now sits under
+  the name.
+- The first gold (#fad779) looked cream next to the pearl balloon's dial
+  on a phone with three balloons. Caught in the same render; it is a
+  deeper gold now.
+
+Checked in headless Chrome on a static render (react-dom/server and the
+real CSS files) at 390 x 844 and 1440 x 900, animations on and off. Not
+yet checked on the live server.
