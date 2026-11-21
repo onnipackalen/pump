@@ -14,10 +14,9 @@
  * Under all of it, at the very end of the page, are everyone's wins (the
  * public wins, like Stake's bets table). They add to the page, below the
  * game's one screen, and never take room from it: see "Public wins under
- * the game" below and wins/public-wins.css. They are the one exception to
- * the rule above: with a mouse the page can be scrolled down to them during
- * a round too. On upright and touch screens they are hidden while a round
- * or auto-play runs, so there a round still cannot scroll at all.
+ * the game" below and wins/public-wins.css. They are hidden while a round
+ * or auto-play runs, on every screen, so a round is always exactly one
+ * screen and Pump or Cash out can never be scrolled away.
  *
  * Colour roles follow graphics/README.md: mint only for a real win, grey
  * only for a pop, the sand-to-orange steps only for the pop chance.

@@ -131,9 +131,12 @@
   }
 }
 
-/* Hidden during play where a drag could scroll the page (see the top of this file). */
-@media (orientation: portrait), (pointer: coarse) {
-  .app:has(.controls > .round, .auto-progress[data-running='true']) > .public-wins {
-    display: none;
-  }
+/*
+ * Hidden during play on every screen: a round (or auto-play) is always
+ * exactly one screen, so the page can never scroll Pump or Cash out away
+ * (with a finger, or with a mouse wheel on a computer). The wins come back
+ * when the round is over.
+ */
+.app:has(.controls > .round, .auto-progress[data-running='true']) > .public-wins {
+  display: none;
 }
