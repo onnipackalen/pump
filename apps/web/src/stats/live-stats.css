@@ -16,8 +16,9 @@
  *   panel down and scrolls with it, and the sheet keeps its two resting
  *   places (down at the top of the page, up at its end; styles.css). Short
  *   enough that Bet stays in sight with the sheet down. During a round or
- *   auto-play the round panel needs all of its room, so the strip steps
- *   aside until the round is over, when its figures change anyway.
+ *   auto-play the round panel needs all of its room, so the strip waits
+ *   until play stops (useLiveStats leaves it out, and the button says it is
+ *   waiting).
  * - Sideways phone, or any wide screen under 560px tall: there is no room
  *   beside or under the stage, so the button and the panel are hidden.
  *
@@ -216,17 +217,14 @@
     border-radius: 3px;
     background: rgba(244, 242, 238, 0.32);
   }
-  .layout > .live-stats[data-in-play='true'] {
-    display: none;
-  }
   /* The controls carry on under the strip: one sheet, one handle. */
-  .layout > .live-stats[data-in-play='false'] + .controls {
+  .layout > .live-stats + .controls {
     margin-top: calc(-1 * var(--gap));
     border-top: 0;
     border-radius: 0;
     box-shadow: none;
   }
-  .layout > .live-stats[data-in-play='false'] + .controls::before {
+  .layout > .live-stats + .controls::before {
     display: none;
   }
   /* One row of figures beside the buttons, the line under them. */

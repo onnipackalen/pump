@@ -125,8 +125,6 @@ export function App() {
   const sessionMs = useSessionClock(state.session?.startedAt ?? null);
 
   const round = state.round;
-  // This visit's live stats, counted from the game as the screen shows it.
-  const liveStats = useLiveStats(state);
   // How the balloons before this round ended, so each new pump sets up
   // from the picture that was in its place (game/setUp.ts).
   const setUp = useSetUpFrom(round);
@@ -166,6 +164,11 @@ export function App() {
   // What the panel shows: Stop while auto-play runs, the round's buttons
   // during a round played by hand, and the bet otherwise.
   const panel = autoRunning ? 'auto-running' : roundActive ? 'round' : 'bet';
+  // This visit's live stats, counted from the game as the screen shows it.
+  const liveStats = useLiveStats(
+    state,
+    panel === 'auto-running' ? 'auto-play' : panel === 'round' ? 'round' : null,
+  );
   // The balloons still in play in a round played by hand.
   const live =
     panel === 'round' && round
@@ -536,7 +539,7 @@ export function App() {
         {/* Live stats: between the stage and the controls, so on an upright
             phone it is the top of the sheet. Where it sits at each size is
             in stats/live-stats.css. */}
-        {liveStats.open && <LiveStats live={liveStats} inPlay={panel !== 'bet'} />}
+        {liveStats.shown && <LiveStats live={liveStats} />}
 
         {state.phase !== 'loading' && (
           <aside className="controls" aria-label="Controls">

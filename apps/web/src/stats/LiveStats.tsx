@@ -22,18 +22,24 @@ const iconProps = {
 /**
  * The small chart button that opens and closes the live stats. App puts it
  * in the top bar (see there for why).
+ *
+ * While the panel is held back (an upright screen during play), the button
+ * says so: it is unavailable, unlit, and its title says when the panel
+ * comes back. It never claims to be open while nothing shows.
  */
 export function LiveStatsOpener({ live }: { readonly live: LiveStatsControl }) {
+  const waitingFor = live.heldBy === 'round' ? 'this round' : 'auto-play';
   return (
     <button
       id={live.openerId}
       type="button"
       className="btn icon-btn live-opener"
       aria-label="Live stats"
-      title="Live stats"
-      aria-expanded={live.open}
-      aria-controls={live.open ? live.panelId : undefined}
-      onClick={live.toggle}
+      title={live.heldBy === null ? 'Live stats' : `Live stats after ${waitingFor}`}
+      aria-expanded={live.shown}
+      aria-controls={live.shown ? live.panelId : undefined}
+      aria-disabled={live.heldBy === null ? undefined : true}
+      onClick={live.heldBy === null ? live.toggle : undefined}
     >
       <svg {...iconProps}>
         <path d="M4 4v16h16" />
@@ -41,17 +47,6 @@ export function LiveStatsOpener({ live }: { readonly live: LiveStatsControl }) {
       </svg>
     </button>
   );
-}
-
-interface LiveStatsProps {
-  readonly live: LiveStatsControl;
-  /**
-   * A round or auto-play is running. On an upright phone the round panel
-   * then needs all of the room under the balloons, so the strip steps aside
-   * until the round is over (live-stats.css). Its figures only change when a
-   * round ends, and it is back on screen as that happens.
-   */
-  readonly inPlay: boolean;
 }
 
 /**
@@ -62,7 +57,7 @@ interface LiveStatsProps {
  * reading each change out would never stop. The balance in the top bar
  * already speaks up when play is by hand.
  */
-export function LiveStats({ live, inPlay }: LiveStatsProps) {
+export function LiveStats({ live }: { readonly live: LiveStatsControl }) {
   const { stats } = live;
   const titleId = useId();
   // The figures are exact; only the drawing is thinned on a very long visit.
@@ -72,12 +67,7 @@ export function LiveStats({ live, inPlay }: LiveStatsProps) {
   const evenNote = 'A round that paid back exactly its cost is neither a win nor a loss.';
 
   return (
-    <section
-      id={live.panelId}
-      className="live-stats"
-      aria-labelledby={titleId}
-      data-in-play={inPlay}
-    >
+    <section id={live.panelId} className="live-stats" aria-labelledby={titleId}>
       <div className="ls-head">
         <h2 id={titleId} className="ls-title">
           Live stats
