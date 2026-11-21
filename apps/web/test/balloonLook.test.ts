@@ -112,38 +112,18 @@ describe('a pop stays quiet', () => {
     expect(shard).not.toContain('--balloon-base');
   });
 
-  it('leaves one mark, the torn scrap, and it is not switched off', () => {
-    expect(rule(css, '.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-remnant')).toContain(
-      'opacity: 1;',
-    );
-    const hidden = /\n([^\n{]*)\{\s*display: none;/.exec(appCss)?.[1] ?? '';
-    expect(hidden).toContain('.pb-ghost');
-    expect(hidden).not.toContain('.pb-remnant');
+  it('leaves nothing of the balloon behind: no torn neck, no bits on the floor', () => {
+    // The user asked for this on 2026-11-20 ("just make it pop like blast
+    // into oblivion"), after trying both.
+    const art = readFileSync(new URL('../src/balloon/Balloon.tsx', import.meta.url), 'utf8');
+    expect(art).not.toMatch(/pb-remnant|pb-floor-bit|pb-torn/);
+    expect(css).not.toMatch(/pb-remnant|pb-floor-bit|--pb-torn/);
   });
 
-  it('draws the torn neck in a darker shade of the balloon colour, with an edge that stands out', () => {
-    // The user chose (2026-11-20) a torn neck in each balloon's own colour
-    // over a grey scrap. The flying pieces stay grey (above).
-    const remnant = rule(css, '.pump-balloon .pb-remnant');
-    expect(remnant).toContain('fill: var(--pb-torn);');
-    expect(remnant).toContain('stroke: var(--pb-torn-edge);');
-    const hose = /\.pb-hose-tube \{[^}]*stroke: (#[0-9a-f]{6});/.exec(css)?.[1] ?? '';
-    const stage = /--stage: (#[0-9a-f]{6});/.exec(
-      readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8'),
-    )?.[1] ?? '';
-    const luminance = (hex: string): number => contrast(hex, '#000000');
-    const bases = balloonColours();
-    [1, 2, 3].forEach((slot, i) => {
-      // Slot 1 is the default on .pump-balloon; 2 and 3 have their own rules.
-      const sheet =
-        slot === 1 ? css : css.slice(css.lastIndexOf(`.pump-balloon[data-slot="${slot}"] {\n  /*`));
-      const torn = new RegExp(`--pb-torn: (#[0-9a-f]{6});`).exec(sheet)?.[1] ?? '';
-      const edge = new RegExp(`--pb-torn-edge: (#[0-9a-f]{6});`).exec(sheet)?.[1] ?? '';
-      expect(contrast(edge, hose)).toBeGreaterThanOrEqual(3);
-      expect(contrast(edge, stage)).toBeGreaterThanOrEqual(9);
-      // Darker than the balloon's own colour: a loss is never brighter.
-      expect(luminance(torn)).toBeLessThan(luminance(bases[i] ?? ''));
-    });
+  it('lets the pieces float down and fade out completely', () => {
+    const end = /@keyframes pb-shard-fly \{[\s\S]*?100% \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(end).toContain('opacity: 0;');
+    expect(end).toMatch(/translate\(var\(--dx\), calc\(var\(--dy\) \+ \d+px\)\)/);
   });
 
   it('keeps the pump number at full strength after a pop', () => {

@@ -1,9 +1,32 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { balloonFirst, balloonSetUp, setUpFrom } from '../src/game/setUp';
+import {
+  balloonSetUp,
+  FIRST_LIFT_MS,
+  firstPump,
+  liftStarts,
+  SET_UP_MS,
+  setUpFrom,
+} from '../src/game/setUp';
+import {
+  fallAt,
+  FLAT,
+  FLOOR_Y,
+  HOSE_FALL_MS,
+  HOSE_LIFT_MS,
+  hoseAt,
+  hoseLies,
+  liftAt,
+  onTip,
+  STAND,
+  STAND_END,
+  tipPose,
+  type Point,
+} from '../src/balloon/hoseShape';
 import { balloon, round } from './fixtures';
 
 const css = readFileSync(new URL('../src/balloon/balloon.css', import.meta.url), 'utf8');
+const appCss = readFileSync(new URL('../src/balloon/balloon-app.css', import.meta.url), 'utf8');
 const art = readFileSync(new URL('../src/balloon/Balloon.tsx', import.meta.url), 'utf8');
 
 /** The text of one @keyframes block in balloon.css. */
@@ -20,29 +43,71 @@ function rule(selector: string): string {
   return css.slice(start, css.indexOf('}', start) + 1);
 }
 
-/** The transform a keyframe at `at` (like "0%" or "from") sets. */
-function transformAt(block: string, at: string): string {
-  const start = block.indexOf(`${at} {`);
-  if (start < 0) throw new Error(`no ${at}`);
-  const found = /transform: ([^;]+);/.exec(block.slice(start));
-  if (!found?.[1]) throw new Error(`no transform at ${at}`);
-  return found[1];
+/** A custom property's milliseconds, as balloon.css sets it on .pump-balloon. */
+function cssMs(name: string): number {
+  const found = new RegExp(`${name}: (\\d+)ms;`).exec(css);
+  if (!found?.[1]) throw new Error(`no ${name}`);
+  return Number(found[1]);
 }
+
+/** A time in a rule: "300ms" or "var(--x)", in ms. */
+function ms(value: string): number {
+  const named = /^var\((--[\w-]+)\)$/.exec(value);
+  return named?.[1] ? cssMs(named[1]) : Number(value.replace('ms', ''));
+}
+
+/** When a rule's one animation is over: its duration plus any delay, in ms. */
+function endMs(selector: string): number {
+  const shorthand = /animation: ([^;]+);/.exec(rule(selector))?.[1];
+  if (!shorthand) throw new Error(`no animation in ${selector}`);
+  const times = shorthand.match(/var\(--[\w-]+\)|\b\d+ms\b/g) ?? [];
+  return times.reduce((sum, t) => sum + ms(t), 0);
+}
+
+/** Every rule whose selector ends in `target` and that sets an animation. */
+function animatedRules(target: string): string[] {
+  const out: string[] = [];
+  const re = /\n([^\n{}]*?) \{([^}]*)\}/g;
+  for (let m = re.exec(css); m; m = re.exec(css)) {
+    const selector = (m[1] ?? '').trim();
+    if (selector.endsWith(target) && /\banimation(-name)?:/.test(m[2] ?? '')) out.push(selector);
+  }
+  return out;
+}
+
+const zoom = Number(/--pb-first-zoom: scale\(([\d.]+)\)/.exec(css)?.[1]);
+const origin = /\.pb-scene \{[^}]*transform-origin: ([\d.]+)px ([\d.]+)px;/.exec(css);
+const zoomed = ([x, y]: Point): Point => {
+  const [ox, oy] = [Number(origin?.[1]), Number(origin?.[2])];
+  return [ox + (x - ox) * zoom, oy + (y - oy) * zoom];
+};
+const pointsOf = (d: string): Point[] => {
+  const n = [...d.matchAll(/-?\d+(\.\d+)?/g)].map((m) => Number(m[0]));
+  const out: Point[] = [];
+  for (let i = 0; i + 1 < n.length; i += 2) out.push([n[i] ?? 0, n[i + 1] ?? 0]);
+  return out;
+};
 
 describe('which set-up a new round gets', () => {
   const ended = round(
-    [balloon({ status: 'popped', rung: 3 }), balloon({ status: 'cashed', rung: 5 })],
+    [
+      balloon({ status: 'popped', rung: 3 }),
+      balloon({ status: 'cashed', rung: 5 }),
+      balloon({ status: 'refunded' }),
+    ],
     { id: 'round-a' },
   );
 
-  it('sets each slot up from how the balloon before it in that slot ended', () => {
+  it('sets each slot up from what was in it: a pop, a cash-out, a refund', () => {
     const next = round([balloon(), balloon(), balloon()], { id: 'round-b' });
-    expect(setUpFrom(ended, next)).toEqual(['popped', 'cashed', undefined]);
+    expect(setUpFrom(ended, next)).toEqual(['popped', 'cashed', 'void']);
   });
 
-  it('sets every slot up from the picture before any bet, when that was on screen', () => {
-    const next = round([balloon(), balloon()], { id: 'round-b' });
-    expect(setUpFrom(null, next, true)).toEqual(['idle', 'idle']);
+  it('sets a slot that had no balloon up like the picture before any bet', () => {
+    const one = round([balloon({ status: 'cashed', rung: 2 })], { id: 'round-a' });
+    const three = round([balloon(), balloon(), balloon()], { id: 'round-b' });
+    expect(setUpFrom(one, three)).toEqual(['cashed', 'idle', 'idle']);
+    expect(setUpFrom(null, three, true)).toEqual(['idle', 'idle', 'idle']);
   });
 
   it('gives no set-up when nothing was on screen before, or the round is the same one', () => {
@@ -50,195 +115,167 @@ describe('which set-up a new round gets', () => {
     // A round restored after a page load: only "Loading" was on screen.
     expect(setUpFrom(null, next, false)).toEqual([]);
     expect(setUpFrom(ended, null)).toEqual([]);
-    // The same round after an answer: it is not new.
     expect(setUpFrom(ended, { ...ended })).toEqual([]);
   });
 
-  it('keeps the set-up while the balloon is in play, and drops it the moment it ends', () => {
+  it('is gone from the first answer on, so it can never start again', () => {
     expect(balloonSetUp(balloon(), 'popped')).toBe('popped');
-    // Pumped already: kept, so a quick first answer cannot cut the set-up short.
-    expect(balloonSetUp(balloon({ rung: 1 }), 'idle')).toBe('idle');
-    // Popped or cashed out: gone in the same frame, so it never replays.
+    // The first pump held: the lift takes over. Kept, the set-up replayed
+    // on the second pump (live check, 2026-11-20).
+    expect(balloonSetUp(balloon({ rung: 1 }), 'idle')).toBeUndefined();
+    expect(balloonSetUp(balloon({ rung: 2 }), 'cashed')).toBeUndefined();
     expect(balloonSetUp(balloon({ status: 'popped' }), 'cashed')).toBeUndefined();
-    expect(balloonSetUp(balloon({ status: 'cashed', rung: 2 }), 'popped')).toBeUndefined();
-    expect(balloonSetUp(balloon(), undefined)).toBeUndefined();
+  });
+
+  it('moves for SET_UP_MS at most, the time auto-play can wait after a bet', () => {
+    expect(cssMs('--pb-setup-ms')).toBe(SET_UP_MS);
+    const setUps = animatedRules('.pb-scene').concat(animatedRules('.pb-limp')).filter((s) => s.includes('data-setup'));
+    expect(setUps.length).toBeGreaterThan(0);
+    for (const selector of setUps) expect(endMs(selector)).toBeLessThanOrEqual(SET_UP_MS);
+  });
+
+  it('starts from the picture before it and ends in the floor picture, holding nothing after', () => {
+    expect(keyframes('pb-zoom-in')).toMatch(/from \{\s*transform: scale\(1\);/);
+    expect(keyframes('pb-zoom-in')).toMatch(/to \{\s*transform: var\(--pb-first-zoom\);/);
+    expect(keyframes('pb-limp-on')).toMatch(/from \{\s*opacity: 0;/);
+    // A refunded balloon already lies there: it does not unroll again.
+    expect(css).toContain('.pump-balloon[data-setup]:not([data-setup="void"]) .pb-limp {');
+    for (const selector of animatedRules('.pb-scene').concat(animatedRules('.pb-limp'))) {
+      expect(rule(selector)).not.toMatch(/ (forwards|both);/);
+    }
   });
 });
 
 describe('the first pump', () => {
-  it('keeps a new balloon on the floor until its first pump, and lifts it only when that pump holds', () => {
-    expect(balloonFirst(balloon({ rung: 0 }))).toBe('floor');
-    expect(balloonFirst(balloon({ rung: 1 }))).toBe('lift');
-    expect(balloonFirst(balloon({ rung: 0, status: 'popped' }))).toBe('floor-popped');
-    // Later pumps, and pops or cash-outs after the first pump: the usual pictures.
-    expect(balloonFirst(balloon({ rung: 2 }))).toBeUndefined();
-    expect(balloonFirst(balloon({ rung: 1, status: 'popped' }))).toBeUndefined();
-    expect(balloonFirst(balloon({ rung: 1, status: 'cashed' }))).toBeUndefined();
+  it('keeps a new balloon flat on the floor until its first answer', () => {
+    expect(firstPump(balloon(), false)).toBe('floor');
+    expect(firstPump(balloon({ status: 'popped' }), false)).toBe('floor-popped');
+    expect(firstPump(balloon({ status: 'refunded' }), false)).toBe('floor-void');
   });
 
-  it('starts the lift from exactly the floor picture', () => {
-    expect(rule('.pump-balloon:is([data-idle], [data-first="floor"]) .pb-hose')).toContain(
-      'transform: var(--pb-hose-down);',
-    );
-    expect(transformAt(keyframes('pb-hose-up'), '0%')).toBe('var(--pb-hose-down)');
-    expect(rule('.pump-balloon:is([data-idle], [data-first="floor"]) .pb-hose-stand')).toContain('opacity: 0;');
-    expect(keyframes('pb-hose-pick-up')).toMatch(/0% \{\s*opacity: 0;/);
-    expect(rule('.pump-balloon:is([data-idle], [data-first="floor"]) .pb-hose-flat')).toContain('opacity: 1;');
-    expect(keyframes('pb-hose-put-away')).toMatch(/from \{\s*opacity: 1;/);
-    expect(rule('.pump-balloon[data-first="floor"] .pb-limp')).toContain('opacity: 1;');
-    expect(keyframes('pb-limp-off')).toMatch(/0%,\s*55% \{\s*opacity: 1;/);
-    expect(rule('.pump-balloon[data-first="floor"] .pb-scene')).toContain('transform: var(--pb-first-zoom);');
-    expect(transformAt(keyframes('pb-zoom-out'), 'from')).toBe('var(--pb-first-zoom)');
-    // It ends at rest: upright, full size, the usual view.
-    expect(transformAt(keyframes('pb-hose-up'), '100%')).toBe('rotate(0deg)');
-    expect(transformAt(keyframes('pb-fill-in'), 'to')).toBe('scale(1)');
-    expect(transformAt(keyframes('pb-zoom-out'), 'to')).toBe('scale(1)');
+  it('lifts only when this screen sees the first pump hold, never on a reload', () => {
+    expect(liftStarts(1, 'survived')).toBe(true);
+    expect(liftStarts(1, 'top')).toBe(true);
+    // Restored on its first rung, or a later pump: no lift.
+    expect(liftStarts(1, 'idle')).toBe(false);
+    expect(liftStarts(2, 'survived')).toBe(false);
+    expect(firstPump(balloon({ rung: 1 }), false)).toBeUndefined();
+    expect(firstPump(balloon({ rung: 1 }), true)).toBe('lift');
   });
 
-  it('does not let the hose fall on a pop it already lies under', () => {
-    // Weightier than the Pop section's fall, so it wins wherever it is.
-    expect(
-      rule('.pump-balloon[data-first="floor-popped"][data-beat="pop"] :is(.pb-hose, .pb-hose-stand, .pb-hose-flat)'),
-    ).toContain('animation: none;');
-    expect(rule('.pump-balloon[data-first="floor-popped"] .pb-shards')).toContain('display: none;');
-  });
-
-  it('runs the first press along the hose that is there', () => {
-    // The lying hose has its own pocket, and the standing one is hidden.
-    expect(art).toMatch(/<g className="pb-air pb-air-flat">[\s\S]*?d=\{FLAT_HOSE_PATH\}/);
-    expect(css).toMatch(/\.pump-balloon\[data-first="floor"\] \.pb-hose \.pb-air,[^{]*\{\s*display: none;/);
-  });
-});
-
-describe('the set-up in balloon.css', () => {
-  it('starts from exactly the picture before it, and ends in the floor picture', () => {
-    // After a pop the hose already lies there, as in the floor picture ...
-    expect(rule('.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) .pb-hose')).toContain(
-      'transform: var(--pb-hose-down);',
-    );
-    expect(rule('.pump-balloon:is([data-beat="pop"], [data-beat="popped"]) :is(.pb-hose-flat, .pb-floor-bits)')).toContain(
-      'opacity: 1;',
-    );
-    expect(keyframes('pb-scrap-off')).toMatch(/from \{\s*opacity: 1;/);
-    // ... after a cash-out it is shrunk back to the pump, and lays itself down.
-    const cashed = /transform: ([^;]+);/.exec(
-      rule('.pump-balloon:is([data-beat="cashout"], [data-beat="cashed"]) .pb-hose'),
-    )?.[1];
-    expect(transformAt(keyframes('pb-hose-lay'), 'from')).toBe(`rotate(0deg) ${cashed}`);
-    expect(transformAt(keyframes('pb-hose-lay'), 'to')).toBe('var(--pb-hose-down) scale(1)');
-    // The view moves from the usual one to the floor picture's.
-    expect(transformAt(keyframes('pb-zoom-in'), 'from')).toBe('scale(1)');
-    expect(transformAt(keyframes('pb-zoom-in'), 'to')).toBe('var(--pb-first-zoom)');
-  });
-
-  it('holds nothing once it is over', () => {
-    for (const selector of [
-      '.pump-balloon[data-setup] .pb-scene',
-      '.pump-balloon[data-setup] .pb-limp',
-      '.pump-balloon[data-setup="popped"] :is(.pb-remnant, .pb-floor-bits)',
-      '.pump-balloon[data-setup="cashed"] .pb-hose',
-      '.pump-balloon[data-setup="cashed"] .pb-hose-stand',
-      '.pump-balloon[data-setup="cashed"] .pb-hose-flat',
-      '.pump-balloon[data-first="lift"] .pb-hose',
-      '.pump-balloon[data-first="lift"] .pb-scene',
-    ]) {
-      // "backwards" at most: nothing is kept after the end ("forwards" or
-      // "both" would be), so the floor picture's own rules take over.
-      expect(rule(selector)).not.toMatch(/ (forwards|both);/);
+  it('keeps the lift whatever comes next, until it is over', () => {
+    // A quick second pump or a cash-out used to cut it short with a jump.
+    expect(firstPump(balloon({ rung: 2 }), true)).toBe('lift');
+    expect(firstPump(balloon({ rung: 1, status: 'cashed' }), true)).toBe('lift');
+    expect(cssMs('--pb-zoom-ms')).toBe(FIRST_LIFT_MS);
+    for (const layer of ['.pb-limp', '.pb-grow', '.pb-scene']) {
+      expect(endMs(`.pump-balloon[data-first="lift"] ${layer}`)).toBeLessThanOrEqual(FIRST_LIFT_MS);
     }
   });
 
-  it('lets the lift, a pop and a cash-out take over from a set-up', () => {
-    const setUp = css.indexOf('.pump-balloon[data-setup="cashed"] .pb-hose {');
-    expect(setUp).toBeGreaterThan(0);
-    expect(setUp).toBeLessThan(css.indexOf('.pump-balloon[data-first="lift"] .pb-hose {'));
-    expect(setUp).toBeLessThan(css.indexOf('[data-beat="pop"] .pb-hose {'));
-    expect(setUp).toBeLessThan(css.indexOf('[data-beat="cashout"] .pb-hose {'));
+  it('runs the lift on layers no pop or cash-out moves, so its end state is never cut', () => {
+    // The blow-up is on the grow layer (a cash-out floats the layer around
+    // it), the view on the scene: only these start rules animate them.
+    for (const selector of animatedRules('.pb-grow')) expect(selector).toContain('[data-first="lift"]');
+    for (const selector of animatedRules('.pb-scene')) expect(selector).toMatch(/data-setup|data-first/);
+    expect(keyframes('pb-blow-up')).toMatch(/to \{\s*opacity: 1;\s*scale: 1;/);
+    expect(keyframes('pb-zoom-out')).toMatch(/to \{\s*transform: scale\(1\);/);
   });
 
-  it('keeps the air pocket in the hose layer, so a pump during the set-up rides the moving hose', () => {
-    const hose = art.indexOf('<g className="pb-hose">');
-    const pocket = art.indexOf('<g className="pb-air">');
-    const hoseEnd = art.indexOf('<g className="pb-remnant">');
-    expect(hose).toBeGreaterThan(0);
-    expect(pocket).toBeGreaterThan(hose);
-    expect(pocket).toBeLessThan(hoseEnd);
+  it('lifts from exactly the floor picture', () => {
+    expect(rule('.pump-balloon:is([data-first="floor"], [data-first="floor-void"]) .pb-limp')).toContain('opacity: 1;');
+    expect(keyframes('pb-limp-off')).toMatch(/0%,\s*55% \{\s*opacity: 1;/);
+    expect(rule('.pump-balloon[data-first="floor"] .pb-scene')).toContain('transform: var(--pb-first-zoom);');
+    expect(keyframes('pb-zoom-out')).toMatch(/from \{\s*transform: var\(--pb-first-zoom\);/);
+    // The flat balloon rides up for exactly as long as the hose lifts.
+    expect(cssMs('--pb-lift-ms')).toBe(HOSE_LIFT_MS);
+  });
+
+  it('shows no blown-up balloon when the first pump pops it, or its bet is refunded', () => {
+    const hidden = rule(
+      '.pump-balloon:is([data-idle], [data-first="floor"], [data-first="floor-popped"], [data-first="floor-void"]) .pb-float',
+    );
+    expect(hidden).toContain('opacity: 0;');
+    expect(rule('.pump-balloon[data-first="floor-popped"] .pb-shards')).toContain('display: none;');
+  });
+
+  it('with motion off, fades the new balloon in at once', () => {
+    expect(rule(':root[data-motion="reduce"] .pump-balloon[data-first="lift"] .pb-grow')).toContain(
+      'animation-delay: 0s;',
+    );
+  });
+
+  it('zooms in only when one balloon is on the stage', () => {
+    expect(appCss).toMatch(/\.slots:has\(> \.slot:nth-child\(2\)\) \.pump-balloon \{\s*--pb-first-zoom: scale\(1\);/);
   });
 });
 
-describe('the popped picture in Balloon.tsx', () => {
-  /** The numbers of a path constant in Balloon.tsx. */
-  const pathNumbers = (name: string): number[] => {
-    const found = new RegExp(`const ${name} =\\s*'([^']+)'`).exec(art);
-    if (!found?.[1]) throw new Error(`no ${name}`);
-    return [...found[1].matchAll(/-?\d+(\.\d+)?/g)].map((m) => Number(m[0]));
-  };
-  const angle = Number(/--pb-hose-down: rotate\((-?[\d.]+)deg\)/.exec(css)?.[1]);
-  /** A point of the standing hose, turned by --pb-hose-down around the nozzle. */
-  const turned = (x: number, y: number): [number, number] => {
-    const [nx, ny] = [116, 295];
-    const r = (angle * Math.PI) / 180;
-    return [
-      nx + (x - nx) * Math.cos(r) - (y - ny) * Math.sin(r),
-      ny + (x - nx) * Math.sin(r) + (y - ny) * Math.cos(r),
-    ];
-  };
-
-  it('lays the hose so its end is where the fallen standing hose ends, pointing the same way', () => {
-    // The fitting and the torn neck turn with the standing hose; the lying
-    // hose must end right under them, or they would float beside it.
-    const stand = pathNumbers('HOSE_PATH');
-    const flat = pathNumbers('FLAT_HOSE_PATH');
-    const [ex, ey] = turned(stand[stand.length - 2] ?? 0, stand[stand.length - 1] ?? 0);
-    const [fx, fy] = [flat[flat.length - 2] ?? 0, flat[flat.length - 1] ?? 0];
-    expect(Math.hypot(ex - fx, ey - fy)).toBeLessThan(0.3);
-    // Direction at the end: from the last control point to the end point.
-    const [cx, cy] = turned(stand[stand.length - 4] ?? 0, stand[stand.length - 3] ?? 0);
-    const [gx, gy] = [flat[flat.length - 4] ?? 0, flat[flat.length - 3] ?? 0];
-    const along = (a: number, b: number) => Math.atan2(b, a);
-    const diff = Math.abs(along(ex - cx, ey - cy) - along(fx - gx, fy - gy));
-    expect(diff).toBeLessThan((5 * Math.PI) / 180);
-    // Both start at the nozzle.
-    expect(flat.slice(0, 2)).toEqual(stand.slice(0, 2));
+describe('the hose', () => {
+  it('lies on the floor before a bet, while a balloon waits, and after a pop or a cash-out alike', () => {
+    expect(hoseLies({ idle: true })).toBe(true);
+    for (const first of ['floor', 'floor-popped', 'floor-void']) expect(hoseLies({ first })).toBe(true);
+    for (const beat of ['pop', 'popped', 'cashout', 'cashed']) expect(hoseLies({ beat })).toBe(true);
+    for (const beat of [undefined, 'press', 'survive', 'blocked']) expect(hoseLies({ beat, first: 'lift' })).toBe(false);
   });
 
-  it('keeps the floor bits on the floor, between the hose end and the pump', () => {
-    const bits = [...art.matchAll(/className="pb-floor-bit" d="([^"]+)"/g)].map((m) => m[1] ?? '');
-    expect(bits.length).toBeGreaterThanOrEqual(2);
-    expect(bits.length).toBeLessThanOrEqual(3);
-    const flat = pathNumbers('FLAT_HOSE_PATH');
-    const hoseEnd = flat[flat.length - 2] ?? 0;
-    for (const d of bits) {
-      const n = [...d.matchAll(/-?\d+(\.\d+)?/g)].map((m) => Number(m[0]));
-      for (let i = 0; i < n.length; i += 2) {
-        expect(n[i]).toBeGreaterThan(hoseEnd);
-        expect(n[i]).toBeLessThan(116); // the nozzle: the pump starts here
-        expect(n[i + 1]).toBeGreaterThan(310); // on the floor, in front of the hose
+  it('bends from its standing shape exactly into its lying one', () => {
+    const same = (a: readonly Point[], b: readonly Point[]) =>
+      a.every(([x, y], i) => Math.abs(x - (b[i]?.[0] ?? NaN)) < 1e-9 && Math.abs(y - (b[i]?.[1] ?? NaN)) < 1e-9);
+    expect(same(hoseAt(0), STAND)).toBe(true);
+    expect(same(hoseAt(1), FLAT)).toBe(true);
+    expect([fallAt(0), fallAt(1), liftAt(0), liftAt(1)]).toEqual([0, 1, 1, 0]);
+  });
+
+  it('moves as one fluid line: no part of it jumps from one frame to the next', () => {
+    // The user asked for a fluid fall (2026-11-20): it used to turn over
+    // stiffly and swap shapes as it landed. At 60 frames a second no point
+    // may move more than 16 units in one frame, in the fall or the lift.
+    for (const [curve, duration] of [[fallAt, HOSE_FALL_MS], [liftAt, HOSE_LIFT_MS]] as const) {
+      const frames = Math.ceil(duration / (1000 / 60));
+      for (let i = 1; i <= frames; i += 1) {
+        const a = hoseAt(curve((i - 1) / frames));
+        const b = hoseAt(curve(i / frames));
+        a.forEach(([ax, ay], k) => {
+          const [bx, by] = b[k] ?? [ax, ay];
+          expect(Math.hypot(ax - bx, ay - by)).toBeLessThan(16);
+        });
       }
     }
   });
 
-  it('keeps the closer view of a new balloon inside 14% to 87% of the width, and on the floor', () => {
-    const zoom = Number(/--pb-first-zoom: scale\(([\d.]+)\)/.exec(css)?.[1]);
-    const origin = /\.pb-scene \{[^}]*transform-origin: ([\d.]+)px ([\d.]+)px;/.exec(css);
-    const [ox, oy] = [Number(origin?.[1]), Number(origin?.[2])];
-    expect(zoom).toBeGreaterThan(1);
-    const zoomed = ([x, y]: [number, number]): [number, number] => [ox + (x - ox) * zoom, oy + (y - oy) * zoom];
-    // What the floor picture draws: the lying hose, the fitting and the
-    // flat balloon (both turned down with the standing hose), and the pump.
-    const flat = pathNumbers('FLAT_HOSE_PATH');
-    const points: [number, number][] = [];
-    for (let i = 0; i < flat.length; i += 2) points.push([flat[i] ?? 0, flat[i + 1] ?? 0]);
-    for (const [x, y] of [[96, 221], [104, 221], [96, 228], [104, 228]] as const) points.push(turned(x, y));
+  it('never passes through the floor or outside 14% to 87% of the width', () => {
+    for (let i = 0; i <= 100; i += 1) {
+      for (const [x, y] of hoseAt(i / 100).slice(1)) {
+        expect(y).toBeLessThanOrEqual(FLOOR_Y);
+        expect(x).toBeGreaterThanOrEqual(28);
+        expect(x).toBeLessThanOrEqual(174);
+      }
+    }
+  });
+
+  it('carries the fitting and the flat balloon on its end, onto the floor and inside the layout', () => {
+    const still = tipPose(STAND);
+    expect(Math.abs(still.dx) + Math.abs(still.dy) + Math.abs(still.degrees)).toBeLessThan(1e-9);
+    const pose = tipPose(FLAT);
+    const [ex, ey] = onTip(STAND_END, pose);
+    expect(Math.hypot(ex - (FLAT[9]?.[0] ?? 0), ey - (FLAT[9]?.[1] ?? 0))).toBeLessThan(1e-9);
     const limp = /className="pb-limp-body" d="([^"]+)"/.exec(art)?.[1] ?? '';
-    const n = [...limp.matchAll(/-?\d+(\.\d+)?/g)].map((m) => Number(m[0]));
-    for (let i = 0; i < n.length; i += 2) points.push(turned(n[i] ?? 0, n[i + 1] ?? 0));
-    points.push([174, 314], [168, 311]); // the shadow's right edge, the pump's base
-    for (const p of points) {
+    const fitting: Point[] = [[96, 221], [104, 221], [96, 228], [104, 228]];
+    for (const p of [...pointsOf(limp), ...fitting].map((q) => onTip(q, pose))) {
+      // On the floor: no lower than the pump's base (y 311), with a little give.
+      expect(p[1]).toBeLessThanOrEqual(311.5);
+      // Inside 14% to 87%, even in the closer view of a waiting balloon.
       const [x, y] = zoomed(p);
       expect(x).toBeGreaterThanOrEqual(28);
       expect(x).toBeLessThanOrEqual(174);
       expect(y).toBeLessThanOrEqual(320);
     }
+    for (const p of FLAT) expect(zoomed(p)[0]).toBeGreaterThanOrEqual(28);
+  });
+
+  it('puts every line of the air pocket on the hose, so it runs along whatever shape the hose has', () => {
+    const pocket = [...art.matchAll(/<path className="pb-air-[^"]*"[^>]*>/g)].map((m) => m[0]);
+    expect(pocket.length).toBe(9);
+    for (const line of pocket) expect(line).toContain('data-hose-line');
   });
 });

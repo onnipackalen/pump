@@ -1,6 +1,19 @@
-import type { CSSProperties } from 'react';
+import { useLayoutEffect, useRef, type CSSProperties } from 'react';
 import './balloon.css';
 import './balloon-app.css';
+import {
+  fallAt,
+  FLAT,
+  HOSE_FALL_MS,
+  HOSE_LIFT_MS,
+  hoseAt,
+  hoseLies,
+  hosePath,
+  liftAt,
+  STAND,
+  tipTransform,
+  type Point,
+} from './hoseShape';
 
 /**
  * The balloon picture. This file and balloon.css are the originals of the
@@ -11,23 +24,10 @@ import './balloon-app.css';
  * is decided in BalloonCard.
  */
 
-/**
- * The hose, from the pump's nozzle up into the balloon's neck. 79.2 units
- * long. The air pocket is drawn on this same line (see .pb-air in
- * balloon.css, whose distances along the hose are worked out from it).
- */
-const HOSE_PATH = 'M116 295C88 295 100 262 100 227';
-
-/**
- * The hose lying loose on the floor after a pop: out of the nozzle, down
- * to the floor, then along it with one soft rise, about as long as the
- * standing hose. It ends exactly where, and pointing the way, the standing
- * hose's end lands when that hose is turned by --pb-hose-down
- * (rotate(-87deg) around the nozzle): at (47.3, 307.4), pointing left. So
- * the fitting and the torn neck, which turn with the standing hose, sit on
- * this hose's end, and the fall can hand over to it without a jump.
- */
-const FLAT_HOSE_PATH = 'M116 295C106 295 103 308.5 94 308.5C84 308.5 80 305.5 70 306C61 306.5 55.3 307.8 47.3 307.4';
+/** The hose standing and lying (hoseShape.ts), as path lines. */
+const STAND_LINE = hosePath(STAND);
+const FLAT_LINE = hosePath(FLAT);
+const FLAT_TIP = tipTransform(FLAT);
 
 /** data-beat values: each is one moment the art can show. */
 export type BalloonBeat =
@@ -65,18 +65,20 @@ export interface BalloonProps {
   /**
    * What was in this balloon's place before its round began, on a balloon
    * of a new round only: its pump sets up from that picture (balloon.css,
-   * Set-up). "idle" is the picture before any bet. Keep it while the
-   * balloon is in play; leave it out from the moment it pops or is cashed
-   * out.
+   * Set-up). "idle" is the picture before any bet (or no balloon there),
+   * "void" a refunded balloon still lying flat. Only while the balloon
+   * waits for its first answer; leave it out from that answer on.
    */
-  readonly setUp?: 'idle' | 'popped' | 'cashed' | undefined;
+  readonly setUp?: 'idle' | 'popped' | 'cashed' | 'void' | undefined;
   /**
    * The first pump (balloon.css, First pump). "floor": in play and not yet
    * pumped, so the small flat balloon lies on the floor. "lift": the first
-   * pump held, so the hose lifts it and it blows up. "floor-popped": the
-   * first pump popped it on the floor. Leave it out otherwise.
+   * pump just held, so the hose lifts it and it blows up (keep it for the
+   * whole lift, game/setUp.ts FIRST_LIFT_MS). "floor-popped": the first pump
+   * popped it on the floor. "floor-void": its bet was refunded unpumped, so
+   * it stays flat on the floor. Leave it out otherwise.
    */
-  readonly first?: 'floor' | 'lift' | 'floor-popped' | undefined;
+  readonly first?: 'floor' | 'lift' | 'floor-popped' | 'floor-void' | undefined;
   /** The picture before any bet: the hose on the floor, no balloon. */
   readonly idle?: boolean | undefined;
   /**
@@ -106,6 +108,9 @@ export function Balloon({
   value,
 }: BalloonProps) {
   const style = { '--balloon-scale': scale.toFixed(4) } as CSSProperties;
+  const lying = hoseLies({ beat, first, idle });
+  const hose = useHoseMotion(lying, beat);
+  const line = lying ? FLAT_LINE : STAND_LINE;
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -228,58 +233,28 @@ export function Balloon({
           </g>
         </g>
 
-        {/* flat hose: the hose lying loose on the floor: after a pop, before
-             any bet, and under a new balloon until its first pump. The
-             standing hose hands over to it as it lands. */}
-        <g className="pb-hose-flat">
-          <path className="pb-hose-tube" d={FLAT_HOSE_PATH} />
-          <path className="pb-hose-shine" d={FLAT_HOSE_PATH} />
-          {/* The air pocket of the first pump, which runs along the hose while
-               it still lies on the floor. The same layers as the standing
-               hose's pocket below, on this hose's line (73.6 long). */}
-          <g className="pb-air pb-air-flat">
-            <path className="pb-air-wall pb-air-1" d={FLAT_HOSE_PATH} />
-            <path className="pb-air-wall pb-air-2" d={FLAT_HOSE_PATH} />
-            <path className="pb-air-wall pb-air-3" d={FLAT_HOSE_PATH} />
-            <path className="pb-air-wall pb-air-4" d={FLAT_HOSE_PATH} />
-            <path className="pb-air-wall pb-air-5" d={FLAT_HOSE_PATH} />
-            <path className="pb-air-wall pb-air-6" d={FLAT_HOSE_PATH} />
-            <path className="pb-air-thin" d={FLAT_HOSE_PATH} />
-            <path className="pb-air-core" d={FLAT_HOSE_PATH} />
-            <path className="pb-air-shine" d={FLAT_HOSE_PATH} />
-          </g>
-        </g>
-        {/* floor bits: three small pieces of the burst balloon that stay on
-             the floor after a pop, still. Between the hose's end and the
-             pump, inside this balloon's own slot. Hidden until a pop. */}
-        <g className="pb-floor-bits">
-          <path className="pb-floor-bit" d="M59.5 312.6L61.8 311.2L64.4 311.9L63.6 313.6L60.8 314Z" />
-          <path className="pb-floor-bit" d="M76.4 313.4L78.6 312.1L81.8 312.6L80.9 314.1L77.6 314.3Z" />
-          <path className="pb-floor-bit" d="M101.8 312.4L103.5 311.2L106.3 311.6L105.6 313.2L103 313.4Z" />
-        </g>
-
-        {/* hose: from the pump into the neck. It curls back to the pump on a
-             cash-out and drops to the floor on a pop. */}
-        <g className="pb-hose">
-          {/* stand: the hose's tube and shine, faded as one, so the shine keeps
-               its own strength. After a pop the lying hose shows instead. */}
-          <g className="pb-hose-stand">
-            <path className="pb-hose-tube" d={HOSE_PATH} />
-            <path className="pb-hose-shine" d={HOSE_PATH} />
-          </g>
-          {/* air: the pocket of air that runs up the hose on each tap. It is the
-               hose itself swelling: short, thick pieces of the hose's own line,
-               stacked from long and thin to short and fat, so together they
-               make a bulge that tapers into the hose and bends where it bends.
-               balloon.css slides them along the hose. Hidden until a press.
-               It is inside the hose layer, so it moves with the hose: on a
-               pop, on a cash-out, and when a pump sets up while a new
-               round's first pump is already on its way. */}
+        {/* hose: from the pump into the neck. It stands while a balloon is
+             on it and lies on the floor otherwise: before any bet, while a
+             new balloon waits for its first pump, and after a pop or a
+             cash-out. Between the two it bends as one line (hoseShape.ts,
+             useHoseMotion below): every line marked data-hose-line gets the
+             same shape on every frame. */}
+        <g className="pb-hose" ref={hose}>
+          <path className="pb-hose-tube" data-hose-line="" d={line} />
+          <path className="pb-hose-shine" data-hose-line="" d={line} />
+          {/* air: the pocket of air that runs along the hose on each tap. It is
+               the hose itself swelling: short, thick pieces of the hose's own
+               line, stacked from long and thin to short and fat, so together
+               they make a bulge that tapers into the hose and bends where it
+               bends. balloon.css slides them along the line. They are hose
+               lines too, so the pocket runs along whatever shape the hose
+               has: lying on the floor for a new balloon's first pump, and
+               falling with it on a pop. Hidden until a press. */}
           <g className="pb-air">
             <defs>
               {/* Soft edges for the pale middle, so it shades smoothly instead of
-                   showing as hard-edged stripes. Fixed frame around both hoses,
-                   standing and lying: a frame from the path's own box would
+                   showing as hard-edged stripes. Fixed frame around the hose,
+                   standing or lying: a frame from the path's own box would
                    clip the blur. */}
               <filter id="pb-air-soft" filterUnits="userSpaceOnUse" x="30" y="190" width="115" height="130">
                 <feGaussianBlur stdDeviation="1.3" />
@@ -288,42 +263,30 @@ export function Balloon({
                 <feGaussianBlur stdDeviation="0.6" />
               </filter>
             </defs>
-            <path className="pb-air-wall pb-air-1" d={HOSE_PATH} />
-            <path className="pb-air-wall pb-air-2" d={HOSE_PATH} />
-            <path className="pb-air-wall pb-air-3" d={HOSE_PATH} />
-            <path className="pb-air-wall pb-air-4" d={HOSE_PATH} />
-            <path className="pb-air-wall pb-air-5" d={HOSE_PATH} />
-            <path className="pb-air-wall pb-air-6" d={HOSE_PATH} />
-            <path className="pb-air-thin" d={HOSE_PATH} />
-            <path className="pb-air-core" d={HOSE_PATH} />
-            <path className="pb-air-shine" d={HOSE_PATH} />
+            <path className="pb-air-wall pb-air-1" data-hose-line="" d={line} />
+            <path className="pb-air-wall pb-air-2" data-hose-line="" d={line} />
+            <path className="pb-air-wall pb-air-3" data-hose-line="" d={line} />
+            <path className="pb-air-wall pb-air-4" data-hose-line="" d={line} />
+            <path className="pb-air-wall pb-air-5" data-hose-line="" d={line} />
+            <path className="pb-air-wall pb-air-6" data-hose-line="" d={line} />
+            <path className="pb-air-thin" data-hose-line="" d={line} />
+            <path className="pb-air-core" data-hose-line="" d={line} />
+            <path className="pb-air-shine" data-hose-line="" d={line} />
           </g>
-          {/* limp: the new balloon before its first pump: small, flat, not
-               blown up. Drawn on the standing hose, hanging down its side
-               from the fitting, so when the hose lies on the floor it lies
-               on the floor in front of the hose (x 46 to 64), and when the
-               first pump lifts the hose it comes up with it. Hidden unless a
-               balloon is waiting for its first pump. */}
-          <g className="pb-limp">
-            <path className="pb-limp-body" d="M97.4 226.2C95.8 228.8 93.4 231.6 93.2 236.4C93 240.4 94.6 244.2 96.2 243.8C97.4 243.4 97.4 238.6 97.3 234.6C97.2 231 97.9 228.4 98.6 226.6Z" />
-            <path className="pb-limp-crease" d="M95.2 232.2C94.8 235.4 95.6 238.4 95.4 241" />
-          </g>
-          <rect className="pb-hose-end" x="96" y="221" width="8" height="7" rx="2" />
-          {/* remnant: the pop mark. The balloon's torn neck, still on the end
-               of the hose: its rolled lip and three ragged flaps of rubber,
-               in a dull shade of the balloon's own colour. It drops to the
-               floor with the hose. Drawn on the standing hose, so "up" here
-               is along the floor once it lies down, and the flaps lean the
-               way that becomes "down": the long one lies on the floor, the
-               short one sticks up a little. Hidden until a pop. It reaches
-               only 8 units past the hose end: on the floor that is the edge
-               of this balloon's own slot, and the next pump stands just
-               beyond it. */}
-          <g className="pb-remnant">
-            <path className="pb-torn" d="M95.2 221.2L93.6 217.6L91.2 215.4L92.9 214.6L91.8 213.2L94.6 214.3L96.6 216.8L97.6 220.6Z" />
-            <path className="pb-torn" d="M98.4 220.6L98.2 216.8L97.6 214.2L99.3 215.1L100.1 213.4L101 215.3L102.4 214.6L101.8 217.6L101.6 220.6Z" />
-            <path className="pb-torn" d="M102.6 220.8L104 218.2L104.6 216.4L106.2 217.2L106.9 215.9L106.6 218.6L105.4 220.9Z" />
-            <ellipse className="pb-torn" cx="100" cy="221.3" rx="4.8" ry="1.9" />
+          {/* tip: what sits on the hose's end. Drawn on the standing hose's
+               end at (100, 227); carried to wherever the end is, turned the
+               way the hose points there. */}
+          <g className="pb-hose-tip" transform={lying ? FLAT_TIP : undefined}>
+            {/* limp: the new balloon before its first pump: small, flat, not
+                 blown up, hanging down the hose from the fitting. When the
+                 hose lies on the floor it lies along the hose's end, its
+                 lowest point on the floor line, and when the first pump
+                 lifts the hose it comes up with it. Hidden unless a balloon waits for its first pump. */}
+            <g className="pb-limp">
+              <path className="pb-limp-body" d="M101.4 226.2C99.8 228.8 97.4 231.6 97.2 236.4C97 240.4 98.6 244.2 100.2 243.8C101.4 243.4 101.4 238.6 101.3 234.6C101.2 231 101.9 228.4 102.6 226.6Z" />
+              <path className="pb-limp-crease" d="M99.2 232.2C98.8 235.4 99.6 238.4 99.4 241" />
+            </g>
+            <rect className="pb-hose-end" x="96" y="221" width="8" height="7" rx="2" />
           </g>
         </g>
 
@@ -510,6 +473,71 @@ export function Balloon({
       </g>
     </svg>
   );
+}
+
+/**
+ * Bends the hose between standing and lying as the art's state changes:
+ * it falls when a round ends and lifts when a new balloon's first pump
+ * holds (hoseShape.ts has the shapes and the timing). React draws the end
+ * shape; this draws the frames on the way there, straight onto the lines,
+ * so a frame never waits for React. The first drawing (a page load, a
+ * restored round, a new balloon) shows its shape at once, and so does
+ * every change when animations are off.
+ */
+function useHoseMotion(lying: boolean, beat: BalloonBeat | undefined) {
+  const layer = useRef<SVGGElement>(null);
+  const shown = useRef<boolean | null>(null);
+  const latestBeat = useRef(beat);
+  useLayoutEffect(() => {
+    latestBeat.current = beat;
+  }, [beat]);
+  useLayoutEffect(() => {
+    const g = layer.current;
+    const was = shown.current;
+    shown.current = lying;
+    if (!g || was === null || was === lying || animationsOff()) return undefined;
+    // A cash-out lets the balloon go first (after its glow, on a real win).
+    const svg = g.ownerSVGElement;
+    const wait = lying && latestBeat.current === 'cashout' && svg ? releaseDelayMs(svg) + 40 : 0;
+    const duration = lying ? HOSE_FALL_MS : HOSE_LIFT_MS;
+    const start = performance.now() + wait;
+    let frame = 0;
+    const step = (now: number) => {
+      const t = (now - start) / duration;
+      drawHose(g, hoseAt(lying ? fallAt(t) : liftAt(t)));
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+    drawHose(g, hoseAt(lying ? 0 : 1));
+    frame = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(frame);
+      drawHose(g, hoseAt(lying ? 1 : 0));
+    };
+  }, [lying]);
+  return layer;
+}
+
+/** Puts one hose shape on every hose line, and the tip on its end. */
+function drawHose(layer: SVGGElement, points: readonly Point[]): void {
+  const d = hosePath(points);
+  for (const line of layer.querySelectorAll('[data-hose-line]')) line.setAttribute('d', d);
+  layer.querySelector('.pb-hose-tip')?.setAttribute('transform', tipTransform(points));
+}
+
+/** The same rule balloon.css follows: the player's choice, else the device's. */
+function animationsOff(): boolean {
+  const choice = document.documentElement.dataset.motion;
+  if (choice === 'reduce') return true;
+  if (choice === 'full') return false;
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/** --pb-release-delay on the balloon, in milliseconds. */
+function releaseDelayMs(svg: SVGSVGElement): number {
+  const value = getComputedStyle(svg).getPropertyValue('--pb-release-delay').trim();
+  const ms = Number.parseFloat(value);
+  if (!Number.isFinite(ms)) return 0;
+  return value.endsWith('ms') ? ms : value.endsWith('s') ? ms * 1000 : ms;
 }
 
 /** The size before the first pump. balloon.css is drawn for this range. */
