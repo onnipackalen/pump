@@ -48,6 +48,49 @@ export function afterRoundLine(balloon: BalloonView): string | null {
 }
 
 /**
+ * The same facts in fewer words, for a slot too narrow for the full line.
+ * Three balloons on a phone on its side leave each about 67 px: there the
+ * full line, at its smallest size, wraps to four lines and spills up onto
+ * the numbers. These fit in two or three.
+ *
+ *   popped on the cash-out rung   "Would pop next"
+ *   popped higher up              "Would pop after 1.37×"
+ *   top                           "Would reach top (25.00×)"
+ */
+export function afterRoundShortText(
+  cashedRung: number,
+  outcome: RevealOutcome,
+  reachedRung: number,
+  reachedMultiplierHundredths: number,
+): string {
+  if (outcome === 'top') return `Would reach top (${formatMultiplier(reachedMultiplierHundredths)})`;
+  if (reachedRung <= cashedRung) return 'Would pop next';
+  return `Would pop after ${formatMultiplier(reachedMultiplierHundredths)}`;
+}
+
+/** Both wordings of a balloon's line: the screen shows the one that fits. */
+export interface AfterRoundWords {
+  readonly full: string;
+  readonly short: string;
+}
+
+/** The line under a balloon in both wordings, or null when afterRoundLine is. */
+export function afterRoundWords(balloon: BalloonView): AfterRoundWords | null {
+  const full = afterRoundLine(balloon);
+  const afterRound = balloon.afterRound ?? null;
+  if (full === null || afterRound === null) return null;
+  return {
+    full,
+    short: afterRoundShortText(
+      balloon.rung,
+      afterRound.outcome,
+      afterRound.reachedRung,
+      afterRound.reachedMultiplierHundredths,
+    ),
+  };
+}
+
+/**
  * How many characters the longer line has when the text is split into two
  * lines as evenly as its spaces allow. The CSS sizes the text by it, so it
  * fits a narrow slot in two short lines.
