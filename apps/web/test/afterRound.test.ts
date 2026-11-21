@@ -136,6 +136,7 @@ describe('BalloonCard', () => {
     return renderToStaticMarkup(
       createElement(BalloonCard, {
         balloon: view,
+        difficultyId: GAME_CONFIG.difficulties[0]?.id ?? 'easy',
         rtpBp: GAME_CONFIG.rtpBp,
         // Any rising ladder with 10 rungs: the card only sizes the art from it.
         ladder: Array.from({ length: 10 }, (_, i) => 200 + 100 * i),

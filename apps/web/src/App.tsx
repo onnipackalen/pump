@@ -478,6 +478,7 @@ export function App() {
                     <BalloonCard
                       key={`${round.id}-${balloon.index}`}
                       balloon={balloon}
+                      difficultyId={round.difficultyId}
                       rtpBp={round.rtpBp}
                       ladder={round.ladder}
                       beat={state.beats[balloon.index] ?? 'idle'}
@@ -520,6 +521,7 @@ export function App() {
                       <PreviewCard
                         key={index}
                         slot={index + 1}
+                        difficultyId={setupDifficulty?.id ?? setup.difficultyId}
                         betCents={betCents}
                         ladder={ladder}
                         // The steps above this bet's top are shown as out of

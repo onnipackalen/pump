@@ -3,6 +3,7 @@ import type { BalloonView, PumpOutcome } from '../api/contract';
 import { Balloon, balloonSize, type BalloonBeat } from '../balloon/Balloon';
 import { afterRoundWords, twoLineChars, type AfterRoundWords } from '../game/afterRound';
 import type { Beat } from '../game/useGame';
+import { levelOf } from '../game/level';
 import { balloonTension } from '../game/risk';
 import { balloonSetUp, firstPump, useFirstLift, type SetUpFrom } from '../game/setUp';
 import { HoldButton } from './HoldButton';
@@ -12,6 +13,8 @@ import { formatCents, formatMultiplier } from '../money';
 
 interface BalloonCardProps {
   readonly balloon: BalloonView;
+  /** Its round's difficulty: the pump shows it (game/level.ts). */
+  readonly difficultyId: string;
   /** The RTP and ladder its round was played with (its own copies). */
   readonly rtpBp: number;
   readonly ladder: readonly number[];
@@ -277,6 +280,7 @@ function SlotAction({
  */
 export function BalloonCard({
   balloon,
+  difficultyId,
   rtpBp,
   ladder,
   beat,
@@ -331,6 +335,7 @@ export function BalloonCard({
       <div className="balloon-box">
         <Balloon
           slot={slot}
+          level={levelOf(difficultyId)}
           scale={cardScale(balloon)}
           beat={balloonBeat(balloon, beat, pending)}
           setUp={balloonSetUp(balloon, setUp)}
@@ -370,6 +375,8 @@ export function BalloonCard({
 
 interface PreviewCardProps {
   readonly slot: number;
+  /** The chosen difficulty: the pump shows it before the bet too. */
+  readonly difficultyId: string;
   /** The bet typed for this balloon, or null while it is not a valid amount. */
   readonly betCents: number | null;
   /** The chosen difficulty's ladder: the steps this balloon would climb. */
@@ -379,7 +386,7 @@ interface PreviewCardProps {
 }
 
 /** A balloon before the round starts, with the bet that will ride on it. */
-export function PreviewCard({ slot, betCents, ladder, topRung }: PreviewCardProps) {
+export function PreviewCard({ slot, difficultyId, betCents, ladder, topRung }: PreviewCardProps) {
   const main = betCents === null ? '—' : formatCents(betCents);
   return (
     <article className="slot" data-status="preview" aria-label={`Balloon ${slot}`}>
@@ -395,7 +402,7 @@ export function PreviewCard({ slot, betCents, ladder, topRung }: PreviewCardProp
       <div className="balloon-box">
         {/* Before any bet: the pump with its hose on the floor, no balloon.
              The balloon goes on when the bet is placed. */}
-        <Balloon slot={slot} scale={0.45} idle />
+        <Balloon slot={slot} level={levelOf(difficultyId)} scale={0.45} idle />
       </div>
       <SlotLabel main={main} sub="" />
       <SlotAction slot={slot} show={false} onPump={() => undefined} onPumpHold={() => undefined} />
