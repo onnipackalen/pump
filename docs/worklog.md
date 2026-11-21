@@ -1279,3 +1279,101 @@ whose saved top was changed by hand is flagged.
 Not done: main moved again during this work (to 297760c: the balloon art and
 the air pocket in the hose). It merges with this branch with no conflict but
 was not merged here.
+## 2026-11-20: the air pocket is the hose swelling, and it no longer flashes
+
+The user could not see the air pocket in play and asked for one. It was
+there (since bc07ff7), but as a pale dot 5 to 18 pixels across that was
+on screen for about 0.35 s. Recorded frame by frame in a real round on a
+local server: it ran on every pump, just too small and pale to notice.
+A test page with the real balloon (speed down to 1/10, a freeze slider,
+every answer, late answers, phone size) let the user try versions:
+
+- A bigger, white, glowing dot was easy to see but sat on top of the
+  hose. The user asked for the pipe itself to spread open instead.
+- A lemon-shaped bulge in the hose's colour, moved by the old keyframes,
+  stuck out of the curve at the bend: the user spotted it. A stiff shape
+  can only follow a curved hose by luck.
+- What shipped: the bulge is drawn on the hose's own line. Six dashes of
+  that line, long and thin to short and fat, all centred on one point,
+  make a round bulge that tapers into the hose; a paler, blurred middle
+  and the hose's shine go over it. The keyframes now move one number,
+  how far along the hose the bulge is (`--pb-air-s`, a registered
+  property so it can animate), and the opacity. Nothing can leave the
+  hose. The old timing was kept by measuring the old keyframe points
+  along the hose line.
+- The wait no longer flashes. In another chat the user asked to keep the
+  pocket but stop the flashing dot; the wait loop (`pb-air-wait`) is
+  gone and the rush just holds its last frame.
+- The swell by tension went from 1 / 1.07 / 1.14 / 1.22 (too small to
+  see) to 1 / 1.25 / 1.5 / 1.8 of the extra width, with the user's yes
+  and the base size the user picked ("Now"). It still comes only from the
+  published pop chance. "Biggest" (2.2x) was too big, the user said.
+
+Kept on purpose: a new swell still waits until the pocket has gone in
+(now a delayed `stroke-width` transition instead of a delayed `scale`),
+so the pocket never changes size on the frame the answer shows, where a
+pop and a survive could have looked different. Checked in a real round:
+the answer frame changes data-strain, the pocket goes in at its old
+width, and the new width lands about 200 ms later, hidden.
+
+Tests in `apps/web/test/pressTiming.test.ts` were rewritten for the new
+drawing: the swell is never read in a keyframe, a change of width waits
+for the entry, there is no wait loop, the keyframes move only along the
+hose and only forwards, and the entry starts where the rush ends.
+
+Found on the way: in Chrome, a paused animation of an inherited
+registered property that is seeked (`currentTime`) does not always
+redraw the children until their style is read. Running animations are
+fine; only freeze-frame tools are affected.
+## 2026-11-20: balloon art: strain sheen, a real knot, latex depth
+
+From the "Hostile agent game fix" chat, on branch `strain-sheen`, after
+the user's own picks ("Fix the odd shine", "Yes, use it", "now do the
+knot and latex depth"). Balloon.tsx and balloon.css only.
+
+Built:
+
+- The strain spot is now a sheen. It was an oval with a dark rim on the
+  upper right that read as a dent or an eye, and on Expert it showed
+  before the first pump. The rubber over the upper right now goes paler
+  as the pop chance rises, with a bright band along the curve and no
+  edge. On the pearl balloon, where nothing is paler than its white, the
+  patch is a cool see-through grey. Strain levels and the level-3 pulse
+  are unchanged.
+- The knot shown at a cash-out tie-off is a wrapped lump with its crease
+  and a little light, the neck's end flaring out below, and a rolled lip.
+  It was a cone and a flat oval.
+- Latex depth: the balloon's own deeper colour towards the bottom, a
+  lighter black underside, light bounced up the lower left edge, creases
+  where the rubber gathers into the neck, a broad soft light on the
+  upper left, and a fuller rolled lip on the pumping neck.
+- Every new layer is drawn on the body outline or inside it. Masks and
+  gradients are black and white only, so their ids can repeat on every
+  balloon, like pb-shade; the colour comes from the fill.
+
+Turned out wrong, and how it was caught:
+
+- The user asked to "remove flashing dot". I hid the whole air pocket,
+  but another chat was building that same pocket at the user's request.
+  Caught by listing the running chats before going further; the user
+  then chose "Keep it, stop flashing", so the hide was reverted
+  (3780203) and the change went to the "Air pocket balloon animation"
+  chat, which owns the pocket.
+- The soft light was first a tilted ellipse whose measured box reached
+  x 22, past the 14-87% limit the phone layout relies on. Caught by
+  measuring every new shape's box with motion off; it is now the body
+  path with an elliptical gradient (c05cc7c). With motion off, every new
+  shape sits inside the body, x 28 to 172.
+- I built a fix for the round panel's readouts overflowing at 320 px
+  while the coordinator built the same fix on main; our messages
+  crossed. Mine was dropped (main has 3b02d33).
+
+How it was checked: typecheck, lint and all tests after merging main
+(1211 tests, including balloonLook.test.ts and pressTiming.test.ts,
+which read balloon.css). Every slot drawn at strain 0 to 3, Patch on,
+before the first pump, popped, cashed and tied, from the real component
+next to the merged coordinator art (grey shards, slate tape, pop scrap
+on the hose). Live in the game before the merge: 3 Expert balloons at
+375x667, no page scroll, same picture sizes, and a cash-out lifting off
+with the new knot. Layout files (styles.css, App.tsx, components) are
+identical to main.

@@ -65,6 +65,21 @@
 .pump-balloon .pb-knot {
   fill: var(--balloon-deep);
 }
+/* The knot: the neck's end flares below a wrapped lump. */
+.pump-balloon .pb-knot-tail {
+  fill: var(--balloon-base);
+}
+.pump-balloon .pb-knot-crease {
+  fill: none;
+  stroke: #000;
+  stroke-opacity: 0.28;
+  stroke-width: 0.9px;
+  stroke-linecap: round;
+}
+.pump-balloon .pb-knot-gleam {
+  fill: #fff;
+  opacity: 0.4;
+}
 
 /* Open neck while pumping; the knot (.pb-tie) only shows once tied. */
 .pump-balloon .pb-neck-tube {
@@ -72,6 +87,24 @@
 }
 .pump-balloon .pb-neck-lip {
   fill: var(--balloon-deep);
+}
+/* The neck is darker where it is pinched into the balloon and at the lip,
+   and the rolled lip catches a little light. */
+.pump-balloon .pb-neck-fade-a {
+  stop-color: #000;
+  stop-opacity: 0.28;
+}
+.pump-balloon .pb-neck-fade-b {
+  stop-color: #000;
+  stop-opacity: 0.08;
+}
+.pump-balloon .pb-neck-fade-c {
+  stop-color: #000;
+  stop-opacity: 0.18;
+}
+.pump-balloon .pb-neck-gleam {
+  fill: #fff;
+  opacity: 0.35;
 }
 .pump-balloon .pb-tie {
   opacity: 0;
@@ -133,6 +166,57 @@
   fill: #fff;
   opacity: 0.16;
 }
+/* Depth: a darker underside and light bounced up the lower left edge. */
+.pump-balloon .pb-core-a {
+  stop-color: #000;
+  stop-opacity: 0;
+}
+.pump-balloon .pb-core-b {
+  stop-color: #000;
+  stop-opacity: 0.16;
+}
+/* Latex: the balloon's deeper colour towards the bottom (a mask, so white
+   only here; the colour is the fill). */
+.pump-balloon .pb-deep {
+  fill: var(--balloon-deep);
+  opacity: 0.55;
+}
+.pump-balloon .pb-deep-fade-a {
+  stop-color: #fff;
+  stop-opacity: 0;
+}
+.pump-balloon .pb-deep-fade-b {
+  stop-color: #fff;
+  stop-opacity: 1;
+}
+/* The creases where the rubber gathers into the neck. */
+.pump-balloon .pb-gather-line {
+  fill: none;
+  stroke: var(--balloon-deep);
+  stroke-width: 1.1px;
+  stroke-linecap: round;
+  opacity: 0.6;
+}
+.pump-balloon .pb-gather-light {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 0.8px;
+  stroke-linecap: round;
+  opacity: 0.22;
+}
+/* The broad soft light of the window, under the sharp streak. */
+.pump-balloon .pb-soft-light-a {
+  stop-color: #fff;
+  stop-opacity: 0.22;
+}
+.pump-balloon .pb-soft-light-b {
+  stop-color: #fff;
+  stop-opacity: 0;
+}
+.pump-balloon .pb-bounce {
+  fill: #fff;
+  opacity: 0.14;
+}
 .pump-balloon .pb-shine {
   fill: #fff;
   opacity: 0.42;
@@ -178,26 +262,89 @@
   stroke-linecap: round;
   opacity: 0.3;
 }
-/* The air pocket: a pale core inside a wall of hose colour, so it reads
- * as the hose itself swelling where the air is. Hidden until a press. */
+/* The air pocket: the hose itself swelling where the air is.
+ *
+ * It is drawn on the hose's own line: seven short dashes of that line, all
+ * centred on the same point. The four wall dashes are in the hose's colour,
+ * from long and thin (1) to short and fat (4), so together they make a
+ * bulge whose edge is the hose's edge, rising and tapering back into it.
+ * Because they are pieces of the hose's line, the bulge bends exactly
+ * where the hose bends. On top: a paler middle where the rubber is
+ * stretched thin, and the hose's shine running over it.
+ *
+ * --pb-air-s is how far along the hose the middle of the bulge is, in
+ * drawing units (the hose is 79.2 long). The keyframes move only that and
+ * the opacity; every dash reads it, so they all slide together. A dash of
+ * length L is laid from s - L/2 to s + L/2; any part past either end of
+ * the hose is simply not drawn, so the bulge comes out of the pump and
+ * goes into the neck.
+ *
+ * Hidden until a press. */
+@property --pb-air-s {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
 .pump-balloon .pb-air {
-  fill: #ece6da;
-  stroke: #56627e;
-  stroke-width: 2.2;
   opacity: 0;
-  /* How fat the pocket is. The keyframes never read the swell: they set the
-   * path (translate, rotate) and the shape (transform), and this scale sits
-   * between the two. The answer changes data-strain in the same frame as
-   * the beat, so a change of swell waits until the pocket has gone in and
-   * is hidden. The entry is then the same size as the wait before it,
-   * whatever the answer. */
-  scale: var(--pb-air-swell);
-  transition: scale 0s linear calc(var(--pb-air-in-ms) + 60ms);
+}
+.pump-balloon .pb-air path {
+  fill: none;
+  stroke-linecap: round;
+  /* --pb-air-w0: the width with no swell; --pb-air-e: how much of the
+   * swell this dash takes. */
+  stroke-width: calc((var(--pb-air-w0) + var(--pb-air-e) * var(--pb-air-swell)) * 1px);
+  stroke-dasharray: calc(var(--pb-air-len) * 1px) 400px;
+  stroke-dashoffset: calc((var(--pb-air-len) / 2 - var(--pb-air-s)) * 1px);
+  /* How fat the pocket is. The keyframes never read the swell. The answer
+   * changes data-strain in the same frame as the beat, so a change of
+   * swell waits until the pocket has gone in and is hidden. The entry is
+   * then the same size as the wait before it, whatever the answer. */
+  transition: stroke-width 0s linear calc(var(--pb-air-in-ms) + 60ms);
 }
 /* A press takes its swell at once (the pocket is still hidden in its first
  * frame), even if it comes right after an answer. */
-.pump-balloon[data-beat="press"] .pb-air {
+.pump-balloon[data-beat="press"] .pb-air path {
   transition: none;
+}
+/* The wall, in the hose's colour. The hose is 5 wide; with no swell the
+ * bulge is 10 wide. The six dashes follow a smooth, round curve: each
+ * one's straight part ends where the curve has come down to its width, and
+ * its round end carries the curve on from there. */
+.pump-balloon .pb-air .pb-air-wall {
+  stroke: #56627e;
+  --pb-air-w0: 5;
+}
+.pump-balloon .pb-air .pb-air-1 { --pb-air-len: 16.2; --pb-air-e: 1; }
+.pump-balloon .pb-air .pb-air-2 { --pb-air-len: 14.1; --pb-air-e: 1.8; }
+.pump-balloon .pb-air .pb-air-3 { --pb-air-len: 11.9; --pb-air-e: 2.6; }
+.pump-balloon .pb-air .pb-air-4 { --pb-air-len: 9.5; --pb-air-e: 3.4; }
+.pump-balloon .pb-air .pb-air-5 { --pb-air-len: 6.6; --pb-air-e: 4.2; }
+.pump-balloon .pb-air .pb-air-6 { --pb-air-len: 1; --pb-air-e: 5; }
+/* The stretched middle: paler towards the centre, with soft edges. */
+.pump-balloon .pb-air .pb-air-thin {
+  stroke: #8591ad;
+  filter: url(#pb-air-soft);
+  --pb-air-len: 9;
+  --pb-air-w0: 1;
+  --pb-air-e: 3.6;
+}
+.pump-balloon .pb-air .pb-air-core {
+  stroke: #b3bcd1;
+  filter: url(#pb-air-soft);
+  --pb-air-len: 4;
+  --pb-air-w0: 0.5;
+  --pb-air-e: 2;
+}
+/* The hose's shine, carried over the bulge, softened at its ends. Same
+ * colour as .pb-hose-shine. */
+.pump-balloon .pb-air .pb-air-shine {
+  stroke: #c3c9d6;
+  opacity: 0.4;
+  filter: url(#pb-air-softer);
+  --pb-air-len: 12;
+  --pb-air-w0: 1.3;
+  --pb-air-e: 0;
 }
 
 /* Number plate on the pump */
@@ -236,16 +383,16 @@
  * Never grow the balloon before the answer is in.
  *
  * The air pocket, step by step:
- *   1. Rush. The handle pushes down and the pocket leaves the pump. It
- *      speeds up along the hose, then slows a touch under the neck. This
- *      takes exactly the press length, so it reaches the neck at the
- *      earliest moment an answer may be shown.
- *   2. Wait. If the answer is not in yet, the pocket stays under the neck
- *      and glows on and off, and the balloon trembles a little. This loops for as
- *      long as "press" is set. It looks the same whatever the answer
- *      will be.
+ *   1. Rush. The handle pushes down and the hose swells where it leaves
+ *      the pump. The swelling speeds up along the hose, round the bend,
+ *      then slows under the neck. This takes exactly the press length, so
+ *      it reaches the neck at the earliest moment an answer may be shown.
+ *   2. Wait. If the answer is not in yet, the swelling holds still under
+ *      the neck and the balloon trembles a little. No flashing: the user
+ *      asked for the pocket to stay steady while it waits (2026-11-20).
+ *      It looks the same whatever the answer will be.
  *   3. Enter. The answer beat ("survive", "blocked", "pop", or the top)
- *      pushes the pocket through the neck in 90 ms, in the same frame as
+ *      pushes the swelling on into the neck in 90 ms, in the same frame as
  *      the balloon grows or pops. So the result is never seen before the
  *      pocket goes in, and never long after.
  *
@@ -254,7 +401,8 @@
  * (balloonTension), worked out from the PUBLISHED chance that this pump
  * pops and nothing else; the game waits on the same number, and the same
  * four lengths are in game/risk.ts (PRESS_MS). A test checks that the two
- * lists match. A tenser pump is slower and the swell in the hose is bigger.
+ * lists match. A tenser pump is slower and the swell in the hose is bigger:
+ * 1, 1.25, 1.5 and 1.8 times the extra width, so the step is easy to see.
  *
  * Rhythm. A held Pump button sends the next "press" about 250 ms after
  * each "survive". So everything in the answer is over, or as good as
@@ -267,7 +415,6 @@
   --pb-press-ms: 300ms; /* strain 0, and a balloon with no strain set */
   --pb-return-ms: 220ms;
   --pb-air-in-ms: 90ms;     /* the pocket going in through the neck */
-  --pb-air-wait-ms: 420ms;  /* one glow while it waits for the answer */
   --pb-air-swell: 1;        /* how fat the pocket makes the hose */
   --pb-grow-ms: 240ms;
   --pb-spring-ms: 340ms;
@@ -278,17 +425,15 @@
  * same as PRESS_MS in game/risk.ts (test/pressTiming.test.ts checks). */
 .pump-balloon[data-strain="1"] {
   --pb-press-ms: 360ms;
-  --pb-air-swell: 1.07;
+  --pb-air-swell: 1.25;
 }
 .pump-balloon[data-strain="2"] {
   --pb-press-ms: 420ms;
-  --pb-air-swell: 1.14;
-  --pb-air-wait-ms: 360ms;
+  --pb-air-swell: 1.5;
 }
 .pump-balloon[data-strain="3"] {
   --pb-press-ms: 480ms;
-  --pb-air-swell: 1.22;
-  --pb-air-wait-ms: 300ms;
+  --pb-air-swell: 1.8;
 }
 
 /* Tap. The handle pushes down over the first 70% of the press and stays
@@ -297,12 +442,10 @@
 .pump-balloon[data-beat="press"] .pb-handle {
   animation: pb-stroke-down calc(var(--pb-press-ms) * 0.7) cubic-bezier(0.3, 0, 0.3, 1) forwards;
 }
-/* Two animations in a row: the rush, then the wait. The wait only starts
- * when the rush is over, and loops until the beat changes. */
+/* The rush. It ends where the wait holds, so a late answer finds the
+ * pocket standing still. */
 .pump-balloon[data-beat="press"] .pb-air {
-  animation:
-    pb-air var(--pb-press-ms) linear forwards,
-    pb-air-wait var(--pb-air-wait-ms) ease-in-out var(--pb-press-ms) infinite;
+  animation: pb-air var(--pb-press-ms) linear forwards;
 }
 /* The balloon takes a small breath in as the air arrives (2%), then holds
  * it. While it waits it trembles by a third of a unit. The tremble uses
@@ -315,8 +458,8 @@
 }
 
 /* The answer: the pocket goes in through the neck. The same for every
- * answer. It starts in the pose the rush ends in, which the wait never
- * leaves, and at the swell the press had (see .pb-air above). */
+ * answer. It starts where the rush ends, which the wait never leaves, and
+ * at the swell the press had (see .pb-air above). */
 .pump-balloon:is([data-beat="survive"], [data-beat="blocked"], [data-beat="pop"], [data-stroke="up"]) .pb-air {
   animation: pb-air-in var(--pb-air-in-ms) cubic-bezier(0.5, 0, 0.9, 0.6);
 }
@@ -368,148 +511,97 @@
   }
 }
 
-/* The rush. The pocket forms at the pump (first 10%), then follows the
- * hose and stops just under the neck. The points are worked out from the
- * hose curve: close together at the start, far apart in the middle (fast),
- * close again near the neck (slowing). It is long and thin when fast,
- * round and fat when slow, and always turned the way the hose runs. */
+/* The rush. The same timing the round pocket had, turned into distance
+ * along the hose (the old keyframes' points, measured along the hose
+ * line). It forms where the hose leaves the pump (first 10%, half of it
+ * still inside the nozzle), speeds up along the hose and round the bend,
+ * then slows and stops 66 units along: the front of the bulge then just
+ * touches the end of the hose, under the neck. */
 @keyframes pb-air {
   0% {
     opacity: 0;
-    translate: 116.0px 295.0px;
-    rotate: 0deg;
-    transform: scale(0.3, 0.3);
+    --pb-air-s: 0;
   }
-  10.0% {
+  10% {
     opacity: 0.95;
-    translate: 116.0px 295.0px;
-    rotate: 0.0deg;
-    transform: scale(0.93, 0.88);
+    --pb-air-s: 0;
   }
-  16.0% {
+  16% {
     opacity: 0.95;
-    translate: 114.0px 294.9px;
-    rotate: 3.5deg;
-    transform: scale(0.99, 0.86);
+    --pb-air-s: 1.76;
   }
-  22.0% {
+  22% {
     opacity: 0.95;
-    translate: 111.0px 294.6px;
-    rotate: 10.4deg;
-    transform: scale(1.04, 0.85);
+    --pb-air-s: 4.41;
   }
-  28.0% {
+  28% {
     opacity: 0.95;
-    translate: 107.1px 293.4px;
-    rotate: 23.3deg;
-    transform: scale(1.09, 0.84);
+    --pb-air-s: 8.01;
   }
-  34.0% {
+  34% {
     opacity: 0.95;
-    translate: 102.9px 290.7px;
-    rotate: 44.2deg;
-    transform: scale(1.13, 0.82);
+    --pb-air-s: 12.41;
   }
-  40.0% {
+  40% {
     opacity: 0.95;
-    translate: 99.7px 285.9px;
-    rotate: 66.6deg;
-    transform: scale(1.17, 0.81);
+    --pb-air-s: 17.5;
   }
-  46.0% {
+  46% {
     opacity: 0.95;
-    translate: 98.0px 279.7px;
-    rotate: 81.0deg;
-    transform: scale(1.19, 0.81);
+    --pb-air-s: 23.16;
   }
-  52.0% {
+  52% {
     opacity: 0.95;
-    translate: 97.5px 272.9px;
-    rotate: 88.7deg;
-    transform: scale(1.21, 0.80);
+    --pb-air-s: 29.14;
   }
-  58.0% {
+  58% {
     opacity: 0.95;
-    translate: 97.6px 265.7px;
-    rotate: 92.7deg;
-    transform: scale(1.22, 0.80);
+    --pb-air-s: 35.47;
   }
-  64.0% {
+  64% {
     opacity: 0.95;
-    translate: 98.0px 258.6px;
-    rotate: 94.5deg;
-    transform: scale(1.21, 0.80);
+    --pb-air-s: 41.71;
   }
-  70.0% {
+  70% {
     opacity: 0.95;
-    translate: 98.6px 251.7px;
-    rotate: 94.9deg;
-    transform: scale(1.19, 0.81);
+    --pb-air-s: 47.79;
   }
-  76.0% {
+  76% {
     opacity: 0.95;
-    translate: 99.1px 245.4px;
-    rotate: 94.5deg;
-    transform: scale(1.15, 0.82);
+    --pb-air-s: 53.33;
   }
-  82.0% {
+  82% {
     opacity: 0.95;
-    translate: 99.5px 240.1px;
-    rotate: 93.7deg;
-    transform: scale(1.10, 0.83);
+    --pb-air-s: 58.01;
   }
-  88.0% {
+  88% {
     opacity: 0.95;
-    translate: 99.8px 235.9px;
-    rotate: 92.8deg;
-    transform: scale(1.04, 0.85);
+    --pb-air-s: 61.7;
   }
-  94.0% {
+  94% {
     opacity: 0.95;
-    translate: 99.9px 232.9px;
-    rotate: 92.0deg;
-    transform: scale(0.98, 0.87);
+    --pb-air-s: 64.33;
   }
-  100.0% {
-    opacity: 0.95;
-    translate: 100.0px 231.0px;
-    rotate: 91.4deg;
-    transform: scale(0.93, 0.88);
-  }
-}
-
-/* The wait: the pocket glows under the neck. Colour only: it must never
- * move or resize the pocket, because the answer can land at any point of
- * the loop and the entry always starts from the pose the rush ends in. */
-@keyframes pb-air-wait {
-  0%,
   100% {
-    fill: #ece6da;
-    stroke: #56627e;
-  }
-  50% {
-    fill: #ffffff;
-    stroke: #98a5c6;
+    opacity: 0.95;
+    --pb-air-s: 66;
   }
 }
 
-/* The answer: up through the neck and gone. The neck is drawn over it, so
- * it is seen to go inside. */
+/* The answer: on along the hose and into the neck. Past the end of the
+ * hose nothing is drawn, so the bulge is seen to go inside. By 95 it is
+ * all past the end. */
 @keyframes pb-air-in {
   0% {
     opacity: 0.95;
-    translate: 100px 231px;
-    rotate: 91.4deg;
-    transform: scale(0.93, 0.88);
+    --pb-air-s: 66;
   }
   70% {
     opacity: 0.9;
   }
   100% {
     opacity: 0;
-    translate: 100px 214px;
-    rotate: 90deg;
-    transform: scale(1.3, 0.5);
+    --pb-air-s: 95;
   }
 }
 
@@ -1320,7 +1412,7 @@
  * Never use the hidden draw, and never react to how close a draw was.
  *
  * Higher level = wider sway; a little taller; deeper breathing; brighter,
- * wider highlight; a pale "thin spot" fades in; and from level 2 a short
+ * wider highlight; a soft paler sheen fades in over the upper right; and from level 2 a short
  * shiver every 1.3 s. Only transform and opacity.
  * The sway uses the separate rotate, scale and translate properties, so
  * it never fights the beat (.pb-squash) or the size (.pb-grow).
@@ -1389,21 +1481,49 @@
   --pb-shiver: 1.1px;
 }
 
-/* Thin spot gradient: pale centre, soft darker edge (black and white only). */
-.pump-balloon .pb-thin-a {
+/*
+ * Stretched thin. The rubber over the upper right goes paler, with a
+ * bright band along the curve. Nothing is paler than the pearl balloon's
+ * white, so there the patch is a cool see-through grey instead, the way
+ * thin white latex lets the dark sky show through. Both fade out with no
+ * edge: the old oval spot had a dark rim and read as a dent or an eye.
+ * The mask and the band are white only (their ids repeat on every
+ * balloon); the colour and strength come from these two numbers.
+ */
+.pump-balloon {
+  --pb-sheen-tint: #fff;
+  --pb-sheen-max: 0.5;
+}
+.pump-balloon[data-slot="1"] {
+  --pb-sheen-tint: #8fa3c6;
+  --pb-sheen-max: 0.42;
+}
+.pump-balloon .pb-sheen {
+  fill: var(--pb-sheen-tint);
+  opacity: var(--pb-sheen-max);
+}
+.pump-balloon .pb-sheen-fade-a {
   stop-color: #fff;
-  stop-opacity: 0.6;
+  stop-opacity: 1;
 }
-.pump-balloon .pb-thin-b {
+.pump-balloon .pb-sheen-fade-b {
   stop-color: #fff;
-  stop-opacity: 0.2;
+  stop-opacity: 0.32;
 }
-.pump-balloon .pb-thin-c {
-  stop-color: #000;
-  stop-opacity: 0.08;
+.pump-balloon .pb-sheen-fade-c {
+  stop-color: #fff;
+  stop-opacity: 0;
 }
-.pump-balloon .pb-thin-d {
-  stop-color: #000;
+.pump-balloon .pb-band-a {
+  stop-color: #fff;
+  stop-opacity: 0;
+}
+.pump-balloon .pb-band-b {
+  stop-color: #fff;
+  stop-opacity: 0.85;
+}
+.pump-balloon .pb-band-c {
+  stop-color: #fff;
   stop-opacity: 0;
 }
 
@@ -1511,7 +1631,7 @@
   94%, 100% { translate: 0 0; }
 }
 
-/* At level 3 the thin spot pulses gently, in time with the shiver. */
+/* At level 3 the sheen pulses gently, in time with the shiver. */
 @keyframes pb-thin-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.8; }
@@ -1520,7 +1640,7 @@
 /* ---------------------------------------------------------------------
  * Reduced motion: no sway, no breathing, no pulse, and the highlight
  * changes without growing. The STILL cues stay: the level's stretch,
- * the thin spot and the brighter highlight, so the risk cue is kept.
+ * the sheen and the brighter highlight, so the risk cue is kept.
  * ------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {

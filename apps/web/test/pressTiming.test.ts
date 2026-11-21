@@ -98,47 +98,71 @@ function keyframes(name: string): string {
   return css.slice(start, end);
 }
 
+/** One CSS rule's text, found by its exact selector. */
+function rule(selector: string): string {
+  const start = css.indexOf(`${selector} {`);
+  if (start < 0) throw new Error(`no rule ${selector}`);
+  return css.slice(start, css.indexOf('}', start) + 1);
+}
+
+/** The --pb-air-s values of a keyframes block, in order. */
+function distances(block: string): number[] {
+  return [...block.matchAll(/--pb-air-s: ([\d.]+);/g)].map((m) => Number(m[1]));
+}
+
 describe('the air pocket in balloon.css', () => {
   it('never reads the swell inside a keyframe, so an answer cannot resize the pocket', () => {
     // data-strain (and with it the swell) changes in the same frame as the
     // answer beat. A keyframe that read it would jump on that frame.
-    for (const name of ['pb-air', 'pb-air-wait', 'pb-air-in']) {
+    for (const name of ['pb-air', 'pb-air-in']) {
       expect(keyframes(name)).not.toContain('--pb-air-swell');
     }
   });
 
   it('holds a change of swell back until the pocket has gone in', () => {
     const inMs = /--pb-air-in-ms: (\d+)ms/.exec(css);
-    const rule = /\.pump-balloon \.pb-air \{[^}]*\}/.exec(css);
+    const dash = rule('.pump-balloon .pb-air path');
     expect(inMs).not.toBeNull();
-    expect(rule?.[0]).toContain('scale: var(--pb-air-swell);');
-    const extra = /transition: scale 0s linear calc\(var\(--pb-air-in-ms\) \+ (\d+)ms\);/.exec(
-      rule?.[0] ?? '',
+    // The swell sets only the width of the dashes ...
+    expect(dash).toMatch(/stroke-width: calc\([^;]*var\(--pb-air-swell\)[^;]*\);/);
+    // ... and a change of width waits until the pocket has gone in.
+    const extra = /transition: stroke-width 0s linear calc\(var\(--pb-air-in-ms\) \+ (\d+)ms\);/.exec(
+      dash,
     );
     expect(extra).not.toBeNull();
     expect(Number(extra?.[1])).toBeGreaterThan(0);
   });
 
-  it('waits without moving or resizing the pocket, so a late answer cannot snap it', () => {
-    const wait = keyframes('pb-air-wait');
-    for (const property of ['transform', 'translate', 'rotate', 'scale', 'stroke-width', ' r:']) {
-      expect(wait).not.toContain(property);
+  it('stands still while it waits: no loop, so no flashing and nothing to snap', () => {
+    // The user asked for a steady pocket while the answer is late
+    // (2026-11-20). The rush runs once and holds its last frame.
+    expect(css).not.toContain('@keyframes pb-air-wait');
+    const press = rule('.pump-balloon[data-beat="press"] .pb-air');
+    expect(press).toContain('animation: pb-air var(--pb-press-ms) linear forwards;');
+    expect(press).not.toContain('infinite');
+  });
+
+  it('moves only along the hose, and only forwards', () => {
+    // Only the distance along the hose and the opacity change, so the
+    // pocket can never leave the hose, even at the bend.
+    for (const name of ['pb-air', 'pb-air-in']) {
+      const block = keyframes(name);
+      for (const property of ['transform', 'translate', 'rotate', 'scale', 'stroke-width']) {
+        expect(block).not.toContain(property);
+      }
+      const s = distances(block);
+      expect(s.length).toBeGreaterThan(1);
+      for (let i = 1; i < s.length; i += 1) expect(s[i]).toBeGreaterThanOrEqual(s[i - 1] ?? 0);
     }
   });
 
-  it('starts the entry in the exact pose the rush ends in', () => {
-    const pose = (block: string): string[] =>
-      ['translate', 'rotate', 'transform'].map((property) => {
-        const found = new RegExp(`${property}: ([^;]+);`).exec(block);
-        if (!found?.[1]) throw new Error(`no ${property}`);
-        // "100.0px" and "100px" are the same length.
-        return found[1].replace(/(\d)\.0px/g, '$1px');
-      });
-    const rush = keyframes('pb-air');
-    const rushEnd = rush.slice(rush.indexOf('100.0% {'));
-    const entry = keyframes('pb-air-in');
-    const entryStart = entry.slice(entry.indexOf('0% {'), entry.indexOf('70% {'));
-    expect(pose(entryStart)).toEqual(pose(rushEnd));
+  it('starts the entry exactly where the rush ends', () => {
+    const rush = distances(keyframes('pb-air'));
+    const entry = distances(keyframes('pb-air-in'));
+    expect(entry[0]).toBe(rush[rush.length - 1]);
+    // The rush stops on the hose (79.2 long); the entry ends past its end.
+    expect(rush[rush.length - 1]).toBeLessThan(79.2);
+    expect(entry[entry.length - 1]).toBeGreaterThan(79.2);
   });
 });
 
