@@ -137,6 +137,11 @@ export function App() {
   useEffect(() => {
     if (afterRoundShown) shownReveals.remember(round);
   }, [afterRoundShown, round]);
+  // And each balloon's top rung as the screen first shows the round: a
+  // reveal stops there, so the verify page checks the record's top against it.
+  useEffect(() => {
+    if (round) shownReveals.rememberTops(round);
+  }, [round]);
   // A finished round with a reveal line keeps the row under the balloons
   // open on upright phones, where an empty row is closed (styles.css): the
   // line goes in that row, and the pictures do not jump when it appears.

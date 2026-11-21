@@ -1,12 +1,26 @@
-import { DIFFICULTIES, GAME_CONFIG } from '@pump/engine';
-import { verifyRound } from '@pump/engine/fair';
+import {
+  DIFFICULTIES,
+  GAME_CONFIG,
+  ladderProblems,
+  revealAfterCashOut,
+  topRungForBet,
+  type Round,
+} from '@pump/engine';
+import { revealDrawerFor, verifyRound } from '@pump/engine/fair';
 import { describe, expect, it } from 'vitest';
-import type { AfterRoundView, BalloonView, RoundView } from '../src/api/contract';
+import type {
+  AfterRoundView,
+  BalloonView,
+  RoundView,
+  VerifiableBalloon,
+  VerifiableRound,
+} from '../src/api/contract';
 import { DemoClient } from '../src/demo/DemoClient';
 import {
   MAX_ROUNDS,
   screenAgrees,
   shownRevealStore,
+  topAgrees,
   type KeyValueStore,
 } from '../src/verify/shownReveals';
 import { balloon, round } from './fixtures';
@@ -122,6 +136,134 @@ describe('the reveal lines this device showed', () => {
     expect(reread.shownOf('r0', 0)).toBeNull();
     expect(reread.shownOf('r1', 0)).not.toBeNull();
   });
+});
+
+describe('the top rung this device showed', () => {
+  it('keeps each balloon’s top as the round was first seen, whatever later answers say', () => {
+    const storage = memoryStore();
+    const shown = shownRevealStore(storage);
+    shown.rememberTops(round([balloon({ topRung: 7 }), balloon({ index: 1, topRung: 4 })]));
+    shown.rememberTops(round([balloon({ topRung: 2 }), balloon({ index: 1, topRung: 2 })]));
+    expect(shown.topOf('round-1', 0)).toBe(7);
+    expect(shown.topOf('round-1', 1)).toBe(4);
+    expect(shown.topOf('round-1', 2)).toBeNull();
+    expect(shown.topOf('round-2', 0)).toBeNull();
+    // Read back on the next visit, next to the lines.
+    shown.remember(round([cashed(popped(4))]));
+    const reread = shownRevealStore(storage);
+    expect(reread.topOf('round-1', 0)).toBe(7);
+    expect(reread.shownOf('round-1', 0)).toEqual({ outcome: 'popped', reachedRung: 4 });
+  });
+
+  it('still reads lines kept before tops were kept, with no top for them', () => {
+    const storage = memoryStore();
+    storage.items.set('pump.shownReveals', '[["r", [[0, "popped", 4]]]]');
+    const shown = shownRevealStore(storage);
+    expect(shown.shownOf('r', 0)).toEqual({ outcome: 'popped', reachedRung: 4 });
+    expect(shown.topOf('r', 0)).toBeNull();
+    shown.rememberTops(round([cashed(popped(4))], { id: 'r' }));
+    expect(shownRevealStore(storage).topOf('r', 0)).toBe(10);
+    expect(shownRevealStore(storage).shownOf('r', 0)).toEqual({ outcome: 'popped', reachedRung: 4 });
+  });
+
+  it('agrees only with the same top, and says nothing when there is no replayed balloon', () => {
+    expect(topAgrees(7, 7)).toBe(true);
+    expect(topAgrees(7, 2)).toBe(false);
+    expect(topAgrees(7, null)).toBe(true);
+  });
+
+  it.each(RTPS)(
+    'catches a record whose lower cap carries a shorter reveal that checks out, at RTP %i',
+    async (rtpBp) => {
+      const config = { ...GAME_CONFIG, rtpBp };
+      const betCents = config.limits.maxBetCents;
+      // A cap low enough to put the top at rung 2, yet one the record's own
+      // checks accept, on a difficulty whose real top is higher.
+      const lieCapOf = (ladder: readonly number[]): number =>
+        Math.floor((betCents * (ladder[1] ?? 0)) / 100);
+      const difficulty = config.difficulties.find(
+        (d) =>
+          topRungForBet(d.ladder, betCents, config.limits.maxPayoutCents) > 2 &&
+          topRungForBet(d.ladder, betCents, lieCapOf(d.ladder)) === 2 &&
+          ladderProblems(rtpBp, d.ladder, { ...config.limits, maxPayoutCents: lieCapOf(d.ladder) })
+            .length === 0,
+      );
+      expect(difficulty).toBeDefined();
+      if (!difficulty) return;
+
+      const client = new DemoClient(config, 0);
+      await client.setClientSeed('cap-lie', key());
+      const shown = shownRevealStore(memoryStore());
+      // Play until a balloon survives its first pump, then cash it out on
+      // rung 1: it has a reveal, which stops at its top.
+      let finished: RoundView | null = null;
+      while (finished === null) {
+        const started = (
+          await client.startRound({ difficultyId: difficulty.id, betsCents: [betCents] }, key())
+        ).round;
+        shown.rememberTops(started);
+        const pumped = (
+          await client.pump(started.id, { balloonIndex: 0, expectedDrawIndex: 0, patch: false }, key())
+        ).round;
+        if (pumped.status !== 'active') continue;
+        finished = (
+          await client.cashOut(pumped.id, { balloonIndex: 0, expectedDrawIndex: 1 }, key())
+        ).round;
+      }
+      shown.remember(finished);
+      await client.rotateSeed(key());
+      const record = await client.getVerifiableRound(finished.id);
+      const stored = record.balloons[0];
+      expect(stored?.afterRound).not.toBeNull();
+      if (!stored) return;
+
+      // The honest record checks out, and its top is the one shown.
+      const honest = verifyRound(record);
+      expect(honest.ok).toBe(true);
+      const shownTop = shown.topOf(record.id, 0);
+      expect(shownTop).toBe(stored.topRung);
+      expect(topAgrees(shownTop ?? 0, honest.balloons[0]?.balloon?.topRung ?? null)).toBe(true);
+
+      // The lie: a lower cap, the top it gives, and the reveal worked out
+      // honestly against that top.
+      const maxPayoutCents = lieCapOf(difficulty.ladder);
+      const cashedAt: Round = {
+        difficultyId: record.difficultyId,
+        rtpBp: record.rtpBp,
+        ladder: record.ladder,
+        balloons: [
+          {
+            betCents: stored.betCents,
+            status: 'cashed',
+            rung: stored.rung,
+            drawIndex: stored.drawIndex,
+            topRung: 2,
+            patchesCents: stored.patchesCents,
+            payoutCents: stored.payoutCents,
+          },
+        ],
+      };
+      const reveal = revealAfterCashOut(
+        cashedAt,
+        0,
+        revealDrawerFor({
+          serverSeed: record.serverSeed,
+          clientSeed: record.clientSeed,
+          nonce: record.nonce,
+          balloonIndex: 0,
+          drawIndex: stored.drawIndex,
+        }),
+      );
+      const liedBalloon: VerifiableBalloon = { ...stored, topRung: 2, afterRound: reveal };
+      const lied: VerifiableRound = { ...record, maxPayoutCents, balloons: [liedBalloon] };
+
+      // The record checks out against itself, so only this device can tell.
+      const check = verifyRound(lied);
+      expect(check.problems).toEqual([]);
+      expect(check.balloons[0]?.balloon?.topRung).toBe(2);
+      expect(topAgrees(shownTop ?? 0, check.balloons[0]?.balloon?.topRung ?? null)).toBe(false);
+    },
+  );
 });
 
 describe('the screen against the seeds', () => {

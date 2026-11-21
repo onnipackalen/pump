@@ -32,7 +32,7 @@ import {
   recordHashProblem,
 } from '../verify/hashCheck';
 import { shownHashFor } from '../verify/shownHashes';
-import { screenAgrees, shownReveals } from '../verify/shownReveals';
+import { screenAgrees, shownReveals, topAgrees } from '../verify/shownReveals';
 
 interface VerifyPageProps {
   readonly client: GameClient;
@@ -431,16 +431,21 @@ function Results({
   // The server's record naming another hash than this browser saved is a
   // problem with the record itself, whatever the inputs say.
   const recordProblem = recordHashProblem(shownHash, recordHash);
-  // The reveal lines this device's screen showed and the seeds disagree with.
-  // verifyRound checks the record; only this device knows what it showed.
+  // What this device's screen showed and the record disagrees with: a top
+  // rung, or a reveal line the seeds do not give. verifyRound checks the
+  // record against itself; only this device knows what it showed.
   const screenProblems = result.balloons.flatMap((b) => {
+    const top = topScreenProblem(b, round);
     const screen = screenCheck(b, round);
-    if (screen === null || screen.agrees) return [];
+    if (screen === null || screen.agrees) return top === null ? [] : [top];
     const truth =
       b.afterRound === null
         ? 'the seeds give it no reveal'
         : `worked out from the seeds it is “${describeReveal(b.afterRound, cashedRung(b, round), round.ladder)}”`;
-    return [`Balloon ${b.balloonIndex + 1}: after the round this device showed “${screen.words}”, but ${truth}.`];
+    return [
+      ...(top === null ? [] : [top]),
+      `Balloon ${b.balloonIndex + 1}: after the round this device showed “${screen.words}”, but ${truth}.`,
+    ];
   });
   const recordOk = result.ok && recordProblem === null;
   const ok = recordOk && screenProblems.length === 0;
@@ -645,6 +650,25 @@ function screenCheck(
     words: describeReveal(shown, cashedRung(check, round), round.ladder),
     agrees: screenAgrees(shown, check.afterRound),
   };
+}
+
+/**
+ * The top rung this device showed for a balloon during the round, said as a
+ * problem when the record's bet, ladder and payout cap give another one. A
+ * reveal stops at the top, so a record with a lower cap could carry a
+ * shorter reveal that still checks out against itself. Null when they agree
+ * or this device kept no top for the balloon.
+ */
+function topScreenProblem(check: BalloonCheck, round: VerifiableRound): string | null {
+  const shownTop = shownReveals.topOf(round.id, check.balloonIndex);
+  const replayedTop = check.balloon?.topRung ?? null;
+  if (shownTop === null || replayedTop === null || topAgrees(shownTop, replayedTop)) return null;
+  return (
+    `Balloon ${String(check.balloonIndex + 1)}: during the round this device showed its top as ` +
+    `rung ${String(shownTop)}${multiplierText(round.ladder, shownTop)}, but this record's bet, ` +
+    `ladder and payout cap of ${formatCents(round.maxPayoutCents)} put its top at rung ` +
+    `${String(replayedTop)}${multiplierText(round.ladder, replayedTop)}.`
+  );
 }
 
 /** A table of draws, and the bytes behind each roll. */

@@ -8,6 +8,12 @@
  * keeps the line: for each round and balloon, how it ended (popped or top)
  * and the rung it named.
  *
+ * It also keeps each balloon's top rung as this device first saw the round
+ * (normally the answer that started it). A reveal stops at the top rung, and
+ * the record's top comes from its own payout cap, so a record with a lower
+ * cap could carry a shorter reveal that still checks out against itself.
+ * The top this device showed during the round is the player's evidence.
+ *
  * It lives in memory, and in localStorage when the browser allows. It is
  * only a help: another device, a private window or cleared site data has
  * none, and then the verify page says nothing about the screen.
@@ -33,12 +39,25 @@ const KEY = 'pump.shownReveals';
 /** The most rounds kept. The oldest goes first. */
 export const MAX_ROUNDS = 200;
 
-/** Round id -> balloon index -> the line shown. Oldest round first. */
-type Shown = Map<string, Map<number, ShownReveal>>;
+/** What this device kept of one round. */
+interface ShownRound {
+  /** Balloon index -> the reveal line shown once the round was over. */
+  readonly lines: ReadonlyMap<number, ShownReveal>;
+  /** Balloon index -> its top rung, as this device first saw the round. */
+  readonly tops: ReadonlyMap<number, number>;
+}
 
-/** As stored: [roundId, [[balloonIndex, outcome, reachedRung], ...]], oldest first. */
+/** Round id -> what was kept of it. Oldest round first. */
+type Shown = Map<string, ShownRound>;
+
+/**
+ * As stored, oldest first:
+ * [roundId, [[balloonIndex, outcome, reachedRung], ...], [[balloonIndex, topRung], ...]].
+ * Rounds kept before tops were kept have no third part.
+ */
 type StoredLine = readonly [number, RevealOutcome, number];
-type StoredRound = readonly [string, readonly StoredLine[]];
+type StoredTop = readonly [number, number];
+type StoredRound = readonly [string, readonly StoredLine[], readonly StoredTop[]];
 
 function isWhole(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
@@ -61,25 +80,34 @@ function parse(text: string | null): Shown {
   if (!Array.isArray(parsed)) return shown;
   for (const entry of parsed as unknown[]) {
     if (!Array.isArray(entry)) continue;
-    const [roundId, lines] = entry as unknown[];
-    if (typeof roundId !== 'string' || !Array.isArray(lines)) continue;
-    const byBalloon = new Map<number, ShownReveal>();
-    for (const line of lines as unknown[]) {
+    const [roundId, storedLines, storedTops = []] = entry as unknown[];
+    if (typeof roundId !== 'string' || !Array.isArray(storedLines) || !Array.isArray(storedTops)) {
+      continue;
+    }
+    const lines = new Map<number, ShownReveal>();
+    for (const line of storedLines as unknown[]) {
       if (!Array.isArray(line)) continue;
       const [balloonIndex, outcome, reachedRung] = line as unknown[];
       if (isWhole(balloonIndex) && isOutcome(outcome) && isWhole(reachedRung)) {
-        byBalloon.set(balloonIndex, { outcome, reachedRung });
+        lines.set(balloonIndex, { outcome, reachedRung });
       }
     }
-    if (byBalloon.size > 0) shown.set(roundId, byBalloon);
+    const tops = new Map<number, number>();
+    for (const top of storedTops as unknown[]) {
+      if (!Array.isArray(top)) continue;
+      const [balloonIndex, topRung] = top as unknown[];
+      if (isWhole(balloonIndex) && isWhole(topRung)) tops.set(balloonIndex, topRung);
+    }
+    if (lines.size > 0 || tops.size > 0) shown.set(roundId, { lines, tops });
   }
   return shown;
 }
 
 function serialise(shown: Shown): string {
-  const rounds: StoredRound[] = [...shown].map(([roundId, byBalloon]) => [
+  const rounds: StoredRound[] = [...shown].map(([roundId, { lines, tops }]) => [
     roundId,
-    [...byBalloon].map(([index, line]): StoredLine => [index, line.outcome, line.reachedRung]),
+    [...lines].map(([index, line]): StoredLine => [index, line.outcome, line.reachedRung]),
+    [...tops].map(([index, topRung]): StoredTop => [index, topRung]),
   ]);
   return JSON.stringify(rounds);
 }
@@ -110,6 +138,24 @@ export function shownRevealStore(store: KeyValueStore | null) {
     return shown;
   };
 
+  /** Puts a round's updated record last (newest), keeps the latest MAX_ROUNDS, and saves. */
+  const save = (roundId: string, kept: ShownRound): void => {
+    const all = load();
+    all.delete(roundId);
+    all.set(roundId, kept);
+    for (const old of [...all.keys()].slice(0, Math.max(0, all.size - MAX_ROUNDS))) {
+      all.delete(old);
+    }
+    try {
+      store?.setItem(KEY, serialise(all));
+    } catch {
+      // Storage full or blocked: it is still kept for this visit.
+    }
+  };
+
+  const keptOf = (roundId: string): ShownRound =>
+    load().get(roundId) ?? { lines: new Map(), tops: new Map() };
+
   return {
     /**
      * Keeps every reveal line a finished round shows. Call it when the lines
@@ -118,34 +164,44 @@ export function shownRevealStore(store: KeyValueStore | null) {
      */
     remember(round: RoundView): void {
       if (round.status !== 'finished') return;
-      const all = load();
-      const byBalloon = new Map(all.get(round.id) ?? []);
+      const kept = keptOf(round.id);
+      const lines = new Map(kept.lines);
       for (const balloon of round.balloons) {
         const afterRound = balloon.afterRound ?? null;
         if (afterRound === null || afterRoundLine(balloon) === null) continue;
-        if (byBalloon.has(balloon.index)) continue;
-        byBalloon.set(balloon.index, {
+        if (lines.has(balloon.index)) continue;
+        lines.set(balloon.index, {
           outcome: afterRound.outcome,
           reachedRung: afterRound.reachedRung,
         });
       }
-      if (byBalloon.size === (all.get(round.id)?.size ?? 0)) return;
-      // Newest last, and only the latest MAX_ROUNDS rounds.
-      all.delete(round.id);
-      all.set(round.id, byBalloon);
-      for (const roundId of [...all.keys()].slice(0, Math.max(0, all.size - MAX_ROUNDS))) {
-        all.delete(roundId);
+      if (lines.size === kept.lines.size) return;
+      save(round.id, { lines, tops: kept.tops });
+    },
+
+    /**
+     * Keeps each balloon's top rung as this device first saw the round. Call
+     * it with every round the screen shows; the first top kept for a balloon
+     * stays, so a later answer cannot change it.
+     */
+    rememberTops(round: RoundView): void {
+      const kept = keptOf(round.id);
+      const tops = new Map(kept.tops);
+      for (const balloon of round.balloons) {
+        if (!tops.has(balloon.index)) tops.set(balloon.index, balloon.topRung);
       }
-      try {
-        store?.setItem(KEY, serialise(all));
-      } catch {
-        // Storage full or blocked: it is still kept for this visit.
-      }
+      if (tops.size === kept.tops.size) return;
+      save(round.id, { lines: kept.lines, tops });
     },
 
     /** The line this device showed for one balloon, or null if it kept none. */
     shownOf(roundId: string, balloonIndex: number): ShownReveal | null {
-      return load().get(roundId)?.get(balloonIndex) ?? null;
+      return load().get(roundId)?.lines.get(balloonIndex) ?? null;
+    },
+
+    /** The top rung this device first showed for one balloon, or null if it kept none. */
+    topOf(roundId: string, balloonIndex: number): number | null {
+      return load().get(roundId)?.tops.get(balloonIndex) ?? null;
     },
   };
 }
@@ -169,4 +225,14 @@ export function screenAgrees(
     shown.outcome === recomputed.outcome &&
     shown.reachedRung === recomputed.reachedRung
   );
+}
+
+/**
+ * Whether the top rung this device showed for a balloon during the round is
+ * the one the record's bet, ladder and payout cap give (the replayed
+ * balloon's top). With no replayed balloon there is nothing to compare:
+ * verifyRound already says why it could not be replayed.
+ */
+export function topAgrees(shownTop: number, replayedTop: number | null): boolean {
+  return replayedTop === null || shownTop === replayedTop;
 }
