@@ -52,6 +52,13 @@ export interface BalloonProps {
   /** "up": the handle comes back up, for the pump that reached the top. */
   readonly stroke?: 'up' | undefined;
   /**
+   * How the balloon before this one in the same place ended, on a fresh
+   * balloon of a new round only: its pump sets up from that picture
+   * (balloon.css, Set-up). Keep it while the balloon is in play; leave it
+   * out from the moment it pops or is cashed out.
+   */
+  readonly setUp?: 'popped' | 'cashed' | undefined;
+  /**
    * The multiplier printed on the balloon, like "1.37×". Empty before the
    * first pump: an unpumped balloon has no multiplier yet.
    */
@@ -72,6 +79,7 @@ export function Balloon({
   top,
   hold,
   stroke,
+  setUp,
   value,
 }: BalloonProps) {
   const style = { '--balloon-scale': scale.toFixed(4) } as CSSProperties;
@@ -88,6 +96,7 @@ export function Balloon({
       data-top={win !== undefined && top ? 'true' : undefined}
       data-hold={hold ? 'true' : undefined}
       data-stroke={stroke}
+      data-setup={setUp}
       role="img"
       aria-label={`Balloon ${slot}`}
       style={style}
@@ -194,6 +203,36 @@ export function Balloon({
       <g className="pb-hose">
         <path className="pb-hose-tube" d={HOSE_PATH} />
         <path className="pb-hose-shine" d={HOSE_PATH} />
+        {/* air: the pocket of air that runs up the hose on each tap. It is the
+             hose itself swelling: short, thick pieces of the hose's own line,
+             stacked from long and thin to short and fat, so together they
+             make a bulge that tapers into the hose and bends where it bends.
+             balloon.css slides them along the hose. Hidden until a press.
+             It is inside the hose layer, so it moves with the hose: on a
+             pop, on a cash-out, and when a pump sets up while a new
+             round's first pump is already on its way. */}
+        <g className="pb-air">
+          <defs>
+            {/* Soft edges for the pale middle, so it shades smoothly instead of
+                 showing as hard-edged stripes. Fixed frame around the hose:
+                 a frame from the path's own box would clip the blur. */}
+            <filter id="pb-air-soft" filterUnits="userSpaceOnUse" x="70" y="190" width="70" height="125">
+              <feGaussianBlur stdDeviation="1.3" />
+            </filter>
+            <filter id="pb-air-softer" filterUnits="userSpaceOnUse" x="70" y="190" width="70" height="125">
+              <feGaussianBlur stdDeviation="0.6" />
+            </filter>
+          </defs>
+          <path className="pb-air-wall pb-air-1" d={HOSE_PATH} />
+          <path className="pb-air-wall pb-air-2" d={HOSE_PATH} />
+          <path className="pb-air-wall pb-air-3" d={HOSE_PATH} />
+          <path className="pb-air-wall pb-air-4" d={HOSE_PATH} />
+          <path className="pb-air-wall pb-air-5" d={HOSE_PATH} />
+          <path className="pb-air-wall pb-air-6" d={HOSE_PATH} />
+          <path className="pb-air-thin" d={HOSE_PATH} />
+          <path className="pb-air-core" d={HOSE_PATH} />
+          <path className="pb-air-shine" d={HOSE_PATH} />
+        </g>
         <rect className="pb-hose-end" x="96" y="221" width="8" height="7" rx="2" />
         {/* remnant: the pop mark. A torn scrap of rubber still stuck over the
              end of the hose, so it drops to the floor with it. Hidden until
@@ -201,33 +240,6 @@ export function Balloon({
              that is the edge of this balloon's own slot, and the next pump
              stands just beyond it. */}
         <path className="pb-remnant" d="M96 230L94 222L93 216L97 218.5L99 214L102 218L105 213.5L107 218L111 215.5L112 222L108.5 225L111 230L105 229L104 232Z" />
-      </g>
-      {/* air: the pocket of air that runs up the hose on each tap. It is the
-           hose itself swelling: short, thick pieces of the hose's own line,
-           stacked from long and thin to short and fat, so together they
-           make a bulge that tapers into the hose and bends where it bends.
-           balloon.css slides them along the hose. Hidden until a press. */}
-      <g className="pb-air">
-        <defs>
-          {/* Soft edges for the pale middle, so it shades smoothly instead of
-               showing as hard-edged stripes. Fixed frame around the hose:
-               a frame from the path's own box would clip the blur. */}
-          <filter id="pb-air-soft" filterUnits="userSpaceOnUse" x="70" y="190" width="70" height="125">
-            <feGaussianBlur stdDeviation="1.3" />
-          </filter>
-          <filter id="pb-air-softer" filterUnits="userSpaceOnUse" x="70" y="190" width="70" height="125">
-            <feGaussianBlur stdDeviation="0.6" />
-          </filter>
-        </defs>
-        <path className="pb-air-wall pb-air-1" d={HOSE_PATH} />
-        <path className="pb-air-wall pb-air-2" d={HOSE_PATH} />
-        <path className="pb-air-wall pb-air-3" d={HOSE_PATH} />
-        <path className="pb-air-wall pb-air-4" d={HOSE_PATH} />
-        <path className="pb-air-wall pb-air-5" d={HOSE_PATH} />
-        <path className="pb-air-wall pb-air-6" d={HOSE_PATH} />
-        <path className="pb-air-thin" d={HOSE_PATH} />
-        <path className="pb-air-core" d={HOSE_PATH} />
-        <path className="pb-air-shine" d={HOSE_PATH} />
       </g>
 
       {/* float: the balloon. Lifts and fades on cash-out. */}

@@ -665,6 +665,121 @@
 }
 
 /* ---------------------------------------------------------------------
+ * Set-up
+ *
+ * On a fresh balloon of a new round, your code sets data-setup to how the
+ * balloon before it in the same place ended (game/setUp.ts):
+ *   "popped"  the hose lifts off the floor back up to the neck, and the
+ *             torn scrap on its end falls away.
+ *   "cashed"  the hose stretches back out from the pump to the neck.
+ * Then the new balloon fills in at the end of the hose. Each starts from
+ * exactly the end picture the round before left (the transforms of the
+ * "popped" and "cashed" rules below), so nothing jumps. A balloon with
+ * nothing before it in its place gets no data-setup and no set-up.
+ *
+ * Display only: the round is already live and nothing waits for this. A
+ * pump during it is fine: the air pocket is in the hose layer, so it rides
+ * the moving hose. Keep data-setup while the balloon is in play (taking it
+ * away early would cut the set-up short) and remove it in the same update
+ * as the pop or cash-out, so it never plays again: when that motion ends,
+ * the hose would otherwise fall back to the set-up rule and replay it.
+ *
+ * This section comes before Pop and Cash-out on purpose. Their rules
+ * weigh the same as these, and the later rule wins, so a pop or a
+ * cash-out always takes the hose over.
+ * ------------------------------------------------------------------- */
+
+.pump-balloon {
+  --pb-setup-hose-ms: 300ms;
+  --pb-setup-fill-ms: 240ms;
+  /* The balloon fills in once the hose is most of the way there. */
+  --pb-setup-fill-delay: 150ms;
+}
+.pump-balloon[data-setup="popped"] .pb-hose {
+  animation: pb-hose-up var(--pb-setup-hose-ms) linear backwards;
+}
+.pump-balloon[data-setup="cashed"] .pb-hose {
+  animation: pb-hose-out var(--pb-setup-hose-ms) cubic-bezier(0.25, 0.8, 0.35, 1.15) backwards;
+}
+/* The scrap falls away as the hose starts to lift. */
+.pump-balloon[data-setup="popped"] .pb-remnant {
+  animation: pb-scrap-off 140ms ease-in backwards;
+}
+/* The pop dimmed the number plate. */
+.pump-balloon[data-setup="popped"] .pb-tag {
+  animation: pb-tag-back 200ms ease-out backwards;
+}
+/* The new balloon fills in from nothing at the end of the hose. */
+.pump-balloon[data-setup] .pb-float {
+  animation: pb-fill-in var(--pb-setup-fill-ms) cubic-bezier(0.2, 0.8, 0.3, 1.25)
+    var(--pb-setup-fill-delay) backwards;
+}
+/* With motion off the hose is simply there (see Reduced motion), and the
+ * new balloon fades in instead of growing. */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .pump-balloon[data-setup] .pb-float {
+    animation-name: pb-fade-in;
+  }
+}
+:root[data-motion="reduce"] .pump-balloon[data-setup] .pb-float {
+  animation-name: pb-fade-in;
+}
+
+/* Lifted, not thrown: quick at first, a small swing past upright, still. */
+@keyframes pb-hose-up {
+  0% {
+    transform: var(--pb-hose-down);
+    animation-timing-function: cubic-bezier(0.3, 0.6, 0.4, 1);
+  }
+  72% {
+    transform: rotate(4deg);
+    animation-timing-function: ease-in-out;
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+/* The cash-out's hose-back, played the other way. */
+@keyframes pb-hose-out {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes pb-scrap-off {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes pb-tag-back {
+  from {
+    opacity: 0.6;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pb-fill-in {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ---------------------------------------------------------------------
  * Pop
  *
  * After the same press and hold, your code sets data-beat to:
