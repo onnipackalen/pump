@@ -1350,8 +1350,9 @@ input {
   background: var(--stage);
 }
 
-/* "Keep my wins private": a settings row with room for a failure under it. */
-.private-wins-failure {
+/* "Keep my wins private": a settings row with room for a failure under it,
+   which starts where the row's label does. */
+.private-wins .private-wins-failure {
   margin: 0 14px 10px;
 }
 

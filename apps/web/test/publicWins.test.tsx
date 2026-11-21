@@ -4,9 +4,13 @@ import { describe, expect, it } from 'vitest';
 import type { PublicWin, PublicWinsResponse, SessionView } from '../src/api/contract';
 import { HttpClient } from '../src/api/httpClient';
 import {
+  canToggle,
   LOAD_FAILED,
+  privateWinsStep,
   PrivateWinsView,
   SAVE_FAILED,
+  START_PRIVATE_WINS,
+  type PrivateWinsEvent,
   type PrivateWinsState,
 } from '../src/components/PrivateWinsRow';
 import { DemoClient } from '../src/demo/DemoClient';
@@ -410,39 +414,146 @@ describe('Upright phones: the wins join the page only with the sheet up', () => 
 
 // ------------------------------------------------------------- Settings row
 
-function row(state: PrivateWinsState): string {
-  return renderToStaticMarkup(<PrivateWinsView state={state} onToggle={() => undefined} />);
+function state(overrides: Partial<PrivateWinsState> = {}): PrivateWinsState {
+  return { ...START_PRIVATE_WINS, ...overrides };
+}
+
+function row(s: PrivateWinsState): string {
+  return renderToStaticMarkup(<PrivateWinsView state={s} onToggle={() => undefined} />);
+}
+
+/** Runs events through the row's rule. */
+function run(events: readonly PrivateWinsEvent[], from: PrivateWinsState = START_PRIVATE_WINS): PrivateWinsState {
+  return events.reduce(privateWinsStep, from);
 }
 
 describe('"Keep my wins private" settings row', () => {
   it('is a labelled switch that shows the server’s value', () => {
-    const off = row({ winsPrivate: false, saving: false, failure: null });
+    const off = row(state({ winsPrivate: false }));
     expect(off).toMatch(/<span id="([^"]+)">Keep my wins private<\/span><button[^>]*role="switch"[^>]*aria-labelledby="\1"/);
     expect(off).toContain('aria-checked="false"');
     expect(off).toMatch(/>Off<\/button>/);
-    const on = row({ winsPrivate: true, saving: false, failure: null });
+    const on = row(state({ winsPrivate: true }));
     expect(on).toContain('aria-checked="true"');
     expect(on).toMatch(/>On<\/button>/);
     expect(on).not.toContain('disabled');
+    expect(on).toContain('aria-busy="false"');
   });
 
-  it('cannot be pressed before the value is known or while saving', () => {
-    for (const state of [
-      { winsPrivate: null, saving: false, failure: null },
-      { winsPrivate: true, saving: true, failure: null },
-    ]) {
-      const html = row(state);
+  it('is no switch at all before the value is known, so it never says off for an unknown value', () => {
+    for (const s of [state({ reading: 1 }), state({ failure: LOAD_FAILED })]) {
+      const html = row(s);
+      expect(html).not.toContain('role="switch"');
+      expect(html).not.toContain('aria-checked');
       expect(html).toContain('disabled=""');
-      expect(html).toContain('aria-busy="true"');
+      expect(html).toMatch(/<span id="([^"]+)">Keep my wins private<\/span><button[^>]*aria-labelledby="\1"/);
     }
-    expect(row({ winsPrivate: null, saving: false, failure: null })).toMatch(/>…<\/button>/);
+  });
+
+  it('says it is busy only while a request is on its way', () => {
+    const loading = row(state({ reading: 1 }));
+    expect(loading).toContain('aria-busy="true"');
+    expect(loading).toMatch(/>…<\/button>/);
+    const saving = row(state({ winsPrivate: true, saving: true }));
+    expect(saving).toContain('aria-busy="true"');
+    expect(saving).toContain('disabled=""');
+    // The read failed: nothing is loading any more.
+    const lost = row(state({ failure: LOAD_FAILED }));
+    expect(lost).toContain('aria-busy="false"');
+    expect(lost).not.toMatch(/>…<\/button>/);
   });
 
   it('shows a failure plainly', () => {
-    expect(row({ winsPrivate: false, saving: false, failure: SAVE_FAILED })).toContain(
+    expect(row(state({ winsPrivate: false, failure: SAVE_FAILED }))).toContain(
       `role="alert">${SAVE_FAILED}</p>`,
     );
-    expect(row({ winsPrivate: null, saving: false, failure: LOAD_FAILED })).toContain(LOAD_FAILED);
-    expect(row({ winsPrivate: false, saving: false, failure: null })).not.toContain('role="alert"');
+    expect(row(state({ failure: LOAD_FAILED }))).toContain(LOAD_FAILED);
+    expect(row(state({ winsPrivate: false }))).not.toContain('role="alert"');
+  });
+});
+
+describe('"Keep my wins private": the row’s rule', () => {
+  const read = (winsPrivate: boolean, savesWhenSent = 0): PrivateWinsEvent => ({
+    type: 'read-answered',
+    winsPrivate,
+    savesWhenSent,
+  });
+
+  it('shows the value read, and nothing before it', () => {
+    const sentOnly = run([{ type: 'read-sent' }]);
+    expect(sentOnly.winsPrivate).toBeNull();
+    expect(canToggle(sentOnly)).toBe(false);
+    const known = run([{ type: 'read-sent' }, read(true)]);
+    expect(known).toMatchObject({ winsPrivate: true, reading: 0, failure: null });
+    expect(canToggle(known)).toBe(true);
+  });
+
+  it('a failed first read says so and stops loading; a failed later read keeps the value', () => {
+    expect(run([{ type: 'read-sent' }, { type: 'read-failed' }])).toMatchObject({
+      winsPrivate: null,
+      reading: 0,
+      failure: LOAD_FAILED,
+    });
+    const later = run([{ type: 'read-sent' }, read(false), { type: 'read-sent' }, { type: 'read-failed' }]);
+    expect(later).toMatchObject({ winsPrivate: false, reading: 0, failure: null });
+  });
+
+  it('does not show a press until the server has answered it', () => {
+    const known = run([{ type: 'read-sent' }, read(false)]);
+    const pressed = privateWinsStep(known, { type: 'save-sent' });
+    expect(pressed).toMatchObject({ winsPrivate: false, saving: true });
+    expect(canToggle(pressed)).toBe(false);
+    expect(privateWinsStep(pressed, { type: 'save-answered', winsPrivate: true })).toMatchObject({
+      winsPrivate: true,
+      saving: false,
+      failure: null,
+    });
+  });
+
+  it('a failed save keeps the value the server last sent', () => {
+    const failedSave = run([{ type: 'read-sent' }, read(false), { type: 'save-sent' }, { type: 'save-failed' }]);
+    expect(failedSave).toMatchObject({ winsPrivate: false, saving: false, failure: SAVE_FAILED });
+    expect(canToggle(failedSave)).toBe(true);
+  });
+
+  it('drops a read sent before a save: it may carry the value from before', () => {
+    const known = run([{ type: 'read-sent' }, read(false)]);
+    // The menu reopens (a read goes, tagged 0 saves), then the player presses at once.
+    const readGoes = privateWinsStep(known, { type: 'read-sent' });
+    const saved = run([{ type: 'save-sent' }, { type: 'save-answered', winsPrivate: true }], readGoes);
+    // The old read comes back last, with the value from before the save.
+    const late = privateWinsStep(saved, read(false, readGoes.saves));
+    expect(late).toMatchObject({ winsPrivate: true, reading: 0 });
+    // A read sent after the save counts.
+    expect(privateWinsStep(late, read(false, late.saves)).winsPrivate).toBe(false);
+  });
+
+  it('only ever shows a value the server sent, over any run of events', () => {
+    // Every event in turn, from every reachable state a few steps deep.
+    const events = (s: PrivateWinsState): PrivateWinsEvent[] => [
+      { type: 'read-sent' },
+      read(true, s.saves),
+      read(false, s.saves),
+      read(true, s.saves - 1),
+      { type: 'read-failed' },
+      { type: 'save-sent' },
+      { type: 'save-answered', winsPrivate: true },
+      { type: 'save-answered', winsPrivate: false },
+      { type: 'save-failed' },
+    ];
+    let paths: { s: PrivateWinsState; lastSent: boolean | null }[] = [{ s: START_PRIVATE_WINS, lastSent: null }];
+    for (let depth = 0; depth < 5; depth += 1) {
+      paths = paths.flatMap(({ s, lastSent }) =>
+        events(s).map((e) => {
+          const next = privateWinsStep(s, e);
+          const accepted =
+            e.type === 'save-answered' || (e.type === 'read-answered' && e.savesWhenSent === s.saves);
+          const sentValue = accepted && 'winsPrivate' in e ? e.winsPrivate : lastSent;
+          expect(next.winsPrivate).toBe(sentValue);
+          return { s: next, lastSent: sentValue };
+        }),
+      );
+    }
+    expect(paths.length).toBe(9 ** 5);
   });
 });
