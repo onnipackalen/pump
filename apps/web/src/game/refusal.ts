@@ -67,6 +67,10 @@ export const SEEDS_CHANGED_TEXT =
   'No round was started: the seeds changed since this screen last showed them (in another ' +
   'tab, say). Check Provably fair, then press Bet again.';
 
+/** Said when a seed change is pressed while another seed change, or a round start, is on its way. */
+export const SEED_CHANGE_BUSY_TEXT =
+  'That was not sent: a seed change or a round start is still on its way. Try again in a moment.';
+
 /** The finished round a refusal carries, if it carries one. */
 export function finishedRefusal(error: unknown): RoundView | null {
   if (!(error instanceof ApiFailure)) return null;

@@ -143,7 +143,9 @@ describe('a round start and a seed change are never on their way at once', () =>
   it('the game sends every seed change and round start through it, and locks the seeds while a start is on its way', () => {
     const source = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8');
     const game = source('../src/game/useGame.ts');
-    expect(game.match(/seedGate\.changeSeeds\(/g)).toHaveLength(2);
+    // One place calls the gate; the client seed save and the rotate both go through it.
+    expect(game.match(/seedGate\.changeSeeds\(/g)).toHaveLength(1);
+    expect(game.match(/changeSeeds\(async \(\) => \{\s+try \{\s+const (fairness|result) = await send/g)).toHaveLength(2);
     expect(game).toMatch(/client\.setClientSeed\(clientSeed, key\)/);
     expect(game).toMatch(/client\.rotateSeed\(key\)/);
     expect(game).toMatch(/seedGate\.start\(/);
@@ -152,6 +154,8 @@ describe('a round start and a seed change are never on their way at once', () =>
     expect(game).toMatch(/shownFairness\.current = result\.fairness;/);
     const app = source('../src/App.tsx');
     expect(app).toMatch(/locked=\{roundActive \|\| autoRunning \|\| state\.starting\}/);
+    // Save and Rotate also wait while a seed change is on its way.
+    expect(app).toMatch(/changing=\{state\.seedChanging\}/);
     expect(app).toMatch(/canRotate=\{!roundActive && !autoRunning && !state\.starting && /);
   });
 });

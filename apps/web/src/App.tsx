@@ -478,6 +478,7 @@ export function App() {
                 revealed={state.revealed}
                 // Also while a start is on its way: the round is bet against the seeds on screen.
                 locked={roundActive || autoRunning || state.starting}
+                changing={state.seedChanging}
                 onSaveClientSeed={game.setClientSeed}
                 onRotate={game.rotateSeed}
               />

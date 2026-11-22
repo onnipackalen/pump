@@ -5,7 +5,7 @@ import { NetworkFailure } from '../src/api/client';
 import type { FairnessView, RotateResult } from '../src/api/contract';
 import { formFrom, roundFrom, roundToCheck } from '../src/components/VerifyPage';
 import { DemoClient } from '../src/demo/DemoClient';
-import { SEEDS_CHANGED_TEXT } from '../src/game/refusal';
+import { SEED_CHANGE_BUSY_TEXT, SEEDS_CHANGED_TEXT } from '../src/game/refusal';
 import { runAutoPlay } from '../src/game/useAutoPlay';
 import { useGame, type Game } from '../src/game/useGame';
 import { recordProblems } from '../src/verify/copyCheck';
@@ -206,4 +206,28 @@ describe('a seed change whose answer was lost, then Bet at once', () => {
       expect(await checksOut(server, result.round.id)).toBe(true);
     }, 30_000);
   }
+});
+
+describe('a seed change pressed while another is on its way', () => {
+  it('is not sent, says so, and Save and Rotate wait while a change is on its way', async () => {
+    const server = new DemoClient(GAME_CONFIG, 60);
+    const tab = await openTab(server);
+    const before = panel(tab);
+    tab.current().rotateSeed();
+    await until(() => tab.current().state.seedChanging);
+
+    expect(await tab.current().setClientSeed('my-own-seed')).toBe(false);
+    await until(() => tab.current().state.notice?.text === SEED_CHANGE_BUSY_TEXT);
+    // Pressing Rotate again is not sent either.
+    tab.current().rotateSeed();
+
+    await until(() => !tab.current().state.seedChanging);
+    const after = await server.getSession();
+    expect(after.fairness.clientSeed).toBe(before.clientSeed);
+    expect(after.fairness.serverSeedHash).not.toBe(before.serverSeedHash);
+    expect(tab.current().state.revealed).toHaveLength(1);
+    // Once it is done, a save goes again.
+    expect(await tab.current().setClientSeed('my-own-seed')).toBe(true);
+    expect((await server.getSession()).fairness.clientSeed).toBe('my-own-seed');
+  }, 30_000);
 });

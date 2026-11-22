@@ -25,6 +25,7 @@ import {
   failureNotice,
   finishedRefusal,
   LOST_SESSION_TEXT,
+  SEED_CHANGE_BUSY_TEXT,
   seedsInRefusal,
 } from './refusal';
 import { pressMs } from './risk';
@@ -101,6 +102,8 @@ export interface GameState {
    */
   readonly endedElsewhere: string | null;
   readonly starting: boolean;
+  /** A client seed save or a rotate is on its way: Save and Rotate wait for it. */
+  readonly seedChanging: boolean;
   readonly notice: Notice | null;
   /**
    * When this visit's session started and the balance then, for the
@@ -315,6 +318,7 @@ const initialState: GameState = {
   winShownFor: null,
   endedElsewhere: null,
   starting: false,
+  seedChanging: false,
   notice: null,
   session: null,
 };
@@ -876,9 +880,29 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
 
   // Seed changes go through the gate: none while a round start is on its
   // way, one at a time, and a start waits for one on its way (see SeedGate).
-  const setClientSeed = useCallback(
-    async (clientSeed: string): Promise<boolean> => {
+  // While one is on its way the panel's Save and Rotate wait (seedChanging).
+  // One the gate refuses is not sent, and the screen says so, so a seed the
+  // player typed never looks saved when it was not.
+  const changeSeeds = useCallback(
+    (work: () => Promise<boolean>): Promise<boolean> => {
       const change = seedGate.changeSeeds(async () => {
+        setState((s) => ({ ...s, seedChanging: true }));
+        try {
+          return await work();
+        } finally {
+          setState((s) => ({ ...s, seedChanging: false }));
+        }
+      });
+      if (change !== null) return change;
+      setState((s) => ({ ...s, notice: { tone: 'info', text: SEED_CHANGE_BUSY_TEXT } }));
+      return Promise.resolve(false);
+    },
+    [seedGate],
+  );
+
+  const setClientSeed = useCallback(
+    (clientSeed: string): Promise<boolean> =>
+      changeSeeds(async () => {
         try {
           const fairness = await send((key) => client.setClientSeed(clientSeed, key));
           shownFairness.current = fairness;
@@ -892,14 +916,12 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           handleFailure(error, null);
           return false;
         }
-      });
-      return change ?? false;
-    },
-    [client, handleFailure, seedGate],
+      }),
+    [changeSeeds, client, handleFailure],
   );
 
   const rotateSeed = useCallback(() => {
-    void seedGate.changeSeeds(async () => {
+    void changeSeeds(async () => {
       try {
         const result = await send((key) => client.rotateSeed(key));
         shownFairness.current = result.fairness;
@@ -917,7 +939,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         return false;
       }
     });
-  }, [client, handleFailure, refreshHistory, seedGate]);
+  }, [changeSeeds, client, handleFailure, refreshHistory]);
 
   const dismissNotice = useCallback(() => {
     setState((s) => ({ ...s, notice: null }));
