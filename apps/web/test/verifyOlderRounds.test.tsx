@@ -6,23 +6,31 @@ import { RoundPicker, VerifyPage, type OlderRounds } from '../src/components/Ver
 import { DemoClient } from '../src/demo/DemoClient';
 import { HISTORY_SIZE } from '../src/game/session';
 import {
+  askForOlder,
   fitsOnTop,
   lastListed,
   laterMayHide,
   listedRounds,
+  loadOlderPage,
   mayHaveOlder,
   OLDER_FAILED,
   OLDER_PAGE_SIZE,
+  olderUnknownAfter,
   roundListStep,
   startRoundList,
   withSeedsKnown,
+  type HistoryPages,
+  type RoundListEvent,
   type RoundListState,
 } from '../src/verify/roundList';
 
 // The verify page lists the game's newest rounds, and loads older ones a
 // page at a time with "Older rounds", so every finished round can be found
-// and checked. These tests drive the list's own rule (roundList.ts) against
-// the in-browser demo, which pages exactly like the server.
+// and checked. These tests drive the list's own rule and the steps the page
+// runs (roundList.ts: a press runs loadOlderPage, and a full list asks
+// askForOlder) against the in-browser demo, which pages exactly like the
+// server. The button itself is drawn with renderToStaticMarkup: there is no
+// DOM here to click it in.
 //
 // The demo stamps its rounds with the clock, so the clock is faked: most
 // tests move it on a second before each round, as real play does, and one
@@ -80,13 +88,25 @@ async function everyRound(client: DemoClient): Promise<RoundSummary[]> {
   }
 }
 
-/** One press of "Older rounds": ask for the page after the last round listed, and take the answer in. */
-async function pressOlder(client: DemoClient, state: RoundListState): Promise<RoundListState> {
-  const before = lastListed(state);
-  if (before === null) throw new Error('nothing listed');
-  const asked = roundListStep(state, { type: 'asked', before });
-  const page = await client.getHistoryPage(OLDER_PAGE_SIZE, before);
-  return roundListStep(asked, { type: 'answered', before, page });
+/** A list run as the page runs it: every event goes through the list's rule. */
+function liveList(start: RoundListState) {
+  let state = start;
+  return {
+    get state() {
+      return state;
+    },
+    dispatch: (event: RoundListEvent): void => {
+      state = roundListStep(state, event);
+    },
+  };
+}
+
+/** One press of "Older rounds": the step the button runs, loadOlderPage, with its answer taken in. */
+async function pressOlder(client: HistoryPages, state: RoundListState): Promise<RoundListState> {
+  if (lastListed(state) === null) throw new Error('nothing listed');
+  const list = liveList(state);
+  await loadOlderPage(client, state, list.dispatch);
+  return list.state;
 }
 
 /** Presses "Older rounds" until the button goes. Returns the list and how many presses it took. */
@@ -137,7 +157,7 @@ function picker(state: RoundListState, revealedHashes: readonly string[] = []): 
 const count = (html: string, text: string): number => html.split(text).length - 1;
 
 describe('the verify page’s list of rounds', () => {
-  it('reaches a round older than the game’s list through "Older rounds", each round once and in order', async () => {
+  it('reaches a round older than the game’s list with the "Older rounds" step, each round once and in order', async () => {
     const client = await newDemo();
     const early = await play(client, 30);
     await client.rotateSeed(key());
@@ -291,6 +311,80 @@ describe('the verify page’s list of rounds', () => {
       page: repeated,
     });
     expect(ids(listedRounds(state))).toEqual(ids(await everyRound(client)));
+  });
+
+  it('asks once while a page is on its way, never lists a round twice, and shows a failure', async () => {
+    const client = await newDemo();
+    await play(client, 40);
+    const truth = await everyRound(client);
+    const start = startRoundList(await client.getHistory(HISTORY_SIZE));
+    let asked = 0;
+    const counting: HistoryPages = {
+      getHistoryPage: (limit, before) => {
+        asked += 1;
+        return client.getHistoryPage(limit, before);
+      },
+    };
+    const list = liveList(start);
+    const first = loadOlderPage(counting, list.state, list.dispatch);
+    // The list knows at once that a page is on its way (the button shows
+    // "Loading…"): another press now asks nothing.
+    const second = loadOlderPage(counting, list.state, list.dispatch);
+    // A press that still sees the list from before does ask again, but only
+    // one answer is taken in.
+    const stale = loadOlderPage(counting, start, list.dispatch);
+    await Promise.all([first, second, stale]);
+    expect(asked).toBe(2);
+    expect(ids(listedRounds(list.state))).toEqual(ids(truth).slice(0, HISTORY_SIZE + OLDER_PAGE_SIZE));
+
+    const broken: HistoryPages = { getHistoryPage: () => Promise.reject(new Error('offline')) };
+    const failed = liveList(list.state);
+    await loadOlderPage(broken, failed.state, failed.dispatch);
+    expect(failed.state.failure).toBe(OLDER_FAILED);
+    expect(failed.state.loadingAfter).toBeNull();
+    expect(mayHaveOlder(failed.state, HISTORY_SIZE)).toBe(true);
+  });
+
+  it.each([
+    [HISTORY_SIZE, false],
+    [HISTORY_SIZE + 1, true],
+  ])('with %i rounds, a full list asks the server first, so the button shows only if older rounds remain', async (played, more) => {
+    const client = await newDemo();
+    await play(client, played);
+    const list = liveList(startRoundList(await client.getHistory(HISTORY_SIZE)));
+    // Before the answer the button shows: older rounds may remain.
+    expect(mayHaveOlder(list.state, HISTORY_SIZE)).toBe(true);
+    const after = olderUnknownAfter(list.state, HISTORY_SIZE);
+    expect(after).toBe(lastListed(list.state));
+    await askForOlder(client, after ?? '', list.dispatch);
+    expect(list.state.more).toBe(more);
+    expect(mayHaveOlder(list.state, HISTORY_SIZE)).toBe(more);
+    expect(picker(list.state).includes('Older rounds')).toBe(more);
+    // Once it is known, the page does not ask again.
+    expect(olderUnknownAfter(list.state, HISTORY_SIZE)).toBeNull();
+  });
+
+  it('asks nothing for a short list, keeps the button if the question fails, and drops a stale answer', async () => {
+    const client = await newDemo();
+    await play(client, 4);
+    expect(olderUnknownAfter(startRoundList(await client.getHistory(HISTORY_SIZE)), HISTORY_SIZE)).toBeNull();
+    expect(olderUnknownAfter(startRoundList([]), HISTORY_SIZE)).toBeNull();
+
+    await play(client, 30);
+    const list = liveList(startRoundList(await client.getHistory(HISTORY_SIZE)));
+    const after = olderUnknownAfter(list.state, HISTORY_SIZE) ?? '';
+    const broken: HistoryPages = { getHistoryPage: () => Promise.reject(new Error('offline')) };
+    await askForOlder(broken, after, list.dispatch);
+    expect(list.state.more).toBeNull();
+    expect(mayHaveOlder(list.state, HISTORY_SIZE)).toBe(true);
+    expect(list.state.failure).toBeNull();
+
+    // An answer about a round that is no longer the last one listed, or
+    // that comes after a page has already said, changes nothing.
+    const paged = await pressOlder(client, list.state);
+    expect(roundListStep(paged, { type: 'checked', after, more: false })).toBe(paged);
+    const restarted = startRoundList((await client.getHistory(HISTORY_SIZE)).slice(0, 9));
+    expect(roundListStep(restarted, { type: 'checked', after: 'not-the-last', more: false })).toBe(restarted);
   });
 
   it('draws the whole page with the button and the ids from the game’s list', async () => {

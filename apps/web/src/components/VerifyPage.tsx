@@ -41,10 +41,11 @@ import {
   type ShownSeeds,
 } from '../verify/shownHashes';
 import {
-  lastListed,
+  askForOlder,
   listedRounds,
+  loadOlderPage,
   mayHaveOlder,
-  OLDER_PAGE_SIZE,
+  olderUnknownAfter,
   roundListStep,
   startRoundList,
   withSeedsKnown,
@@ -231,14 +232,15 @@ function useRoundList(client: GameClient, newest: readonly RoundSummary[]) {
     dispatch({ type: 'newest', rounds: newest });
   }, [newest]);
 
+  // A full list may be every round there is: ask once, so the button shows
+  // only if older rounds remain.
+  const askAfter = olderUnknownAfter(state, HISTORY_SIZE);
+  useEffect(() => {
+    if (askAfter !== null) void askForOlder(client, askAfter, dispatch);
+  }, [client, askAfter]);
+
   const loadOlder = (): void => {
-    const before = lastListed(state);
-    if (before === null || state.loadingAfter !== null) return;
-    dispatch({ type: 'asked', before });
-    client.getHistoryPage(OLDER_PAGE_SIZE, before).then(
-      (page) => dispatch({ type: 'answered', before, page }),
-      () => dispatch({ type: 'failed', before }),
-    );
+    void loadOlderPage(client, state, dispatch);
   };
 
   return { state, loadOlder };

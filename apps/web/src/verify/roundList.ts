@@ -1,3 +1,4 @@
+import type { GameClient } from '../api/client';
 import type { HistoryResponse, RoundSummary } from '../api/contract';
 
 /**
@@ -45,7 +46,12 @@ export type RoundListEvent =
   | { readonly type: 'newest'; readonly rounds: readonly RoundSummary[] }
   | { readonly type: 'asked'; readonly before: string }
   | { readonly type: 'answered'; readonly before: string; readonly page: HistoryResponse }
-  | { readonly type: 'failed'; readonly before: string };
+  | { readonly type: 'failed'; readonly before: string }
+  /** The server said whether any round is older than `after`. */
+  | { readonly type: 'checked'; readonly after: string; readonly more: boolean };
+
+/** The one call the list makes to the game's client. */
+export type HistoryPages = Pick<GameClient, 'getHistoryPage'>;
 
 export function startRoundList(newest: readonly RoundSummary[]): RoundListState {
   return { newest, older: [], more: null, loadingAfter: null, failure: null };
@@ -62,12 +68,67 @@ export function lastListed(state: RoundListState): string | null {
 }
 
 /**
- * Whether the "Older rounds" button shows. Once a page has come back, its
- * `more` says. Before that, older rounds can only exist if the game's list
- * is full: a shorter list is every round the player has.
+ * Whether the "Older rounds" button shows. Once the server has said (a page
+ * came back, or the page asked, see olderUnknownAfter), its `more` says.
+ * Before that, older rounds can only exist if the game's list is full: a
+ * shorter list is every round the player has.
  */
 export function mayHaveOlder(state: RoundListState, newestSize: number): boolean {
   return state.more ?? (state.newest.length > 0 && state.newest.length >= newestSize);
+}
+
+/**
+ * The round to ask about, or null. A full list from the game may still be
+ * every round the player has (exactly ten, say). So while nothing has said
+ * yet whether older rounds remain, the page asks the server once, and the
+ * button goes if there are none, before anyone presses it for nothing.
+ */
+export function olderUnknownAfter(state: RoundListState, newestSize: number): string | null {
+  if (state.more !== null || state.newest.length === 0 || state.newest.length < newestSize) return null;
+  return lastListed(state);
+}
+
+/**
+ * Asks whether any round is older than `after` (a page of one is enough)
+ * and hands the answer to `dispatch`. If the question fails, nothing
+ * changes: the button stays, as older rounds may remain.
+ */
+export async function askForOlder(
+  client: HistoryPages,
+  after: string,
+  dispatch: (event: RoundListEvent) => void,
+): Promise<void> {
+  let page: HistoryResponse;
+  try {
+    page = await client.getHistoryPage(1, after);
+  } catch {
+    return;
+  }
+  dispatch({ type: 'checked', after, more: page.rounds.length > 0 });
+}
+
+/**
+ * One press of "Older rounds": asks for the page after the last round
+ * listed, and hands the answer, or the failure, to `dispatch`. While a page
+ * is on its way it does nothing, so a quick second press asks only once.
+ * The promise is done once the answer is in; it never fails.
+ */
+export async function loadOlderPage(
+  client: HistoryPages,
+  state: RoundListState,
+  dispatch: (event: RoundListEvent) => void,
+): Promise<void> {
+  const before = lastListed(state);
+  if (before === null || state.loadingAfter !== null) return;
+  dispatch({ type: 'asked', before });
+  let page: HistoryResponse;
+  try {
+    page = await client.getHistoryPage(OLDER_PAGE_SIZE, before);
+  } catch {
+    dispatch({ type: 'failed', before });
+    return;
+  }
+  dispatch({ type: 'answered', before, page });
 }
 
 /**
@@ -114,6 +175,8 @@ export function laterMayHide(top: readonly RoundSummary[], listed: readonly Roun
  *   still on its way is dropped when it comes.
  * - A page came: its rounds go on the end, unless the list started again
  *   since it was asked for. A round already listed is never added twice.
+ * - The server said whether older rounds remain: kept, if the list still
+ *   ends on the round asked about and no page has said already.
  */
 export function roundListStep(state: RoundListState, event: RoundListEvent): RoundListState {
   switch (event.type) {
@@ -151,6 +214,11 @@ export function roundListStep(state: RoundListState, event: RoundListEvent): Rou
     case 'failed':
       if (event.before !== state.loadingAfter) return state;
       return { ...state, loadingAfter: null, failure: OLDER_FAILED };
+    case 'checked':
+      // Taken only while nothing else has said, and only about the round
+      // that is still the last one listed.
+      if (state.more !== null || event.after !== lastListed(state)) return state;
+      return { ...state, more: event.more };
   }
 }
 
