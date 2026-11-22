@@ -4,8 +4,9 @@
  *
  * "This round checks out" is said only when all of these hold:
  * - verifyRound finds nothing wrong with the inputs on the page;
- * - the server's record names the same hash, client seed and nonce as this
- *   browser saved when the round started (copyCheck);
+ * - the server's record is the round asked for, and names the same hash,
+ *   client seed and nonce as this browser saved when that round started
+ *   (copyCheck);
  * - the record agrees with what this device's screen showed (a reveal line,
  *   a top rung; shownReveals);
  * - the inputs on the page are the round's own: this browser's copy where it
@@ -30,7 +31,7 @@ export interface Verdict {
 export interface VerdictParts {
   /** verifyRound's check of the inputs on the page. */
   readonly result: RoundCheck;
-  /** Where the server's record names another hash, client seed or nonce than this browser saved. */
+  /** Where the server's record is another round's, or names another hash, client seed or nonce than this browser saved. */
   readonly recordProblems: readonly string[];
   /** Where the record differs from what this device's screen showed. */
   readonly screenProblems: readonly string[];
@@ -64,8 +65,8 @@ export function roundVerdict(parts: VerdictParts): Verdict {
       ok: false,
       tone: 'cannot-check',
       headline:
-        '✗ Not checked as played: an input above was changed. Press “Reset to the recorded ' +
-        'round” to check this round.',
+        '✗ Not checked as played: an input above was changed. Press “Reset the inputs” to ' +
+        'check this round.',
       problems,
     };
   }

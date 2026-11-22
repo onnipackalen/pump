@@ -2,19 +2,35 @@ import { GAME_CONFIG } from '@pump/engine';
 import { hashServerSeed, verifyRound } from '@pump/engine/fair';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { RoundView, VerifiableRound } from '../src/api/contract';
-import { formFrom, roundFrom, sameInputs, Workbench, type RoundForm } from '../src/components/VerifyPage';
+import { NetworkFailure } from '../src/api/client';
+import type { ActionResult, RoundView, StartRoundRequest, VerifiableRound } from '../src/api/contract';
+import {
+  formFrom,
+  roundFrom,
+  roundToCheck,
+  sameInputs,
+  Workbench,
+  type RoundForm,
+} from '../src/components/VerifyPage';
 import { DemoClient } from '../src/demo/DemoClient';
+import { keepLostStartCopy, startRoundShown } from '../src/game/session';
 import {
   clientSeedFieldLabel,
   noRecordNote,
   nonceFieldLabel,
   recordClientSeedProblem,
+  recordIdProblem,
   recordNonceProblem,
   recordProblems,
 } from '../src/verify/copyCheck';
 import { hashFieldLabel, hashSource, hashVerdict, recordHashProblem } from '../src/verify/hashCheck';
-import type { ShownSeeds } from '../src/verify/shownHashes';
+import {
+  rememberShown,
+  shownFor,
+  type HashStorage,
+  type SeedsBeforeRound,
+  type ShownSeeds,
+} from '../src/verify/shownHashes';
 import { roundVerdict } from '../src/verify/verdict';
 
 const SHOWN = 'a'.repeat(64);
@@ -40,12 +56,28 @@ function record(serverSeedHash: string): VerifiableRound {
   };
 }
 
+/** localStorage as a Map. */
+function memoryStorage(): HashStorage {
+  const items = new Map<string, string>();
+  return {
+    getItem: (k) => items.get(k) ?? null,
+    setItem: (k, v) => {
+      items.set(k, v);
+    },
+  };
+}
+
+const BETS: StartRoundRequest = { difficultyId: 'easy', betsCents: [100, 250, 1000] };
+
 /** Plays one round in the demo: a few pumps on each balloon, then cash out what is left. */
 async function playRound(client: DemoClient): Promise<string> {
-  let { round }: { round: RoundView } = await client.startRound(
-    { difficultyId: 'easy', betsCents: [100, 250, 1000] },
-    key(),
-  );
+  const { round } = await client.startRound(BETS, key());
+  return finishRound(client, round);
+}
+
+/** Plays a round in progress to its end: pumps to rung 2, then cash out. */
+async function finishRound(client: DemoClient, started: RoundView): Promise<string> {
+  let round = started;
   for (let step = 0; step < 40 && round.status === 'active'; step += 1) {
     const b = round.balloons.find((x) => x.status === 'active');
     if (!b) break;
@@ -75,7 +107,7 @@ async function playedRecords(clientSeed: string, count: number): Promise<Verifia
 }
 
 /** What the browser saved before a round, from a record, with changes. */
-function copyOf(r: VerifiableRound, change: Partial<ShownSeeds> = {}): ShownSeeds {
+function copyOf(r: VerifiableRound, change: Partial<SeedsBeforeRound> = {}): SeedsBeforeRound {
   return { serverSeedHash: r.serverSeedHash, clientSeed: r.clientSeed, nonce: r.nonce, ...change };
 }
 
@@ -89,7 +121,7 @@ function verdictFor(r: VerifiableRound, shown: ShownSeeds | null, form: RoundFor
     result,
     verdict: roundVerdict({
       result,
-      recordProblems: recordProblems(shown, r),
+      recordProblems: recordProblems(r.id, shown, r),
       screenProblems: [],
       inputsChanged: !sameInputs(own, built),
       anyReveal: result.balloons.some((b) => b.afterRound !== null),
@@ -97,9 +129,9 @@ function verdictFor(r: VerifiableRound, shown: ShownSeeds | null, form: RoundFor
   };
 }
 
-/** The page as it first shows a round. */
-const page = (r: VerifiableRound, shown: ShownSeeds | null): string =>
-  renderToStaticMarkup(<Workbench record={r} shown={shown} />);
+/** The page as it first shows a round, asked for by its own id unless another is given. */
+const page = (r: VerifiableRound, shown: ShownSeeds | null, roundId = r.id): string =>
+  renderToStaticMarkup(<Workbench roundId={roundId} record={r} shown={shown} />);
 
 describe('the verify page fills the round in from this browser’s copy', () => {
   it('takes the hash, client seed and nonce from the copy, not the server’s record', () => {
@@ -175,16 +207,16 @@ describe('a record that names other values than this browser saved', () => {
     expect(recordNonceProblem(0, 0)).toBeNull();
     expect(recordNonceProblem(null, 9)).toBeNull();
 
-    expect(recordProblems(null, record(OTHER))).toEqual([]);
-    expect(recordProblems(copyOf(record(OTHER)), record(OTHER))).toEqual([]);
-    expect(recordProblems({ serverSeedHash: OTHER, clientSeed: null, nonce: null }, record(OTHER))).toEqual(
-      [],
-    );
+    expect(recordProblems('round-1', null, record(OTHER))).toEqual([]);
+    expect(recordProblems('round-1', copyOf(record(OTHER)), record(OTHER))).toEqual([]);
+    expect(
+      recordProblems('round-1', { serverSeedHash: OTHER, clientSeed: null, nonce: null }, record(OTHER)),
+    ).toEqual([]);
   });
 
   it('gets one line for each value that differs', () => {
     const r = record(OTHER);
-    const lines = recordProblems({ serverSeedHash: SHOWN, clientSeed: 'player-seed', nonce: 2 }, r);
+    const lines = recordProblems('round-1', { serverSeedHash: SHOWN, clientSeed: 'player-seed', nonce: 2 }, r);
     expect(lines).toHaveLength(3);
     expect(lines[0]).toContain(SHOWN);
     expect(lines[1]).toContain('player-seed');
@@ -195,16 +227,25 @@ describe('a record that names other values than this browser saved', () => {
 describe('without a copy, the page says the values are the server’s own record', () => {
   it('names the hash, client seed and nonce when this browser saved nothing', () => {
     const note = noRecordNote(null);
-    expect(note).toMatch(/no record of the hash, client seed and nonce/);
-    expect(note).toMatch(/another device/);
-    expect(note).toMatch(/cleared/);
+    expect(note).toMatch(/no copy of the hash, client seed and nonce/);
     expect(note).toMatch(/server’s own record/);
     expect(note).toMatch(/can’t catch a server that changed them/);
   });
 
+  it('puts each cause as something that can happen, not as what did', () => {
+    const note = noRecordNote(null) ?? '';
+    expect(note).toMatch(/That happens if the round was played on another device or in another browser/);
+    expect(note).toMatch(/cleared or could not be saved/);
+    expect(note).toMatch(/connection was lost as the round started/);
+    expect(note).toMatch(/older than the last 500 rounds this browser keeps/);
+    // A copy is this browser's; "record" is only ever the server's.
+    expect(note).not.toMatch(/no record of/);
+  });
+
   it('names the client seed and nonce for an older copy that has only the hash', () => {
     const note = noRecordNote({ serverSeedHash: SHOWN, clientSeed: null, nonce: null });
-    expect(note).toMatch(/saved the hash/);
+    expect(note).toMatch(/has a copy of the hash/);
+    expect(note).toMatch(/older version of the game started this round/);
     expect(note).toMatch(/client seed and nonce checked here are the server’s own record/);
     expect(note).toMatch(/can’t catch a server that changed them/);
   });
@@ -214,8 +255,8 @@ describe('without a copy, the page says the values are the server’s own record
   });
 
   it('shows the note on the page', () => {
-    expect(page(record(OTHER), null)).toContain('no record of the hash, client seed and nonce');
-    expect(page(record(OTHER), copyOf(record(OTHER)))).not.toContain('no record of');
+    expect(page(record(OTHER), null)).toContain('no copy of the hash, client seed and nonce');
+    expect(page(record(OTHER), copyOf(record(OTHER)))).not.toContain('no copy of');
   });
 });
 
@@ -301,7 +342,7 @@ describe('the attack: a server that plays with values of its own and names them 
     expect(typed.result.ok).toBe(true);
     expect(typed.verdict.ok).toBe(false);
     expect(typed.verdict.tone).toBe('cannot-check');
-    expect(typed.verdict.headline).toMatch(/Reset to the recorded round/);
+    expect(typed.verdict.headline).toMatch(/Press “Reset the inputs”/);
   });
 
   it('spacing typed around a value is not a change', async () => {
@@ -323,5 +364,108 @@ describe('the attack: a server that plays with values of its own and names them 
       expect(html).toContain('can’t catch a server that changed them');
       expect(html).toContain('Client seed (the server’s record)');
     }
+  });
+});
+
+describe('the record is checked against this browser’s copy of the round asked for', () => {
+  /** Rounds the server played with its own client seed, while the screen showed the player's: their records and the copies this browser saved. */
+  async function riggedRounds(count: number): Promise<{ records: VerifiableRound[]; storage: HashStorage }> {
+    const records = await playedRecords('server-picked', count);
+    const storage = memoryStorage();
+    for (const r of [...records].reverse()) rememberShown(r.id, copyOf(r, { clientSeed: 'player-seed' }), storage);
+    return { records, storage };
+  }
+
+  it('a record sent back under another id never checks out', async () => {
+    const { records, storage } = await riggedRounds(1);
+    const [r] = records;
+    if (!r) throw new Error('a round expected');
+    // The server answers the request for round r with r's record, which adds
+    // up on its own, under an id this browser has no copy for.
+    const renamed: VerifiableRound = { ...r, id: `${r.id}x` };
+    expect(verifyRound(renamed).ok).toBe(true);
+    expect(shownFor(renamed.id, storage)).toBeNull();
+
+    const toCheck = roundToCheck(r.id, renamed, storage);
+    expect(toCheck.shown?.clientSeed).toBe('player-seed');
+    const html = renderToStaticMarkup(<Workbench {...toCheck} />);
+    expect(html).not.toContain(SUCCESS);
+    expect(html).toContain('data-verdict="mismatch"');
+    expect(html).toContain(`asked the server for round ${r.id}, but the server sent the record of round ${r.id}x`);
+    expect(html).toContain('“server-picked”');
+    // Not told it has no copy: it has one.
+    expect(html).not.toContain('no copy of');
+  });
+
+  it('a record under another id never checks out even when the seeds agree', async () => {
+    const [r] = await playedRecords('player-seed', 1);
+    if (!r) throw new Error('a round expected');
+    const storage = memoryStorage();
+    rememberShown(r.id, copyOf(r), storage);
+    const html = renderToStaticMarkup(<Workbench {...roundToCheck(r.id, { ...r, id: 'another-id' }, storage)} />);
+    expect(html).not.toContain(SUCCESS);
+    expect(recordIdProblem(r.id, r.id)).toBeNull();
+    expect(recordIdProblem(r.id, 'another-id')).toContain('another-id');
+  });
+
+  it('another round’s record, sent for this one, never checks out', async () => {
+    // Two honest rounds, both with a copy that agrees with their own record.
+    const [a, b] = await playedRecords('player-seed', 2);
+    if (!a || !b) throw new Error('two rounds expected');
+    const storage = memoryStorage();
+    rememberShown(a.id, copyOf(a), storage);
+    rememberShown(b.id, copyOf(b), storage);
+    expect(page(b, copyOf(b))).toContain(SUCCESS);
+
+    // Asked for a, the server sends b's record, as it is or with a's id.
+    for (const sent of [b, { ...b, id: a.id }]) {
+      const toCheck = roundToCheck(a.id, sent, storage);
+      expect(toCheck.shown).toEqual(copyOf(a));
+      const html = renderToStaticMarkup(<Workbench {...toCheck} />);
+      expect(html).not.toContain(SUCCESS);
+      expect(html).toContain('nonce 1, but this browser saved nonce 0');
+    }
+  });
+});
+
+/**
+ * A server that plays the round on a client seed of its own, then loses
+ * every answer to the start (both tries), so the browser never sees the
+ * round's id from the start itself.
+ */
+class RigsAndLosesStart extends DemoClient {
+  private rigged = false;
+  override async startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
+    if (!this.rigged) {
+      this.rigged = true;
+      await super.setClientSeed('server-picked', key());
+    }
+    await super.startRound(request, k);
+    throw new NetworkFailure('The game server did not answer properly (502).');
+  }
+}
+
+describe('a round whose start answer was lost is still checked against what was shown', () => {
+  it('does not check out when the server played it on a client seed of its own', async () => {
+    const client = new RigsAndLosesStart(GAME_CONFIG, 0);
+    await client.setClientSeed('player-seed', key());
+    const { fairness } = await client.getSession();
+    const storage = memoryStorage();
+    await expect(startRoundShown(client, BETS, fairness, storage)).rejects.toBeInstanceOf(NetworkFailure);
+
+    // The screen loads the whole state again and plays the round it finds.
+    const { activeRound } = await client.getSession();
+    if (!activeRound) throw new Error('the start was applied');
+    keepLostStartCopy(activeRound, storage);
+    const id = await finishRound(client, activeRound);
+    await client.rotateSeed(key());
+    const r = await client.getVerifiableRound(id);
+    expect(r.clientSeed).toBe('server-picked');
+    expect(verifyRound(r).ok).toBe(true);
+
+    const html = renderToStaticMarkup(<Workbench {...roundToCheck(id, r, storage)} />);
+    expect(html).not.toContain(SUCCESS);
+    expect(html).toContain('value="player-seed"');
+    expect(html).toContain('“server-picked”');
   });
 });
