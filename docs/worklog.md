@@ -2980,3 +2980,66 @@ What turned out wrong, and how it was caught:
 - The first PLAYTEST draft said the user had played ours "all day" while it
   was built. Their messages show it only at some points of the day; caught
   when re-reading the draft against the message times, and toned down.
+
+## 2026-11-21: final check of main (29f0692), no code changed
+
+Checked everything the brief and CLAUDE.md ask for, on main as it was at
+29f0692 (code unchanged since the 21841cf deploy). Results:
+- `npm test` (1,790 tests), lint, typecheck and build pass. Also with
+  `RTP_BP` set to 9400 and to 9900 in copies of the repo.
+- `npm run rtp` passes at 9400, 9700 and 9900. `npm run sim` (10 million
+  rounds per difficulty) passes at all three. `npm run hammer` passes at
+  9700 and 9400 (4,466 requests, ledger reconciles).
+- An independent Python check with exact fractions, not using the repo's
+  code, agreed with the engine on every chance, payout, top rung and Patch
+  price: 1.3 million values over 4 difficulties, 3 RTPs and 5,600 bets.
+- One played round recomputed by hand (openssl and Python): the hash, the
+  rolls and the "would have reached 6.55x" reveal all match the game and
+  the verify page.
+- The server refuses to start at RTP 100% and at 93% (Easy and Hard), as
+  CLAUDE.md says. A fresh clone with `npm ci` and `npm start` works.
+- Live site: up, and serving the same build as main.
+
+What turned out wrong, and how it was caught:
+- The verify page takes the client seed and the nonce from the server's
+  record. The browser keeps its own copy only of the hash. A dishonest
+  server could send a different client seed whose rolls give the same
+  results the player saw, and the page would say the round checks out.
+  Caught by an independent review of the fairness code. Not fixed yet.
+- Adding a fifth difficulty "through config alone" breaks 3 tests, though
+  the engine, `npm run rtp` and `npm run sim` handle it: the web level
+  colour test wants a colour for every difficulty, a web fixture assumes
+  every ladder has at least 10 rungs, and a fairness test expects a
+  "reveal to the top" in a short random sample. Caught by adding one in a
+  copy. Not fixed yet.
+- Smaller, from the wallet review: GET /api/session makes a player on every
+  visit with no cookie (no limit); one round that fails to settle would
+  stop the 24-hour sweep for every later round; the hammer never tries to
+  overspend over HTTP (only `test/wallet.test.ts` does).
+
+## 2026-11-21: the write-ups, rewritten for reading
+
+No code changed. README.md, AI_USAGE.md and PLAYTEST.md rewritten in short
+bullets, with every fact kept:
+- README: Render's set-up, deploy, rollback and take-down steps moved to
+  the new `docs/live-site.md`. New: a short "How it's built" list (pure
+  engine, the fair boundary test, schemas at the boundary, CI), "Neither
+  one trusts the engine" under how the math is checked, and a "Known
+  issues" list. Hours: Saturday evening is about 5 pm to midnight, about 7
+  hours, so about 18½ in all.
+- AI_USAGE: the user's design calls (ladders, no Patch cap, the reveal),
+  rounding as the user's call with its reasons, the checks the user set
+  up, and the simulator that measured the engine against itself as the
+  math mistake that should have been caught sooner. It now also says the
+  AI drafted the write-ups.
+- PLAYTEST: the same notes, as bullets.
+
+What turned out wrong, and how it was caught:
+- The README said everything the brief asks for is built, and nothing about
+  the five issues the final check had found. Caught by
+  reading the README against the last worklog entry. They are now under
+  "Known issues". The "Remaining tasks" chat is fixing three of them on
+  their own branches. As each one lands, its README lines get added by hand
+  and its item comes off the list.
+- The hours said about 5 hours on Saturday evening, a guess written before
+  the evening was over. The user said they will stop around midnight.
