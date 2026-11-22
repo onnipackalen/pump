@@ -1,6 +1,17 @@
 # Playtest
 
-- **When:** Friday evening, 20 November, about 40 minutes in all.
+- **Not just one session.** I went back to the other games again and
+  again while ours was built, not only in the session below. I judged them
+  critically: what they do well came over into ours, and I looked at their
+  flaws to make sure ours didn't copy them.
+- **Some of their flaws:**
+  - SmartSoft's Balloon: to me its graphics were a bit over the top, and I
+    didn't like the colours. I felt this game needed calm, simple graphics,
+    more like Stake's.
+  - Stake marks the level with red dots on the pump. I didn't want red
+    dots, so ours shows a small colour instead.
+- **The sit-down session:** Friday evening, 20 November, about 40 minutes
+  in all.
 - **What:** Stake's Pump first, then two similar games: SmartSoft's
   Balloon and InOut's Chicken Road. I spoke my notes out loud as I played.
 - **Then ours.** I had also been playing it at points while it was built.

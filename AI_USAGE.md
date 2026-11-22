@@ -21,6 +21,9 @@
     button before you buy.
   - the after-round reveal, the start animation, the phone layout and
     auto-bet.
+- I had the game plan, and I oversaw the whole build. I looked over
+  everything as it came in, made sure it was right, and made sure the
+  pieces fitted together and the game flowed well.
 - I decided what had to be checked. Separate chats had one job: try to
   break the math, the wallet and the fairness code. Most pieces went
   through one of them before going into `main`. Before I submitted, one
@@ -51,7 +54,7 @@
 
 ## Where the AI was wrong
 
-What I caught myself:
+What I caught:
 
 - **Rounding at the smallest bets.** In my first try at the game, the AI's
   rounding had holes at low cents: on a 10-cent bet a fraction of a cent is
@@ -59,6 +62,30 @@ What I caught myself:
   player's way. That's why this build rounds every amount toward the
   house, and `npm run rtp` checks every legal bet from 10 cents up, not
   only round ones.
+- **The first simulator checked the engine against itself.** `npm run sim`
+  took its expected numbers from the engine it was testing, so it could
+  never fail. I caught it with one of the review chats I set up to break
+  the math. It broke the engine on purpose: pump 1 popped too often, so the
+  game paid about 92.6% instead of 97%, and the simulator still said PASS.
+  A doubled Patch price passed too, and so did payouts one cent off.
+  - The fix: `packages/engine/cli/rules.ts` works out every expected number
+    from the config alone and never calls the engine. The simulator and
+    `npm run rtp` now measure against it (commits 34c0b3f, 8d21551 and
+    12b19fa).
+  - The tests now give the simulator engines that are wrong on purpose,
+    and expect FAIL.
+- **The verify page wasn't strong enough.** It took the client seed and
+  the nonce from the server's own record. A dishonest server could send a
+  different client seed that gives the same results, and the page would
+  still say the round checks out. The final check I ran before submitting
+  found it, and I had it fixed: the browser now keeps its own copy of the
+  seeds and checks the server's record against it. One small gap is left,
+  listed in the README under Known issues.
+- **The AI was wrong on graphics again and again.** It kept adding
+  made-up signs no real game uses (a seal on top, a grid of dots, a ghost
+  outline after a pop, a tape sticker for the Patch), hint sentences all
+  over the screen, and a hose swell that stuck out at the bend. I had each
+  one taken out or fixed. PLAYTEST.md has the full list.
 - **Two chats built the game engine at once**, in the first hour. I
   stopped them and gave each part one owner. Two engines could disagree
   on whether a pump pops, and then the verify page would not match the
@@ -66,22 +93,3 @@ What I caught myself:
 - **The last balloon lost its Pump button.** With three balloons, once
   two had popped, the third one's Pump button disappeared. It now keeps
   its own button.
-- **"Play until infinity."** I asked for a mode to play until infinity. I
-  meant something more like a rocket game. A chat read it as auto-play
-  with endless rounds and built that, tests and all. I had it scrapped.
-
-The math mistake I should have caught:
-
-- The first simulator (`npm run sim`) took its expected numbers from the
-  engine it was testing. It was checking the engine against itself.
-- A review chat proved this by breaking the engine on purpose. Pump 1
-  popped too often, so the game paid about 92.6% instead of 97%, and the
-  simulator still said PASS. A doubled Patch price passed too, and so did
-  payouts one cent off.
-- The fix: `packages/engine/cli/rules.ts` works out every expected number
-  from the config alone and never calls the engine. The simulator and
-  `npm run rtp` now measure against it (commits 34c0b3f, 8d21551 and
-  12b19fa). The tests give the simulator engines that are wrong on
-  purpose and expect FAIL.
-- I should have asked one question at the start: what would make this
-  check fail? If nothing can, it proves nothing.
