@@ -3206,3 +3206,55 @@ minor notes, all confirmed:
 - Sounds: one big-win sparkle partial is set to 23,949 Hz, above what a
   44.1 kHz device can play; browsers clamp it, Chrome warns in the console.
   Harmless. Not changed.
+
+## 2026-11-21: night backgrounds, picked in Settings
+
+The user asked for "dessert night" and other background themes, all at
+night with stars, Dusk kept as the default, and nothing changed until they
+had seen a demo. Drawn first as a mock-up in chat, then shown in a demo copy
+of the game (branch `night-themes`). The user's verdict: "mostly good
+enough", touch them up, check them, then push.
+
+- Settings > Background: Dusk (the default, unchanged), Desert, Dessert,
+  Arctic, Mountain, Fairground, City and Orbit. Radio buttons with a small
+  sky swatch each; saved in this browser like Animations
+  (`apps/web/src/background.ts`, `components/BackgroundPicker.tsx`).
+- Each scene is a few small SVGs and one block in
+  `apps/web/src/scenes/scenes.css`, read through `data-bg` on `<html>`. It
+  repaints the same three parts as `background.css` (page, sky, floor).
+  Nothing moves, nothing depends on the round, no mint, no grey.
+- Desert and dessert are both there because "dessert night" could mean
+  either. The arctic northern lights are violet and blue, never green.
+- The top bar and the browser's own bar colour (`theme-color`, used by
+  Chrome on Android) follow the scene's sky.
+
+Checks: lint, typecheck, 683 web tests (5 new: the default and junk values,
+a sky and floor rule for every scene, text contrast on every floor, no
+mint or grey). Every scene looked at mid-round with three balloons at
+390x844 and at 1280x760/1366x768, the choice tried through the real
+Settings row and after a reload.
+
+What turned out wrong, and how it was caught:
+- In the first demo, phones never showed some scenes' main object: the
+  cactus, the cherry, the big wheel and the icebergs sat too far out on the
+  1200-wide outline. Caught on the phone screenshots; moved toward the
+  middle. The fairground still only showed a sliver of its wheel; an
+  independent review (three reviewers, each finding checked by a skeptic)
+  caught that, and the wheel was made smaller and moved in, with the tents.
+- On a computer the fairground bulbs, the northern lights and the moons sat
+  on the row of multiplier steps along the top. Caught on the 1280x760
+  screenshots; moved down.
+- The same review confirmed four more, all fixed: a strip of the darker sky
+  showed under the ground (the floor stopped at the stage, the page below
+  it was the sky's colour); the browser's bar stayed Dusk navy above a
+  differently coloured top bar on Android; the first arctic floor was too
+  light for the grey "Popped"; and on laptops the desert moon sat where a
+  pearl balloon grows, the same colour as the balloon. The moons are now
+  dimmed and, on wide screens, sit beside the stage under the control panel.
+- Refuted by the review: that a saved scene flashes Dusk on load. What paints
+  before the app runs is an empty page of nearly the same colour.
+
+Not done: pumps and balloons themed to each scene. The user wasn't sure it
+was a good idea (it might clutter the screen), and it is in the README's
+"What I cut".
+
