@@ -1132,12 +1132,28 @@ input {
  * multiplier turns the warning colour when the bets top out below the
  * count (the box's title says why).
  */
+.field-target {
+  container: target-box / inline-size;
+}
+
 .field-target .target-x {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/*
+ * The multiplier must always show whole: cut short, "1,000.00×" would read
+ * "1,00". Where the box is too narrow for the longest one (5,000.00×, about
+ * 80 px) beside the word "pumps", the word goes; the box's title, the
+ * input's label and the − and + buttons still say what the number is.
+ */
+@container target-box (max-width: 234px) {
+  .field-target .muted {
+    display: none;
+  }
 }
 
 .field-target .target-x[data-top='true'] {
