@@ -106,6 +106,34 @@ export function surestStart(
   return MADE_LONG;
 }
 
+/**
+ * Like surestStart, for tests that need balloons to live through several
+ * pumps: of the difficulties with at least `pumps` rungs that `wanted` is
+ * true for, the one most likely to survive `pumps` pumps in a row (the
+ * lowest multiplier at rung `pumps`; the first of those in the list). It is
+ * used if that happens at least half the time at `rtpBp`. If not, as when a
+ * steep ladder is the only one that fits, the made long ladder is used.
+ */
+export function surestClimb(
+  rtpBp: number,
+  pumps: number,
+  wanted: (difficulty: Difficulty) => boolean = () => true,
+  difficulties: readonly Difficulty[] = GAME_CONFIG.difficulties,
+): Difficulty {
+  const at = (d: Difficulty): number => d.ladder[pumps - 1] ?? Infinity;
+  let best: Difficulty | undefined;
+  for (const d of difficulties.filter((d) => d.ladder.length >= pumps && wanted(d))) {
+    if (best === undefined || at(d) < at(best)) best = d;
+  }
+  // Surviving pumps 1 to k has chance S_k = R / m_k = rtpBp / (100 * h_k).
+  // That is at least a half when 2 * rtpBp >= 100 * h_k.
+  if (best !== undefined && 2 * rtpBp >= 100 * at(best)) return best;
+  if (MADE_LONG.ladder.length < pumps || !wanted(MADE_LONG)) {
+    throw new Error('The made long ladder does not have what the test needs');
+  }
+  return MADE_LONG;
+}
+
 /** The game config, with `difficulty` added at the end when it is not in it already. */
 export function configWith(difficulty: Difficulty, config: GameConfig = GAME_CONFIG): GameConfig {
   if (config.difficulties.some((d) => d.id === difficulty.id)) return config;

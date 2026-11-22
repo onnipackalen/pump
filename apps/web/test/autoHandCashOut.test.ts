@@ -21,7 +21,7 @@ import {
 import { runAutoPlay, type AutoPlayHooks, type AutoPlayStatus } from '../src/game/useAutoPlay';
 import type { GameActions } from '../src/game/useGame';
 import { formatCents } from '../src/money';
-import { balloon, BASE, configWith, difficultyWithRungs, round } from './fixtures';
+import { balloon, BASE, climbsAll, configWith, round, surestClimb } from './fixtures';
 import { demoActions, scriptedGame, type SentRequest } from './scriptedGame';
 
 const RTPS = [9400, 9700, 9900] as const;
@@ -398,8 +398,14 @@ function seeded(seed: number): () => number {
 
 describe.each(RTPS)('hand cash-outs against the demo game at RTP %i', (rtpBp) => {
   // A ladder with rungs to spare above the 6-pump target, so a press on
-  // Cash out below it is a real choice (Easy, as shipped).
-  const difficulty = difficultyWithRungs(7);
+  // Cash out below it is a real choice, and one where balloons often live
+  // that long, so there is something to press on (Easy, as shipped). A
+  // steep ladder first in the list would pop most balloons too soon.
+  const difficulty = surestClimb(
+    rtpBp,
+    6,
+    (d) => d.ladder.length >= 7 && climbsAll(d.ladder, 100),
+  );
   const config: GameConfig = configWith(difficulty, { ...GAME_CONFIG, rtpBp });
 
   it('never double-sends, never fails, and the net matches the wallet', async () => {

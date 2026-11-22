@@ -519,8 +519,10 @@ async function playThroughStart(
   if (!activeRound) throw new Error('the start was applied');
   const id = await finishRound(client, activeRound);
   await client.rotateSeed(key());
-  const [listed] = await client.getHistory(10);
-  if (listed?.id !== id) throw new Error('the history lists the round by its real id');
+  // Found by id, not taken as the first: two rounds that end in the same
+  // millisecond can come back in either order.
+  const listed = (await client.getHistory(10)).find((r) => r.id === id);
+  if (listed === undefined) throw new Error('the history lists the round by its real id');
   return { startId: started.id, record: await client.getVerifiableRound(id) };
 }
 
