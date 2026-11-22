@@ -3080,3 +3080,48 @@ What turned out wrong, and how it was caught:
   searching the commits.
 - PLAYTEST listed the strain marks among the graphics taken out, but the
   strain sheen came back later. Caught by reading it against this log.
+
+## 2026-11-21: iPhone: the sheet stays down when a round ends
+
+The user, playing on an iPhone with a screenshot: "after game ends the
+options pop up and the game screen disappears make it so you scroll down
+to see that stuff ... pump and bet have to be in same spot", then "it pops
+out instantly like cant even see pop".
+
+What happened: once the sheet had been swiped up (to set three balloons),
+the end of every later round jumped the sheet up over the balloons. The
+pop was hidden, and Bet was at the top of the sheet instead of in Pump's
+place.
+
+Fix (branch `sheet-stays-down`, styles.css only): on upright screens the
+page does not snap during a round or while auto-play runs
+(`html:has(.controls > .round, .auto-progress[data-running='true'])`
+sets `scroll-snap-type: none`). The page is exactly one screen then, so
+nothing is lost. When the round ends the page stays at sheet down, with
+Bet where Pump was.
+
+Why it happened, as far as I can tell: Safari on an iPhone remembers the
+last resting place a finger left the page in (sheet up) and goes back to
+it whenever the page changes height, and the end of a round makes the
+sheet taller. With snapping off during the round there is nothing to
+remember.
+
+What turned out wrong, and how it was caught:
+- The first fix only took the sheet's own resting place away during a
+  round, on the idea that "sheet up" and "sheet down" are the same place
+  when the round panel exactly fills its room. A test page run in the
+  Mac's own WebKit (a small Swift program around WKWebView, since this Mac
+  has no iPhone simulator) never jumped, with or without that fix, even
+  after a swipe up. So the cause had to be something only the iPhone
+  does, and the fix was changed to switch snapping off for the round.
+
+Checked: web tests (678), typecheck, lint, build. In the Mac's WebKit
+test page, with the fix: the page stays at the top after a round, Bet from
+sheet up ends at the top, and snapping works again after the round (a
+nudge to 300 px rests at sheet up, 400 px).
+
+Not checked: a real iPhone. The jump itself was never reproduced off the
+phone, so the fix is only proven on the phone once it is live. No preview
+server was free (five other chats' servers), so the real game was not run
+at phone size here; the change is one CSS rule that applies only during a
+round.

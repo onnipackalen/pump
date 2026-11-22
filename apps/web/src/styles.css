@@ -281,6 +281,24 @@ body {
     /* Sheet down (the top of the page) or sheet up (its end), nothing between. */
     scroll-snap-type: y mandatory;
   }
+  /*
+   * No snapping during a round or while auto-play runs. The page is then
+   * exactly one screen, so there is nothing to snap to anyway.
+   *
+   * Why: on an iPhone, once the sheet had been swiped up (to change the
+   * bet or the balloons), the end of every round after that jumped the
+   * sheet up over the balloons: so fast the pop couldn't be seen, and Bet
+   * was no longer where Pump had been. Safari seems to remember the last
+   * resting place a finger left the page in, and go back to it when the
+   * page changes height. Seen only on a real iPhone; neither Chrome nor
+   * the Mac's Safari engine did it in a test page. With snapping off for
+   * the round, there is no resting place to remember, and when the round
+   * ends the page stays where it is: sheet down, Bet in Pump's place. The
+   * player swipes up for the rest.
+   */
+  html:has(.controls > .round, .auto-progress[data-running='true']) {
+    scroll-snap-type: none;
+  }
   body,
   #root {
     height: auto;
