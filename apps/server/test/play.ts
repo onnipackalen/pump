@@ -7,7 +7,7 @@ import type {
   RoundView,
   SessionView,
 } from '@pump/contract';
-import { surviveChance, type GameConfig } from '@pump/engine';
+import { surviveChance, type Difficulty, type GameConfig } from '@pump/engine';
 import { drawRoll } from '@pump/engine/fair';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../src/db/database';
@@ -175,6 +175,48 @@ export function clientSeedWhere(wanted: (clientSeed: string) => boolean): string
     if (wanted(clientSeed)) return clientSeed;
   }
   throw new Error('No client seed gives the wanted round');
+}
+
+/*
+ * Ladders for tests that need a ladder of some shape. The config can change
+ * (a difficulty added, the list reordered, a ladder longer or shorter), so
+ * a test asks for the shape it needs: it plays on the first configured
+ * difficulty that has it, and only when none has it on one made here, added
+ * to that test's config. The server refuses to start on a config that fails
+ * its checks, so a made ladder that did not pass them would fail the test.
+ */
+
+/** 24 rungs, 1.01x to 25x. Even the largest bet climbs it all under the cap. */
+export const MADE_LONG: Difficulty = {
+  id: 'made-long',
+  label: 'Made long',
+  ladder: [
+    101, 111, 123, 137, 153, 171, 192, 216, 244, 277, 316, 362, 416, 480, 555, 645, 752, 881,
+    1040, 1230, 1460, 1740, 2080, 2500,
+  ],
+};
+
+/** 5 rungs up to 15,000x. The cap stops the largest bet at rung 3; $1 climbs it all. */
+export const MADE_CAPPED: Difficulty = {
+  id: 'made-capped',
+  label: 'Made capped',
+  ladder: [150, 1000, 10_000, 120_000, 1_500_000],
+};
+
+/**
+ * The first difficulty in `config` that `wanted` is true for, and the config
+ * to play it in: `config` itself, or `config` with `made` added when no
+ * configured difficulty will do.
+ */
+export function withDifficulty(
+  config: GameConfig,
+  wanted: (difficulty: Difficulty) => boolean,
+  made: Difficulty,
+): { readonly config: GameConfig; readonly difficulty: Difficulty } {
+  const found = config.difficulties.find(wanted);
+  if (found) return { config, difficulty: found };
+  if (!wanted(made)) throw new Error(`The made ladder ${made.id} does not have what the test needs`);
+  return { config: { ...config, difficulties: [...config.difficulties, made] }, difficulty: made };
 }
 
 /** The ladder of one difficulty in a config. */
