@@ -11,6 +11,9 @@
  * - 'server': this browser has no copy, so the hash is the server's own
  *   record. A match then only shows the server is consistent with itself.
  * - 'typed': the player changed the field, so the check is against that.
+ *
+ * The client seed and nonce follow the same pattern in copyCheck.ts, which
+ * also has the note for a round this browser has no copy of.
  */
 export type HashSource = 'browser' | 'server' | 'typed';
 
@@ -42,17 +45,6 @@ export function hashVerdict(source: HashSource, matches: boolean): string {
     case 'typed':
       return matches ? '✓ Same as the hash typed above.' : '✗ Not the hash typed above.';
   }
-}
-
-/** Said plainly when this browser has no copy of the hash, or null when it has one. */
-export function noRecordNote(shownHash: string | null): string | null {
-  if (shownHash !== null) return null;
-  return (
-    'This browser has no record of the hash it showed you before this round: the round was ' +
-    'played on another device or in another browser, or this browser’s saved data was cleared. ' +
-    'So the hash checked here is the server’s own record, and this check can’t catch a server ' +
-    'that changed it.'
-  );
 }
 
 /**

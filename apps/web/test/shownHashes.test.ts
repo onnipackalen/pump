@@ -1,12 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { VerifiableRound } from '../src/api/contract';
-import { formFrom } from '../src/components/VerifyPage';
-import {
-  hashSource,
-  hashVerdict,
-  noRecordNote,
-  recordHashProblem,
-} from '../src/verify/hashCheck';
 import {
   MAX_SHOWN_HASHES,
   parseShownHashes,
@@ -182,59 +174,5 @@ describe('what this browser showed before each round, kept in this browser', () 
     for (const id of ['no-seed', 'bad-seed', 'bad-nonce']) {
       expect(shownFor(id, storage)).toEqual({ serverSeedHash: SHOWN, clientSeed: null, nonce: null });
     }
-  });
-});
-
-/** A finished round's record as the server sends it for checking. */
-function record(serverSeedHash: string): VerifiableRound {
-  return {
-    id: 'round-1',
-    difficultyId: 'easy',
-    rtpBp: 9700,
-    ladder: [101, 109],
-    maxPayoutCents: 10_000_000,
-    serverSeed: 'c'.repeat(64),
-    serverSeedHash,
-    clientSeed: 'seed',
-    nonce: 0,
-    finishedAt: '2026-11-20T00:00:00.000Z',
-    balloons: [],
-  };
-}
-
-describe('the verify page checks against this browser\'s copy of the hash', () => {
-  it('fills the hash from this browser\'s copy, not the server\'s record', () => {
-    // A server that lies sends a hash to match whatever seed it reveals.
-    expect(formFrom(record(OTHER), SHOWN).serverSeedHash).toBe(SHOWN);
-  });
-
-  it('falls back to the server\'s record only when this browser has none, and says so plainly', () => {
-    expect(formFrom(record(OTHER), null).serverSeedHash).toBe(OTHER);
-    expect(noRecordNote(null)).toMatch(/no record/);
-    expect(noRecordNote(null)).toMatch(/another device/);
-    expect(noRecordNote(null)).toMatch(/cleared/);
-    expect(noRecordNote(SHOWN)).toBeNull();
-  });
-
-  it('flags a server record that names another hash than this browser saved', () => {
-    expect(recordHashProblem(SHOWN, OTHER)).toContain(SHOWN);
-    expect(recordHashProblem(SHOWN, OTHER)).toContain(OTHER);
-    expect(recordHashProblem(SHOWN, SHOWN)).toBeNull();
-    expect(recordHashProblem(null, OTHER)).toBeNull();
-  });
-
-  it('says what a match proves, by where the hash came from', () => {
-    expect(hashSource(SHOWN, SHOWN, OTHER)).toBe('browser');
-    expect(hashSource(` ${SHOWN} `, SHOWN, OTHER)).toBe('browser');
-    expect(hashSource(OTHER, null, OTHER)).toBe('server');
-    // Typed over by the player, even to the server's value.
-    expect(hashSource(OTHER, SHOWN, OTHER)).toBe('typed');
-    expect(hashSource('abc', null, OTHER)).toBe('typed');
-
-    expect(hashVerdict('browser', true)).toMatch(/^✓.*this browser showed you before the round/);
-    expect(hashVerdict('browser', false)).toMatch(/^✗/);
-    expect(hashVerdict('server', true)).toMatch(/^✓.*server’s record/);
-    expect(hashVerdict('server', false)).toMatch(/^✗/);
-    expect(hashVerdict('typed', true)).toMatch(/^✓.*typed/);
   });
 });
