@@ -16,8 +16,10 @@ What's built:
   (`npm run hammer`) and the verify page.
 - **Where to find the last 10 rounds:** open the settings menu (the gear,
   top right) and scroll to the bottom, to "Last 10 rounds". Each round
-  shows its time, difficulty, spent, paid and net. Once you
-  rotate your server seed, each round gets a Verify button.
+  shows its time, spent, paid and net. Once you
+  rotate your server seed, each round gets a Verify button. The same menu
+  holds "Provably fair" (the server seed hash, your client seed and the
+  Rotate button) and "Check a round" (the verify page).
 - **Keys:** Space pump · Shift+P Patch + Pump · C cash out · A pump all ·
   1–3 pick a balloon · Enter bet · M sound · Esc stop auto-play. Hold Space
   or A to keep pumping. Also listed under Game info in the settings menu.
