@@ -14,6 +14,13 @@ What's built:
   Patch, auto-play, keyboard play, sound, a phone layout, the exact RTP
   check (`npm run rtp`), the simulator (`npm run sim`), the hammer
   (`npm run hammer`) and the verify page.
+- **Where to find the last 10 rounds:** open the settings menu (the gear,
+  top right) and scroll to the bottom, to "Last 10 rounds". Each round
+  shows its time, difficulty, spent, paid and net. Once you
+  rotate your server seed, each round gets a Verify button.
+- **Keys:** Space pump · Shift+P Patch + Pump · C cash out · A pump all ·
+  1–3 pick a balloon · Enter bet · M sound · Esc stop auto-play. Hold Space
+  or A to keep pumping. Also listed under Game info in the settings menu.
 - Extras: a stats page, live stats, public wins, and the after-round reveal
   below.
 - What's still wrong is listed under [Known issues](#known-issues), and
@@ -82,7 +89,8 @@ packages/engine   game rules, ladder config, RTP calculator, simulator
 packages/contract request and response types shared by the server and the web app
 apps/server       HTTP API and SQLite; routes -> services -> repositories
   src/routes/       HTTP only: check the input, find the player, call a service
-  src/services/     wallet, players, seeds, repeated requests
+  src/services/     game (runs the engine), wallet, players, fairness (seeds),
+                    repeated requests, stats, public wins, reconcile
   src/repositories/ the SQL, and nothing else
   src/db/           the schema with its guards, and the transaction helper
   scripts/          npm run hammer
@@ -107,8 +115,8 @@ apps/web          React + Vite frontend
   The verify page runs the same code in the browser.
 - **No `any`.** ESLint treats it as an error. TypeScript is strict in every
   package.
-- **CI** (`.github/workflows/ci.yml`) runs lint, typecheck, every test and
-  the web build on each push.
+- **CI** (`.github/workflows/ci.yml`) runs lint, typecheck, every test, the
+  web build, the exact RTP check (`npm run rtp`) and the hammer on each push.
 
 Read the engine first: `packages/engine/src/PumpEngine.ts` (the order of
 play, with the math in short at the top), then `packages/engine/src/math.ts`
@@ -476,11 +484,13 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
 - `npm run hammer` starts its own server as a separate process on a fresh
   database and has 20 players play at once.
 - First a storm: each player starts a three-balloon round, then every
-  balloon of every player gets 9 different requests (Pump, Patch + Pump,
-  Cash Out), each sent twice with its own key, all in the same moment. The
-  first wave puts 1,080 requests in flight at once; a second does the same
-  for the balloons still in play. Each balloon must have exactly one
-  winner, and each pair of sends the very same answer.
+  balloon of every player gets 9 competing requests, each sent twice with
+  its own key, all in the same moment. The first wave puts 1,080 requests in
+  flight at once; every balloon is still unpumped then, so all of them are
+  Pumps. A second wave does the same for the balloons still in play, and
+  there each balloon gets a mix of Pump, Patch + Pump and Cash Out. Each
+  balloon must have exactly one winner, and each pair of sends the very
+  same answer.
 - Then they play rounds, and every step is a burst sent at the same
   moment: the same key twice, Pump with Cash Out, two Pumps, two Cash Outs,
   four round starts. About 6,500 requests in all.
@@ -514,12 +524,15 @@ All JSON. The exact shapes are TypeScript types in `packages/contract`.
 | `POST /api/fairness/rotate` | Retires the server seed, reveals it, and starts a new one. Refused during a round. |
 
 Every request that changes something needs an `Idempotency-Key` header.
-Errors always look like `{ "error": { "code", "message" } }`:
+Every error the game sends looks like `{ "error": { "code", "message" } }`.
+(A request Node's HTTP parser can't read at all, such as headers over
+16 KB, is refused before it reaches the game, in the web server's own
+shape.)
 
 | Code | Status | Meaning |
 | --- | --- | --- |
 | `invalid_request` | 400 | The request is malformed or breaks a rule. A body the server can't read at all gets this code with the web server's own status instead, such as 413 for a body over 16 KB. |
-| `no_session` | 401 | No player cookie. Only `GET /api/session` starts a player; the screen tells the player to reload. |
+| `no_session` | 401 | No player cookie. Only `GET /api/session` starts a player; the screen then starts a new player by itself and says so. |
 | `insufficient_funds` | 402 | The balance doesn't cover the bets or the Patch. Nothing was charged. |
 | `not_found` | 404 | No such round for this player. |
 | `conflict` | 409 | The balloon isn't in the state the request expected. The body carries the round as it is now. |
@@ -527,6 +540,7 @@ Errors always look like `{ "error": { "code", "message" } }`:
 | `seeds_changed` | 409 | A round start named seeds that are not the player's now. Nothing was charged and no nonce was used. The body carries the seeds as they are now (`fairness`). |
 | `seed_not_revealed` | 409 | The round can't be checked until its server seed is rotated. |
 | `key_reused` | 422 | This idempotency key was already used for a different request. |
+| `internal_error` | 500 | Our bug. The request's transaction was rolled back, so nothing changed. |
 
 ### What the public wins give away
 
@@ -667,8 +681,12 @@ Found in the final check before submitting, and not fixed on `main` yet:
   start is on its way). Its record names the new client seed, but a copy
   this browser kept for its hash and nonce names the old one. The page
   says this can happen without cheating.
-- **`GET /api/session` has no limit.** Every visit without a cookie makes a
-  new player, so a script could fill the database.
+- **No route has a rate limit, and the database only grows.** Every visit
+  without a cookie makes a new player, and every request that changes
+  something keeps its answer for good (refusals too), so a repeat is always
+  answered the same. A script could fill the disk. The fix is a per-player
+  request limit, not deleting stored answers: a deleted answer would let its
+  request run a second time.
 - **The hammer never tries to overspend over HTTP.** That case is tested
   only in `apps/server/test/wallet.test.ts`.
 
