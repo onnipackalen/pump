@@ -476,7 +476,8 @@ export function App() {
               <FairnessPanel
                 fairness={state.fairness}
                 revealed={state.revealed}
-                locked={roundActive || autoRunning}
+                // Also while a start is on its way: the round is bet against the seeds on screen.
+                locked={roundActive || autoRunning || state.starting}
                 onSaveClientSeed={game.setClientSeed}
                 onRotate={game.rotateSeed}
               />
@@ -517,7 +518,7 @@ export function App() {
           config={config}
           rounds={state.history}
           initialRoundId={verifyRoundId}
-          canRotate={!roundActive && !autoRunning && state.phase === 'ready'}
+          canRotate={!roundActive && !autoRunning && !state.starting && state.phase === 'ready'}
           onRotate={game.rotateSeed}
           onBack={closeVerify}
         />

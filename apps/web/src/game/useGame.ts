@@ -28,6 +28,7 @@ import {
 } from './refusal';
 import { pressMs } from './risk';
 import { isOlder } from './roundOrder';
+import { SeedGate } from './seedGate';
 import {
   ensureClientSeed,
   fairnessAfterStart,
@@ -383,11 +384,18 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
   // The seeds on screen now: the server-seed hash, client seed and next
   // nonce a new round is bet against. They are saved for each round, so the
   // verify page can later check the round against what this browser showed
-  // (verify/shownHashes), not against the server's record of it.
+  // (verify/shownHashes), not against the server's record of it. An answer
+  // that changes the seeds also sets it at once, since a start waiting for
+  // that change reads it next; the effect keeps it in step with the rest.
   const shownFairness = useRef<FairnessView | null>(null);
   useEffect(() => {
     shownFairness.current = state.fairness;
   }, [state.fairness]);
+
+  // Keeps a round start and a seed change from being on their way at once,
+  // so a round is never bet against seeds the server has already changed
+  // (see SeedGate).
+  const [seedGate] = useState(() => new SeedGate());
 
   const listenerRef = useRef(listener);
   useEffect(() => {
@@ -599,12 +607,19 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     async (difficultyId: string, betsCents: readonly number[]): Promise<ActionResult | null> => {
       if (inFlight.current.has('start')) return null;
       inFlight.current.add('start');
-      // The seeds on screen as the bet goes out: the ones this round is bet
-      // against. Read now, before anything is sent, and saved with the round.
-      const before = shownFairness.current;
       setState((s) => ({ ...s, starting: true, notice: null }));
       try {
-        const result = await startRoundShown(client, { difficultyId, betsCents }, before);
+        // A client seed save or a rotate still on its way goes first (see
+        // SeedGate). Then the seeds on screen as the bet goes out, the ones
+        // this round is bet against, are read and saved with the round.
+        const result = await seedGate.start(() =>
+          startRoundShown(client, { difficultyId, betsCents }, shownFairness.current),
+        );
+        if (result === null) {
+          // That seed change failed, and its notice says why.
+          setState((s) => ({ ...s, starting: false }));
+          return null;
+        }
         // The round used the next nonce of these seeds: the panel moves on.
         // The ref moves on too, at once, so a round started before the
         // screen has drawn this one (auto-play) saves the new nonce.
@@ -635,7 +650,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         inFlight.current.delete('start');
       }
     },
-    [client, emit, handleFailure],
+    [client, emit, handleFailure, seedGate],
   );
 
   const pumpAction = useCallback(
@@ -849,28 +864,35 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     [round, waitingShown],
   );
 
+  // Seed changes go through the gate: none while a round start is on its
+  // way, one at a time, and a start waits for one on its way (see SeedGate).
   const setClientSeed = useCallback(
     async (clientSeed: string): Promise<boolean> => {
-      try {
-        const fairness = await send((key) => client.setClientSeed(clientSeed, key));
-        setState((s) => ({
-          ...s,
-          fairness,
-          notice: { tone: 'info', text: 'Client seed saved.' },
-        }));
-        return true;
-      } catch (error) {
-        handleFailure(error, null);
-        return false;
-      }
+      const change = seedGate.changeSeeds(async () => {
+        try {
+          const fairness = await send((key) => client.setClientSeed(clientSeed, key));
+          shownFairness.current = fairness;
+          setState((s) => ({
+            ...s,
+            fairness,
+            notice: { tone: 'info', text: 'Client seed saved.' },
+          }));
+          return true;
+        } catch (error) {
+          handleFailure(error, null);
+          return false;
+        }
+      });
+      return change ?? false;
     },
-    [client, handleFailure],
+    [client, handleFailure, seedGate],
   );
 
   const rotateSeed = useCallback(() => {
-    void (async () => {
+    void seedGate.changeSeeds(async () => {
       try {
         const result = await send((key) => client.rotateSeed(key));
+        shownFairness.current = result.fairness;
         setState((s) => ({
           ...s,
           fairness: result.fairness,
@@ -879,11 +901,13 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         }));
         // Rounds on the old seed can be verified now.
         void refreshHistory();
+        return true;
       } catch (error) {
         handleFailure(error, null);
+        return false;
       }
-    })();
-  }, [client, handleFailure, refreshHistory]);
+    });
+  }, [client, handleFailure, refreshHistory, seedGate]);
 
   const dismissNotice = useCallback(() => {
     setState((s) => ({ ...s, notice: null }));

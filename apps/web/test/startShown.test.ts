@@ -341,7 +341,11 @@ describe('every way a round starts goes through the saving start', () => {
     const callers = files(SRC).filter((file) => /\bclient\.startRound\(/.test(readFileSync(file, 'utf8')));
     expect(callers.map((file) => file.slice(SRC.length))).toEqual(['game/session.ts']);
     const game = readFileSync(join(SRC, 'game/useGame.ts'), 'utf8');
-    expect(game).toMatch(/startRoundShown\(client, \{ difficultyId, betsCents \}, before\)/);
+    // Through the seed gate, with the seeds on screen read once any seed
+    // change on its way is done.
+    expect(game).toMatch(
+      /seedGate\.start\(\(\) =>\s+startRoundShown\(client, \{ difficultyId, betsCents \}, shownFairness\.current\)/,
+    );
     expect(game).toMatch(/startRound: startRoundAction/);
     const autoPlay = readFileSync(join(SRC, 'game/useAutoPlay.ts'), 'utf8');
     expect(autoPlay).toMatch(/actions\.startRound\(/);
