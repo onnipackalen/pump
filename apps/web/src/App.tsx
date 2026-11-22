@@ -32,6 +32,8 @@ import {
 import { market } from './market';
 import { formatCents, formatElapsed, formatSignedCents, parseDollarsToCents } from './money';
 import { useMotionSetting } from './motion';
+import { useBackgroundSetting } from './background';
+import { BackgroundPicker } from './components/BackgroundPicker';
 import { flowsOnChange, useStageFlow } from './stageFlow';
 import './flow.css';
 import { shownReveals } from './verify/shownReveals';
@@ -131,6 +133,7 @@ export function App() {
   const [view, setView] = useState<View>(viewFromHash);
   const [verifyRoundId, setVerifyRoundId] = useState<string | null>(null);
   const motion = useMotionSetting();
+  const scene = useBackgroundSetting();
   // A new number of balloons or difficulty glides into place (stageFlow.ts).
   const slotsRef = useRef<HTMLDivElement>(null);
   const goneRef = useRef<HTMLDivElement>(null);
@@ -471,6 +474,7 @@ export function App() {
                 {motion.animationsOn ? 'On' : 'Off'}
               </button>
             </div>
+            <BackgroundPicker value={scene.background} onChange={scene.choose} />
             <PrivateWinsRow client={gameClient} open={settingsOpen} />
             {state.fairness && (
               <FairnessPanel
