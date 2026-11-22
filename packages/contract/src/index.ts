@@ -25,7 +25,8 @@
  *   GET  /api/history?limit=10&before=:roundId -> HistoryResponse
  *        The player's finished rounds, newest first, a page at a time.
  *        before (optional) is the id of one of their finished rounds: the
- *        page then starts right after it. Any other id: 404 "not_found".
+ *        page then starts right after it. Not shaped like a round id: 400
+ *        "invalid_request". Any other id: 404 "not_found".
  *   GET  /api/stats                       -> PlayerStats
  *        The player's results over every round they have finished.
  *   GET  /api/settings                    -> PlayerSettings
