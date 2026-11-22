@@ -3185,3 +3185,24 @@ went live.
 
 Checked afterwards by the user on their iPhone, in Safari: with the sheet
 swiped up and a round played to its end, "It stays down".
+
+The independent review of what 8bb3204 shipped (two reviewers, each finding
+checked by a skeptic) found nothing that should have held the deploy. Four
+minor notes, all confirmed:
+- No test locked the new snap-off rule. Added one next to the handle test
+  in apps/web/test/betPumpSpot.test.ts; it fails with the rule taken out.
+- Older code, not changed here: during a round the public wins are allowed
+  back (the "whole sheet fits" clause in wins/sheetFirst.ts is true while
+  the round panel fills the screen), so when the round ends they join the
+  page at once and leave 120 ms later, or later still if a finger is down.
+  Nothing moves with the page at its top, but in that window a quick flick
+  could fly past sheet up to the wins. Possible fix: keep the wins waiting
+  while a round or auto-play is on. Not done.
+- Sounds (7ddc187, the audio chat's): the DynamicsCompressor in
+  SoundBoard.ts never reaches its threshold, but its built-in makeup gain
+  still lifts every cue by about 4 dB, so cues play louder than the levels
+  the "better sounds" entry measured. Their order is kept (the pop is still
+  the quietest). Not changed.
+- Sounds: one big-win sparkle partial is set to 23,949 Hz, above what a
+  44.1 kHz device can play; browsers clamp it, Chrome warns in the console.
+  Harmless. Not changed.
