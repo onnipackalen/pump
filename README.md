@@ -16,7 +16,9 @@ What's built:
   (`npm run hammer`) and the verify page.
 - Extras: a stats page, live stats, public wins, and the after-round reveal
   below.
-- What's still wrong is listed under [Known issues](#known-issues).
+- What's still wrong is listed under [Known issues](#known-issues), and
+  what we'd like to solve next under
+  [Problems we'd like to solve](#problems-wed-like-to-solve).
 
 ## The fun part: where it would have popped
 
@@ -594,6 +596,56 @@ Found in the final check before submitting, and not fixed on `main` yet:
   new player, so a script could fill the database.
 - **The hammer never tries to overspend over HTTP.** That case is tested
   only in `apps/server/test/wallet.test.ts`.
+
+## Problems we'd like to solve
+
+These aren't bugs: the game does what its rules say. They are places where
+the rules cost a player more than we'd like.
+
+### Cent rounding on small amounts
+
+Money is whole cents, and rounding always goes the house's way (see
+[Rounding](#rounding-which-way-and-why)). On a small amount, one cent is a
+big share.
+
+- **Patches.** A Patch worth about 1 cent can't cost 1.03 cents, so it
+  costs 2 and pays back about half. The worst at 94% is 48.18% (Easy,
+  $0.13 bet, pump 2: worth 0.96 cents, priced 2 cents); at 97% and 99% it
+  is 49.88%. At 97% on Easy, rounding costs more than one point on 28 of
+  the 31 Patches of a $0.10 bet, and on 14 of 31 at $1. At $10 every
+  Patch is within one point.
+- **Cash-outs.** A payout rounds down, so a small bet can lose almost a
+  cent. The worst at 97% is 88.99% (Easy, $0.10 bet, rung 2: 10.9 cents
+  paid as 10); at 94% it is 86.24%. From a $1 bet the loss is under one
+  point, and a whole-dollar bet is always exact.
+
+`npm run rtp` prints the worst case for each ladder at whatever RTP is set.
+
+Ways to solve it, the first being our choice:
+
+1. **Don't sell a Patch that rounding spoils.** Offer a Patch only when its
+   rounded price still returns within one point of the RTP (96% or more at
+   97%). It is a whole-number check with no draw, and every Patch sold
+   would then be close to the RTP. Cost: small bets lose most early
+   Patches, and it changes the rule that a Patch is sold on every pump from
+   the second, so the engine, the Patch button, `npm run rtp` and the tests
+   change together.
+2. **Keep the lost part of each cent.** Give each player a "rounding jar":
+   what a payout's rounding keeps goes into it, and each time it reaches a
+   whole cent, that cent is paid as its own ledger row. Over many rounds the
+   player then gets exactly the RTP back, still with no draw. A cash-out
+   only ever drops whole hundredths of a cent, so the jar is a whole
+   number too. Cost: a new kind of ledger row and a second number per
+   player, and a round's payout no longer shows all the player got back.
+   Patch prices drop awkward fractions, so this suits cash-outs best.
+3. **Bets in 10-cent steps, multipliers to one decimal place** (1.1x, 1.2x,
+   ...). Then every cash-out is a whole number of cents at every bet, so
+   payouts are exact. Cost: all four ladders change (Easy loses its 1.01x
+   first step) and Patch prices still round.
+
+Already turned down: rounding at random (see
+[Rounding](#rounding-which-way-and-why)), and a bigger smallest bet,
+because the brief sets it at $0.10.
 
 ## With more time
 
