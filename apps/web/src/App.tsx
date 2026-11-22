@@ -517,6 +517,7 @@ export function App() {
           client={gameClient}
           config={config}
           rounds={state.history}
+          revealedSeedHashes={state.revealed.map((seed) => seed.serverSeedHash)}
           initialRoundId={verifyRoundId}
           canRotate={!roundActive && !autoRunning && !state.starting && state.phase === 'ready'}
           onRotate={game.rotateSeed}

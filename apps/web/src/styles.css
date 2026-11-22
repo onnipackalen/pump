@@ -1775,6 +1775,27 @@ th {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
+.verify-round {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* As much of the id as fits. The whole id is there: one click selects it to copy. */
+.verify-rounds .verify-round-id {
+  overflow: hidden;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
+.verify-older {
+  margin-top: 8px;
+}
+
 .verify-rotate {
   display: grid;
   justify-items: start;
