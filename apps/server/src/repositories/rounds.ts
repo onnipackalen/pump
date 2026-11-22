@@ -95,6 +95,12 @@ export interface StoredRound {
   readonly reveals: readonly (CashOutReveal | null)[];
 }
 
+/** A round left idle, and whose it is. */
+export interface IdleRound {
+  readonly roundId: string;
+  readonly playerId: string;
+}
+
 /** How a recorded action ended. The last two are cash-outs. */
 export type ActionOutcome = PumpOutcome | 'cashed' | 'abandoned';
 
@@ -339,9 +345,10 @@ export function roundsRepository(db: Db) {
     UNION ALL
     ${publicWinsList('luckiest', 'top_hundredths DESC')}
   `);
+  // Oldest first. The id breaks ties, so the order is the same every time.
   const selectExpired = db.prepare(`
-    SELECT id FROM rounds WHERE status = 'active' AND last_action_at <= :cutoff
-    ORDER BY last_action_at
+    SELECT id, player_id FROM rounds WHERE status = 'active' AND last_action_at <= :cutoff
+    ORDER BY last_action_at, id
   `);
   const insertRound = db.prepare(`
     INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
@@ -507,9 +514,11 @@ export function roundsRepository(db: Db) {
       return { recent: cut('recent'), biggest: cut('biggest'), luckiest: cut('luckiest') };
     },
 
-    /** Rounds still in progress that nobody has touched since `cutoff`. */
-    idleSince(cutoff: string): string[] {
-      return selectExpired.all({ cutoff }).map((row) => text(row, 'id'));
+    /** Rounds still in progress that nobody has touched since `cutoff`, oldest first. */
+    idleSince(cutoff: string): IdleRound[] {
+      return selectExpired
+        .all({ cutoff })
+        .map((row) => ({ roundId: text(row, 'id'), playerId: text(row, 'player_id') }));
     },
 
     /**

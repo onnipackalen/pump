@@ -89,6 +89,23 @@ export function toRoundView(stored: StoredRound): RoundView {
 export type GameService = ReturnType<typeof gameService>;
 
 /**
+ * A round the sweep could not settle, with what went wrong. Its transaction
+ * was rolled back whole, so it is still active, exactly as it was, and the
+ * next sweep tries it again.
+ */
+export interface SweepFailure {
+  readonly roundId: string;
+  readonly playerId: string;
+  readonly error: unknown;
+}
+
+/** What one sweep did: how many rounds it settled, and which it could not. */
+export interface SweepResult {
+  readonly settled: number;
+  readonly failed: readonly SweepFailure[];
+}
+
+/**
  * Playing a round. The rules are the engine's: this service loads the round,
  * asks the engine what a request does, and then stores exactly what the engine
  * answered, with a ledger row for every cent that moved.
@@ -242,12 +259,13 @@ export function gameService(
   /**
    * Settles one idle round: cash out what was pumped, refund what was not.
    * That ends the round, so its reveals are made last (see finish), in this
-   * same transaction.
+   * same transaction. Returns false, changing nothing, if the round is not
+   * active any more.
    */
-  function settle(roundId: string): void {
+  function settle(roundId: string): boolean {
     assertInTransaction(runtime.db);
     const stored = rounds.find(roundId);
-    if (stored?.status !== 'active') return;
+    if (stored?.status !== 'active') return false;
     const at = runtime.now().toISOString();
     const result = settleAbandoned(stored.round);
     for (const settled of result.settled) {
@@ -274,6 +292,7 @@ export function gameService(
       }
     }
     finish(stored, result.round, at);
+    return true;
   }
 
   function idleCutoff(): string {
@@ -522,15 +541,32 @@ export function gameService(
       return true;
     },
 
-    /** The same rule for everyone, run now and then, for players who never come back. */
-    sweepAbandoned(): number {
-      const idle = rounds.idleSince(idleCutoff());
-      for (const roundId of idle) {
-        immediate(runtime.db, () => {
-          settle(roundId);
-        });
+    /**
+     * The same rule for everyone, run now and then, for players who never
+     * come back.
+     *
+     * Each round is settled in its own transaction. If one round throws, its
+     * transaction is rolled back whole (no ledger row, no balance change, no
+     * balloon or reveal saved), it stays active, and the sweep goes on with
+     * the next round. Without this, one bad round would stop every round
+     * after it, and since the oldest round comes first, it would stop them
+     * on every sweep.
+     *
+     * The error is not hidden: every round that failed comes back in
+     * `failed`, with its error, for the caller to log. It is never counted
+     * as settled.
+     */
+    sweepAbandoned(): SweepResult {
+      let settled = 0;
+      const failed: SweepFailure[] = [];
+      for (const { roundId, playerId } of rounds.idleSince(idleCutoff())) {
+        try {
+          if (immediate(runtime.db, () => settle(roundId))) settled += 1;
+        } catch (error) {
+          failed.push({ roundId, playerId, error });
+        }
       }
-      return idle.length;
+      return { settled, failed };
     },
   };
 }

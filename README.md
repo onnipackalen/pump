@@ -386,6 +386,12 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
 - Why this rule: forfeiting the bets is unfair to a player whose connection
   dropped, and leaving rounds open for ever means the player could never
   start another.
+- Each round is settled in its own transaction. If one can't be settled,
+  none of it is saved and it stays as it was. The sweep logs it as an error
+  with its round and player, still settles every other round, and tries
+  that one again next time.
+- Until that round settles, the player's own requests get a plain 500
+  error, logged without the round or player.
 
 ### The hammer
 
@@ -548,8 +554,6 @@ Found in the final check before submitting, and not fixed on `main` yet:
   colour for every difficulty, one web test assumes every ladder has at
   least 10 rungs, and one fairness test expects a "reveal to the top" in a
   short random sample. Being fixed.
-- **One bad round can stop the 24-hour sweep.** If one abandoned round
-  fails to settle, the sweep stops for every round after it. Being fixed.
 - **`GET /api/session` has no limit.** Every visit without a cookie makes a
   new player, so a script could fill the database.
 - **The hammer never tries to overspend over HTTP.** That case is tested
