@@ -13,10 +13,11 @@
  * How a run is judged. Nothing is measured against the engine itself: every
  * yardstick comes from the rules worked out apart from it (cli/rules.ts).
  *
- * 1. Exactly, with no luck in it. Every draw must use the rules' chance for
- *    that pump, every outcome must follow from the roll, and every payout,
- *    Patch charge and top rung must be the rules' number to the cent. One
- *    mismatch in millions is a FAIL.
+ * 1. Exactly, with no luck in it. Every pump must make one draw, at the
+ *    rules' chance for that pump, and keep the roll it was handed. Every
+ *    outcome must follow from that roll, and every payout, Patch charge and
+ *    top rung must be the rules' number to the cent. One mismatch in
+ *    millions is a FAIL.
  * 2. By counting. Luck moves a simulated RTP, and it moves it a lot on
  *    ladders with rare huge prizes. So the result is compared with the exact
  *    RTP of the way the simulator plays, cent rounding included. Each pump's
@@ -193,6 +194,7 @@ function judge(
   if (!stats.exact) {
     console.log(
       `                 not so: ${count(mismatches.chances)} chances, ` +
+        `${count(mismatches.rolls)} rolls, ` +
         `${count(mismatches.outcomes)} outcomes, ${count(mismatches.payouts)} payouts, ` +
         `${count(mismatches.patchPrices)} Patch charges, ${count(mismatches.topRungs)} top rungs`,
     );

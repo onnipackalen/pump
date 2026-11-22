@@ -8,10 +8,11 @@
  * The engine is never asked what the right answer is. Every yardstick comes
  * from the rules worked out apart from it (cli/rules.ts):
  *
- *   - Exact checks, with no luck in them. Every draw must use the chance the
- *     rules give for that pump. Every outcome must follow from the roll.
- *     Every payout, every Patch charge and every top rung must be the rules'
- *     number to the cent. One mismatch is a failure.
+ *   - Exact checks, with no luck in them. Every pump must make one draw, at
+ *     the chance the rules give for that pump, and keep the roll it was
+ *     handed. Every outcome must follow from that roll. Every payout, every
+ *     Patch charge and every top rung must be the rules' number to the cent.
+ *     One mismatch is a failure.
  *   - Counts, where luck plays a part. The simulated RTP is compared with the
  *     exact RTP of the way the simulator plays, and each pump's survival
  *     count with its exact chance, both taken from the rules. PASS_MARK
@@ -135,6 +136,11 @@ export interface BiggestWin {
 export interface Mismatches {
   /** Draws made with a chance that is not the rules' chance for that pump. */
   chances: number;
+  /**
+   * Pumps that did not make exactly one draw at the rules' den, or whose
+   * record of the draw is not the den and roll they were handed.
+   */
+  rolls: number;
   /** Pumps whose outcome or new state did not follow from the roll. */
   outcomes: number;
   /** Payouts that are not bet x multiplier rounded down. */
@@ -239,10 +245,22 @@ export function simulate(
     }
     return table;
   };
-  const draw = (den: number): number => rng.below(den);
+  // Each pump's draws are watched: how many it makes, the den it asks for and
+  // the roll it is handed. The engine's own record of the draw is held up
+  // against these, so it cannot play a roll other than the one it was given.
+  let drawsMade = 0;
+  let denAsked = 0;
+  let rollHanded = 0;
+  const draw = (den: number): number => {
+    drawsMade += 1;
+    denAsked = den;
+    rollHanded = rng.below(den);
+    return rollHanded;
+  };
 
   const mismatches: Mismatches = {
     chances: 0,
+    rolls: 0,
     outcomes: 0,
     payouts: 0,
     patchPrices: 0,
@@ -250,7 +268,7 @@ export function simulate(
     first: '',
   };
   const mismatch = (
-    kind: 'chances' | 'outcomes' | 'payouts' | 'patchPrices' | 'topRungs',
+    kind: 'chances' | 'rolls' | 'outcomes' | 'payouts' | 'patchPrices' | 'topRungs',
     what: () => string,
   ): void => {
     mismatches[kind] += 1;
@@ -330,6 +348,7 @@ export function simulate(
         const pumpNumber = balloon.rung + 1;
         const patch =
           balloon.rung >= 1 && (play.patchOneIn === 1 || rng.below(play.patchOneIn) === 0);
+        drawsMade = 0;
         const result = engine.pump(
           round,
           {
@@ -351,6 +370,26 @@ export function simulate(
               `pump ${String(pumpNumber)} was drawn at ` +
               `${String(result.draw.num)}/${String(result.draw.den)}, ` +
               `the rules give ${String(num)}/${String(den)}`,
+          );
+        }
+        // The pump must make one draw, at the rules' den, and its record must
+        // hold the roll it was handed. Then the outcome below, which follows
+        // the record, follows that roll too.
+        if (
+          drawsMade !== 1 ||
+          denAsked !== den ||
+          result.draw.den !== denAsked ||
+          result.draw.roll !== rollHanded
+        ) {
+          mismatch('rolls', () =>
+            drawsMade !== 1
+              ? `pump ${String(pumpNumber)} made ${String(drawsMade)} draws, the rules give 1`
+              : denAsked !== den
+                ? `pump ${String(pumpNumber)} asked for a roll below ${String(denAsked)}, ` +
+                  `the rules give ${String(den)}`
+                : `pump ${String(pumpNumber)} recorded roll ${String(result.draw.roll)} below ` +
+                  `${String(result.draw.den)}, it was handed ${String(rollHanded)} below ` +
+                  String(denAsked),
           );
         }
         // The outcome must follow from the roll, the Patch and the top rung.
@@ -555,7 +594,7 @@ export function report(
 
   const mean = result.sumRatio / result.rounds;
   const volatility = Math.sqrt(Math.max(result.sumRatioSq / result.rounds - mean * mean, 0));
-  const { chances, outcomes, payouts, patchPrices, topRungs } = result.mismatches;
+  const { chances, rolls, outcomes, payouts, patchPrices, topRungs } = result.mismatches;
   return {
     rtp,
     expectedRtp,
@@ -568,6 +607,6 @@ export function report(
     pumpOneRtp,
     pumpOneError,
     pumpOneZ,
-    exact: chances + outcomes + payouts + patchPrices + topRungs === 0,
+    exact: chances + rolls + outcomes + payouts + patchPrices + topRungs === 0,
   };
 }
