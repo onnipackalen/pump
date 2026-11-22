@@ -549,9 +549,17 @@ export function App() {
             {state.notice && (
               <div className={`notice notice-${state.notice.tone}`} role="status">
                 <span>{state.notice.text}</span>
-                <button type="button" className="btn btn-small" onClick={game.dismissNotice}>
-                  OK
-                </button>
+                {/* The first load failed: nothing works until it loads, so
+                    the notice offers to load again instead of OK. */}
+                {state.phase === 'failed' ? (
+                  <button type="button" className="btn btn-small" onClick={game.retryLoad}>
+                    Try again
+                  </button>
+                ) : (
+                  <button type="button" className="btn btn-small" onClick={game.dismissNotice}>
+                    OK
+                  </button>
+                )}
               </div>
             )}
             {stage?.status === 'finished' && <RoundResult round={stage} />}

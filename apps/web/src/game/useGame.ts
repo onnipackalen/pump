@@ -184,6 +184,11 @@ export interface Game {
   readonly saveClientSeed: (clientSeed: string) => Promise<SeedSave>;
   readonly rotateSeed: () => void;
   readonly dismissNotice: () => void;
+  /**
+   * After a first load that failed: loads the session again. Does nothing
+   * once a load has worked.
+   */
+  readonly retryLoad: () => void;
 }
 
 /*
@@ -476,6 +481,10 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
   }, [client]);
 
   // Load the session once. If a round was in progress, this restores it.
+  // If the load fails, the notice offers to try again: each try counts up
+  // loadTry, which runs this again.
+  const [loadTry, setLoadTry] = useState(0);
+  const loadFailed = useRef(false);
   useEffect(() => {
     let cancelled = false;
     openGame(client).then(
@@ -486,6 +495,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
       },
       (error: unknown) => {
         if (cancelled) return;
+        loadFailed.current = true;
         setState((s) => ({
           ...s,
           phase: 'failed',
@@ -496,7 +506,14 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     return () => {
       cancelled = true;
     };
-  }, [client]);
+  }, [client, loadTry]);
+
+  const retryLoad = useCallback(() => {
+    if (!loadFailed.current) return;
+    loadFailed.current = false;
+    setState((s) => ({ ...s, phase: 'loading', notice: null }));
+    setLoadTry((n) => n + 1);
+  }, []);
 
   /** Takes in a server answer for the round and wallet, unless the screen already has newer. */
   const apply = useCallback(
@@ -995,5 +1012,6 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     saveClientSeed,
     rotateSeed,
     dismissNotice,
+    retryLoad,
   };
 }
