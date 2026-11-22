@@ -107,6 +107,27 @@ export function proveRungs(rtpBp: number, ladder: readonly number[]): readonly R
   return rows;
 }
 
+/**
+ * The engine functions scanBets checks. They are passed in so that a test
+ * can hand it an engine that is wrong on purpose and see that it is caught.
+ */
+export interface MathPort {
+  readonly surviveChance: typeof surviveChance;
+  readonly popChance: typeof popChance;
+  readonly cashOutCents: typeof cashOutCents;
+  readonly patchPriceCents: typeof patchPriceCents;
+  readonly topRungForBet: typeof topRungForBet;
+}
+
+/** The real engine. */
+export const REAL_MATH: MathPort = {
+  surviveChance,
+  popChance,
+  cashOutCents,
+  patchPriceCents,
+  topRungForBet,
+};
+
 /** The lowest return found, and where. */
 export interface Worst {
   /** The return, as a fraction of the money paid: 0.9099... for 90.99%. */
@@ -156,6 +177,7 @@ export function scanBets(
   ladder: readonly number[],
   limits: Limits,
   bets: Iterable<number>,
+  engine: MathPort = REAL_MATH,
 ): BetScan {
   const rtp = BigInt(rtpBp);
   // Per pump k >= 2, the exact price is betCents * priceTop[k] / priceBottom[k].
@@ -175,11 +197,11 @@ export function scanBets(
   const popBottom: bigint[] = [];
   let reach = ONE;
   for (let k = 1; k <= ladder.length; k += 1) {
-    const survive = surviveChance(rtpBp, ladder, k);
+    const survive = engine.surviveChance(rtpBp, ladder, k);
     reach = mul(reach, fr(survive.num, survive.den));
     reachTop[k] = reach.n;
     reachBottom[k] = reach.d;
-    const pop = popChance(rtpBp, ladder, k);
+    const pop = engine.popChance(rtpBp, ladder, k);
     popTop[k] = BigInt(pop.num);
     popBottom[k] = BigInt(pop.den);
   }
@@ -207,12 +229,12 @@ export function scanBets(
     betCount += 1;
     // The rungs to check are the ones the rules allow, not the ones the engine says.
     const top = ruleTopRung(ladder, bet, limits.maxPayoutCents);
-    if (topRungForBet(ladder, bet, limits.maxPayoutCents) !== top) topRungsRight = false;
+    if (engine.topRungForBet(ladder, bet, limits.maxPayoutCents) !== top) topRungsRight = false;
     const betBig = BigInt(bet);
     for (let rung = 1; rung <= top; rung += 1) {
       cashOuts += 1;
       const worth = bet * multiplierAt(ladder, rung); // in hundredths of a cent
-      const payout = cashOutCents(bet, ladder, rung);
+      const payout = engine.cashOutCents(bet, ladder, rung);
       const lost = worth - payout * 100;
       if (lost < 0 || lost >= 100) payoutsRoundDown = false;
       if (bet % 100 === 0 && lost !== 0) wholeDollarsExact = false;
@@ -231,7 +253,7 @@ export function scanBets(
       patches += 1;
       const exactTop = BigInt(bet) * (priceTop[rung] ?? 0n);
       const bottom = priceBottom[rung] ?? 1n;
-      const price = BigInt(patchPriceCents(rtpBp, ladder, bet, rung));
+      const price = BigInt(engine.patchPriceCents(rtpBp, ladder, bet, rung));
       // price - 1 < exact <= price
       if (!(price * bottom >= exactTop && (price - 1n) * bottom < exactTop)) pricesRoundUp = false;
       // pop chance x (bet x m_(k-1)) / price <= rtpBp / 10000, without dividing.
