@@ -16,7 +16,7 @@ import type { BalloonView, RoundView } from '../src/api/contract';
 import { DemoClient } from '../src/demo/DemoClient';
 import { afterRoundLine } from '../src/game/afterRound';
 import { formatMultiplier } from '../src/money';
-import { configWith, difficultyWithRungs, MADE_LONG } from './fixtures';
+import { climbsAll, configWith, MADE_LONG, surestStart } from './fixtures';
 
 vi.mock('@pump/engine/fair', async (importOriginal) => {
   const actual = await importOriginal<typeof Fair>();
@@ -120,8 +120,11 @@ describe.each(RTPS)('the demo at RTP %i', (rtpBp) => {
   });
 
   it('makes no reveal draw for a refused request, and a repeat gets the same answer', async () => {
-    // A ladder where a $1 balloon is still in play after one pump.
-    const difficulty = difficultyWithRungs(2);
+    // A ladder where a $1 balloon is still in play after one pump, and pump
+    // 1 survives at least half the time (Easy, as shipped). Both balloons
+    // then get past pump 1 at least a quarter of the time, so 1000 tries
+    // miss with a chance of about 1 in 10^125, whatever ladder comes first.
+    const difficulty = surestStart(rtpBp, (d) => d.ladder.length >= 2 && climbsAll(d.ladder, 100));
     const client = await newClient(configWith(difficulty, config));
     const difficultyId = difficulty.id;
 
