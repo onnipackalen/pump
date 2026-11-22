@@ -136,10 +136,10 @@ describe('a round left alone for 24 hours', () => {
     const other = await Seat.join(world.app);
     await other.start('easy', [2500]);
 
-    expect(world.services.game.sweepAbandoned()).toBe(0);
+    expect(world.services.game.sweepAbandoned()).toEqual({ settled: 0, failed: [] });
     world.runtime.advance(ABANDONED_AFTER_MS);
-    expect(world.services.game.sweepAbandoned()).toBe(2);
-    expect(world.services.game.sweepAbandoned()).toBe(0);
+    expect(world.services.game.sweepAbandoned()).toEqual({ settled: 2, failed: [] });
+    expect(world.services.game.sweepAbandoned()).toEqual({ settled: 0, failed: [] });
 
     expect(count(world.db, "rounds WHERE status = 'active'")).toBe(0);
     expect((await seat.session()).body.wallet.balanceCents).toBe(START - 3000 + 1010 + 2000);

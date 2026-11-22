@@ -314,7 +314,7 @@ describe.each(RTPS)('reveals at RTP %i', (rtpBp) => {
     expect(count(world.db, 'balloon_reveals')).toBe(0);
     world.runtime.advance(ABANDONED_AFTER_MS);
 
-    expect(world.services.game.sweepAbandoned()).toBe(1);
+    expect(world.services.game.sweepAbandoned()).toEqual({ settled: 1, failed: [] });
 
     const stored = roundsRepository(world.db).find(round.id);
     expect(stored?.status).toBe('finished');
