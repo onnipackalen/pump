@@ -2,7 +2,9 @@ import type { HistoryResponse, VerifiableRound } from '@pump/contract';
 import { GAME_CONFIG, replayBalloon, type Difficulty, type GameConfig, type Round } from '@pump/engine';
 import { drawRoll } from '@pump/engine/fair';
 import { describe, expect, it } from 'vitest';
+import { text } from '../src/db/rows';
 import { ledgerRepository } from '../src/repositories/ledger';
+import { roundsRepository } from '../src/repositories/rounds';
 import { reconcile } from '../src/services/reconcile';
 import { ABANDONED_AFTER_MS } from '../src/settings';
 import { count, onlyPlayerId, testWorld, type TestWorld } from './helpers';
@@ -165,6 +167,160 @@ describe('a round left alone for 24 hours', () => {
       refundedCents: 2000,
     });
   });
+});
+
+describe('the sweep, when one round cannot be settled', () => {
+  /**
+   * A new player with a round of two $10 balloons: balloon 0 pumped once
+   * (it survives, so the 24-hour rule pays it and makes a reveal), balloon 1
+   * never pumped (so it is refunded).
+   */
+  async function idleRound(world: TestWorld): Promise<{ roundId: string; playerId: string }> {
+    const seat = await Seat.join(world.app, null);
+    const { serverSeedHash } = (await seat.session()).body.fairness;
+    const seedRow = world.db
+      .prepare('SELECT seed FROM server_seeds WHERE seed_hash = ?')
+      .get(serverSeedHash);
+    if (!seedRow) throw new Error('The player has no seed');
+    const foretold = {
+      serverSeed: text(seedRow, 'seed'),
+      nonce: 0,
+      rtpBp: CONFIG.rtpBp,
+      ladder: ladderOf(CONFIG, 'tiny'),
+    };
+    await seat.setClientSeed(
+      clientSeedWhere((clientSeed) => willSurvive({ ...foretold, clientSeed }, 0, 0, 1)),
+    );
+    const round = (await seat.start('tiny', [1000, 1000])).body.round;
+    expect((await seat.pump(round, 0)).body.outcome).toBe('survived');
+    const playerId = roundsRepository(world.db).find(round.id)?.playerId;
+    if (playerId === undefined) throw new Error('The round was not stored');
+    return { roundId: round.id, playerId };
+  }
+
+  /** Everything the sweep could change for one round and its player. */
+  function stateOf(world: TestWorld, roundId: string, playerId: string) {
+    const rounds = roundsRepository(world.db);
+    const ledger = ledgerRepository(world.db);
+    return {
+      round: rounds.find(roundId),
+      actions: rounds.actionsOf(roundId),
+      ledger: ledger.entriesOf(playerId),
+      balanceCents: ledger.balanceOf(playerId),
+    };
+  }
+
+  /** True when every player's balance is the sum of their ledger rows. */
+  function everyBalanceMatchesItsLedger(world: TestWorld): boolean {
+    const off = count(
+      world.db,
+      `players p WHERE p.balance_cents <>
+         (SELECT COALESCE(SUM(l.amount_cents), 0) FROM ledger l WHERE l.player_id = p.id)`,
+    );
+    return off === 0;
+  }
+
+  // The fault is a database rule that refuses one write for this one round,
+  // the way the schema's own guards refuse a bad write. Each is later in the
+  // settle than the one before, so more has been written when it fires, and
+  // all of it must be rolled back.
+  const FAULTS = [
+    {
+      when: 'paying the pumped balloon',
+      trigger: (roundId: string) => `
+        CREATE TRIGGER test_fault BEFORE INSERT ON ledger
+        WHEN NEW.round_id = '${roundId}' AND NEW.kind = 'payout'
+        BEGIN SELECT RAISE(ABORT, 'test fault: no payout for this round'); END`,
+    },
+    {
+      when: 'storing the reveal',
+      trigger: (roundId: string) => `
+        CREATE TRIGGER test_fault BEFORE INSERT ON balloon_reveals
+        WHEN NEW.round_id = '${roundId}'
+        BEGIN SELECT RAISE(ABORT, 'test fault: no reveal for this round'); END`,
+    },
+    {
+      when: 'closing the round',
+      trigger: (roundId: string) => `
+        CREATE TRIGGER test_fault BEFORE UPDATE OF status ON rounds
+        WHEN NEW.id = '${roundId}'
+        BEGIN SELECT RAISE(ABORT, 'test fault: this round cannot be closed'); END`,
+    },
+  ];
+
+  it.each(FAULTS)(
+    'settles the rounds before and after it, and leaves it untouched (fault: $when)',
+    async ({ trigger }) => {
+      const world = testWorld(CONFIG);
+      // Played a minute apart, so the sweep meets them in this order.
+      const first = await idleRound(world);
+      world.runtime.advance(60_000);
+      const broken = await idleRound(world);
+      world.runtime.advance(60_000);
+      const last = await idleRound(world);
+      world.runtime.advance(ABANDONED_AFTER_MS);
+      const cutoff = new Date(world.runtime.now().getTime() - ABANDONED_AFTER_MS).toISOString();
+      expect(roundsRepository(world.db).idleSince(cutoff)).toEqual([first, broken, last]);
+
+      world.db.exec(trigger(broken.roundId));
+      const before = stateOf(world, broken.roundId, broken.playerId);
+      const settledBalance = START - 2000 + 1010 + 1000;
+
+      const sweep = world.services.game.sweepAbandoned();
+
+      // Reported, not hidden: one settled count, one failure with its round, player and error.
+      expect(sweep.settled).toBe(2);
+      expect(sweep.failed).toHaveLength(1);
+      expect(sweep.failed[0]).toMatchObject(broken);
+      expect(sweep.failed[0]?.error).toBeInstanceOf(Error);
+      expect(String(sweep.failed[0]?.error)).toContain('test fault');
+      // The rounds on either side were settled as usual.
+      for (const { roundId, playerId } of [first, last]) {
+        const after = stateOf(world, roundId, playerId);
+        expect(after.round?.status).toBe('finished');
+        expect(after.round?.reveals[0]).not.toBeNull();
+        expect(after.balanceCents).toBe(settledBalance);
+      }
+      // The failed one was rolled back whole: still active, no new ledger
+      // row, no balance change, no balloon, action or reveal saved.
+      expect(stateOf(world, broken.roundId, broken.playerId)).toEqual(before);
+      expect(before.round?.status).toBe('active');
+      expect(before.round?.reveals).toEqual([null, null]);
+      expect(
+        before.ledger.filter((entry) => entry.roundId === broken.roundId).map((entry) => entry.kind),
+      ).toEqual(['bet', 'bet']);
+      expect(everyBalanceMatchesItsLedger(world)).toBe(true);
+      expect(reconcile(world.db).problems).toEqual([]);
+
+      // Still broken at the next sweep: tried again, first in line as the
+      // oldest, and it still does not hold up a round that went idle since.
+      const newcomer = await Seat.join(world.app);
+      const newerId = (await newcomer.start('easy', [500])).body.round.id;
+      world.runtime.advance(ABANDONED_AFTER_MS);
+      const laterCutoff = new Date(world.runtime.now().getTime() - ABANDONED_AFTER_MS).toISOString();
+      expect(roundsRepository(world.db).idleSince(laterCutoff).map((idle) => idle.roundId)).toEqual([
+        broken.roundId,
+        newerId,
+      ]);
+      const again = world.services.game.sweepAbandoned();
+      expect(again.settled).toBe(1);
+      expect(again.failed.map((failure) => failure.roundId)).toEqual([broken.roundId]);
+      expect(roundsRepository(world.db).find(newerId)?.status).toBe('finished');
+      expect(stateOf(world, broken.roundId, broken.playerId)).toEqual(before);
+      expect(everyBalanceMatchesItsLedger(world)).toBe(true);
+      expect(reconcile(world.db).problems).toEqual([]);
+
+      // Once the cause is fixed, the next sweep settles it like any other.
+      world.db.exec('DROP TRIGGER test_fault');
+      expect(world.services.game.sweepAbandoned()).toEqual({ settled: 1, failed: [] });
+      const fixed = stateOf(world, broken.roundId, broken.playerId);
+      expect(fixed.round?.status).toBe('finished');
+      expect(fixed.round?.reveals[0]).not.toBeNull();
+      expect(fixed.balanceCents).toBe(settledBalance);
+      expect(everyBalanceMatchesItsLedger(world)).toBe(true);
+      expect(reconcile(world.db).problems).toEqual([]);
+    },
+  );
 });
 
 /** Plays a stored round again with the engine and the real draw code, as the verify page does. */
