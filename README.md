@@ -222,18 +222,28 @@ looks the copy up by the round id the player asked for, fills those three in
 from it, not from the server's record, and each field says where its value
 came from. If the record names another hash, client seed or nonce, or is the
 record of another round, the page says so in a plain line and the round does
-not check out, even when the record's own seeds add up. So the server can't
-name other seeds in its record than the ones the screen showed before the
-round. That is all the copy proves: it is what the server's own answers put
-on the screen, so it can't show that the server kept the client seed the
-browser sent. For that, check that the panel shows your client seed before
-you bet. A round played on another device, or after this browser's data was
-cleared, has no copy: the page then uses the server's record and says
-plainly that the check can't catch a server that changed those values.
-Rounds started by an older version of the game have a copy of the hash only,
-and the page says that too. The bets, steps, RTP, ladder and payout cap come
-from the server's record, and the page checks that every pump and payment
-follows from them.
+not check out, even when the record's own seeds add up. So, for a round
+this browser has a copy of, the server can't name other seeds in its record
+than the ones the screen showed before the round. That is all the copy
+proves: it is what the server's own answers put on the screen, so it can't
+show that the server kept the client seed the browser sent. For that, check
+that the panel shows your client seed before you bet. A round played on
+another device, or after this browser's data was cleared, has no copy: the
+page then uses the server's record and says plainly that the check can't
+catch a server that changed those values. A server that gives a round
+another id in its answers while it is played also leaves this browser with
+no copy under the round's real id. For that case the page also looks for a
+copy saved with the record's hash and nonce under another id (one server
+seed and nonce belong to one round only), and the round does not check out
+if that copy names another client seed. A server that also moved the round
+to a nonce this browser has no copy for is not caught this way, so the
+no-copy note says that, on a round you played in this browser not long ago,
+it is a warning sign. Closing this fully needs the server's record to carry
+something the browser picked at the start, such as the start's idempotency
+key; the server does not do that yet. Rounds started by an older version of
+the game have a copy of the hash only, and the page says that too. The bets,
+steps, RTP, ladder and payout cap come from the server's record, and the
+page checks that every pump and payment follows from them.
 
 **After the round: where it would have popped.** Once a round is over, each
 balloon that was cashed out below its top rung shows where it would have
