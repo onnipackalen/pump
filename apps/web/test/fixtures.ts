@@ -49,12 +49,16 @@ export const MADE_CAPPED: Difficulty = {
 /** Every ladder made here. */
 export const MADE_DIFFICULTIES: readonly Difficulty[] = [MADE_LONG, MADE_CAPPED];
 
-/** The first configured difficulty `wanted` is true for, or `made` if none is. */
+/**
+ * The first difficulty in `difficulties` (the configured ones, unless told
+ * otherwise) that `wanted` is true for, or `made` if none is.
+ */
 export function difficultyWhere(
   wanted: (difficulty: Difficulty) => boolean,
   made: Difficulty = MADE_LONG,
+  difficulties: readonly Difficulty[] = GAME_CONFIG.difficulties,
 ): Difficulty {
-  const found = GAME_CONFIG.difficulties.find(wanted);
+  const found = difficulties.find(wanted);
   if (found) return found;
   if (!wanted(made)) throw new Error(`The made ladder ${made.id} does not have what the test needs`);
   return made;
