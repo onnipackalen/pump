@@ -1792,8 +1792,15 @@ th {
 /*
  * The game screen never scrolls, but the verify page is for reading: it
  * scrolls inside its own box, under the top bar.
+ *
+ * "position: relative" keeps text placed with position: absolute (the
+ * screen-reader labels in the list of rounds) inside this box. Without it
+ * that text is placed against the window instead, makes the window taller
+ * than the screen, and lets the window scroll: the player can't scroll it
+ * back, because the page clips it.
  */
 .verify {
+  position: relative;
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
@@ -1856,6 +1863,27 @@ th {
 
 .verify-rounds li[data-current='true'] {
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+.verify-round {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* As much of the id as fits. The whole id is there: one click selects it to copy. */
+.verify-rounds .verify-round-id {
+  overflow: hidden;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
+.verify-older {
+  margin-top: 8px;
 }
 
 .verify-rotate {

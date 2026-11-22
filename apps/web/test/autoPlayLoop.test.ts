@@ -156,7 +156,7 @@ describe('runAutoPlay against the demo game', () => {
     );
     expect(reason).toBe('player');
     expect(progress.roundsPlayed).toBe(3);
-    expect((await client.getHistory(100)).length).toBe(3);
+    expect((await client.getHistory(50)).length).toBe(3);
   });
 
   it('plays every balloon at once: one action per balloon still in play on each beat', async () => {

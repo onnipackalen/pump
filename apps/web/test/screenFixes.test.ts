@@ -142,6 +142,9 @@ class FakeClient implements GameClient {
     this.calls.push('getHistory');
     return Promise.resolve([]);
   }
+  getHistoryPage(): never {
+    throw new Error('not used');
+  }
   setClientSeed(seed: string, key: string) {
     this.calls.push('setClientSeed');
     this.seedsSent.push({ seed, key });

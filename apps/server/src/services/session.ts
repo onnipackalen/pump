@@ -1,4 +1,5 @@
 import type { HistoryResponse, SessionView } from '@pump/contract';
+import { ApiError } from '../errors';
 import type { RoundsRepository } from '../repositories/rounds';
 import type { FairnessService } from './fairness';
 import type { GameService } from './game';
@@ -23,10 +24,23 @@ export function sessionService(
       };
     },
 
-    /** The player's latest finished rounds, newest first. */
-    history(playerId: string, limit: number): HistoryResponse {
+    /**
+     * The player's finished rounds, newest first, at most `limit` of them.
+     * With `before`, the id of one of their finished rounds, the page starts
+     * right after that round. `more` says whether older rounds remain.
+     */
+    history(playerId: string, limit: number, before: string | null = null): HistoryResponse {
+      const after = before === null ? null : rounds.placeOfFinished(playerId, before);
+      if (before !== null && after === null) {
+        // Another player's round, a round still in play, or no round at all.
+        // All three get the same answer, as on the verify address, so it
+        // never tells whether someone else has a round with that id.
+        throw new ApiError('not_found', 'There is no finished round of yours with that id.');
+      }
+      // One more than asked for: if it comes back, older rounds remain.
+      const found = rounds.latestFinished(playerId, limit + 1, after);
       return {
-        rounds: rounds.latestFinished(playerId, limit).map((round) => ({
+        rounds: found.slice(0, limit).map((round) => ({
           id: round.id,
           difficultyId: round.difficultyId,
           balloonCount: round.balloonCount,
@@ -39,6 +53,7 @@ export function sessionService(
           finishedAt: round.finishedAt,
           seedRevealed: round.seedRevealed,
         })),
+        more: found.length > limit,
       };
     },
   };

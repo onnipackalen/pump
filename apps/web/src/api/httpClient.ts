@@ -153,11 +153,13 @@ export class HttpClient implements GameClient {
   }
 
   async getHistory(limit: number): Promise<readonly RoundSummary[]> {
-    const answer = await this.asPlayer<HistoryResponse>(
-      'GET',
-      `/api/history?limit=${String(limit)}`,
-    );
-    return answer.rounds;
+    return (await this.getHistoryPage(limit, null)).rounds;
+  }
+
+  getHistoryPage(limit: number, before: string | null): Promise<HistoryResponse> {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (before !== null) query.set('before', before);
+    return this.asPlayer('GET', `/api/history?${query.toString()}`);
   }
 
   getStats(): Promise<PlayerStats> {

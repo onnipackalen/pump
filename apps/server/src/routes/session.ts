@@ -10,10 +10,13 @@ export function sessionRoutes(app: FastifyInstance, context: RouteContext): void
     return reply.send(context.services.session.view(playerId));
   });
 
+  // The player's finished rounds, newest first, a page at a time. `before`
+  // (one of their round ids) asks for the page after that round, so a
+  // player can walk back through every round they ever finished.
   app.get('/api/history', (request, reply) => {
-    const { limit } = historyQuery.parse(request.query);
+    const { limit, before } = historyQuery.parse(request.query);
     const playerId = identify(context, request);
-    return reply.send(context.services.session.history(playerId, limit));
+    return reply.send(context.services.session.history(playerId, limit, before ?? null));
   });
 
   // The player's results over every finished round: profit over time, best
