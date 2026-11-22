@@ -3375,3 +3375,56 @@ public wins join is exactly the kind of thing only the phone shows.
 - Nothing turned out wrong. The first draft said the verify page would
   change with a Patch rule; it replays through the engine, so that line
   now names `npm run rtp` instead.
+
+## 2026-11-22: the final check's fixes, every branch merged, main made final
+
+The "Remaining tasks" chat fixed three problems the 21 November final check
+found, then became the one chat that merges into main and pushes.
+
+Built here, each on its own branch, each with hostile reviews whose findings
+had to survive three skeptics before they were fixed:
+- **The verify page checks the client seed and nonce against this
+  browser's copy** (fix-verify-seeds, then fix-verify-followups). The
+  browser saves the hash, client seed and nonce its panel showed before
+  each round, and the page never says "checks out" when the server's record
+  disagrees. Each round start now names those seeds (`expectedSeeds`), and
+  the server refuses a start on other ones (409 `seeds_changed`, nothing
+  charged, no nonce used). A start whose answer is lost or refused keeps its
+  copy.
+- **The tests pass for any difficulty list the server accepts**
+  (fix-any-ladder-tests). Only tests changed; the ladders did not.
+- **One round that fails to settle no longer stops the 24-hour sweep**
+  (fix-sweep-isolation).
+- **The verify page reaches every finished round** (fix-older-rounds):
+  `GET /api/history` pages back with `before`, and the page has an "Older
+  rounds" button and shows each round's id.
+- Docs: fairness.md no longer says the server never knows your client seed
+  when it picks its seed (true only for the first one); the README says a new
+  player must set a client seed first, and that an unreadable body gets
+  `invalid_request` with a 4xx such as 413.
+
+Merged here from other chats, each read before merging: stats-under-bet,
+open-problems-rounding, review-polish, audit-1-4, the test time limit, the
+user's hours and the docs trim. night-themes was merged and pushed by its own
+chat.
+
+What turned out wrong, and how it was caught:
+- The first verify fix looked the copy up by the id inside the server's
+  record, dropped odd seed values to a hash-only copy, and could be dodged
+  by a start answered under another id, or by a nonce sent as text. Each was
+  caught by a hostile review or a final check, and fixed before merging.
+- That fix also made an honest round fail the verify page when a second tab
+  showed old seeds. Caught by a review of merged main, and independently by
+  the "Project review and polish" chat's fairness audit in the built game.
+  Fixed by the server's seed check on each start.
+- Two fixes that each passed alone failed together: the sweep's new tests
+  used a test difficulty id the ladder fix had renamed, and three web tests
+  from different branches lacked fields the others added. Caught by running
+  the tests on each merge before committing it.
+- Under heavy machine load, two engine math sweeps ran out of time (one took
+  12 minutes). Not a code fault: they pass on a quiet machine, and the
+  final check ran when the other chats were done.
+- Still open, under Known issues: a few rare ways a cheating server, or a
+  chain of lost answers, can get past or upset the copy check.
+- A helper chat ran ci.yml's steps and the README's start steps on a fresh
+  clone of feecb29; all passed; nothing turned out wrong.
