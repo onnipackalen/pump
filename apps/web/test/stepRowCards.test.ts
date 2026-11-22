@@ -7,7 +7,7 @@ import type { BalloonView, PumpOutcome } from '../src/api/contract';
 import { BalloonCard, PreviewCard } from '../src/components/BalloonCard';
 import { shownRound } from '../src/game/useGame';
 import { formatMultiplier } from '../src/money';
-import { balloon, round } from './fixtures';
+import { balloon, BASE, MADE_CAPPED, MADE_LONG, round } from './fixtures';
 
 /**
  * How the cards hand a balloon to its row of steps, read from the markup
@@ -20,6 +20,13 @@ import { balloon, round } from './fixtures';
 // reviewers will set.
 const RTPS = [9400, 9700, 9900];
 const { limits } = GAME_CONFIG;
+
+// Every configured ladder, and a ladder the cap cuts short that is made
+// here, so the locked steps are checked whatever the config holds.
+const SWEPT: readonly (readonly number[])[] = [
+  ...GAME_CONFIG.difficulties.map((d) => d.ladder),
+  MADE_CAPPED.ladder,
+];
 
 /** Ordinary bets, the largest one, and the bets one cent either side of each step's cap edge. */
 function betsFor(ladder: readonly number[]): number[] {
@@ -70,7 +77,7 @@ function card(view: BalloonView, ladder: readonly number[], options: CardOptions
       balloon: view,
       rtpBp: options.rtpBp ?? GAME_CONFIG.rtpBp,
       ladder,
-      difficultyId: GAME_CONFIG.difficulties[0]?.id ?? 'easy',
+      difficultyId: BASE.id,
       beat: 'idle',
       patched: options.patched ?? false,
       outcome: options.outcome ?? null,
@@ -94,7 +101,7 @@ function preview(ladder: readonly number[], betCents: number | null, cap: number
   return renderToStaticMarkup(
     createElement(PreviewCard, {
       slot: 1,
-      difficultyId: GAME_CONFIG.difficulties[0]?.id ?? 'easy',
+      difficultyId: BASE.id,
       betCents,
       ladder,
       maxPayoutCents: cap,
@@ -127,7 +134,7 @@ describe('a balloon card and its row of steps', () => {
   it('locks exactly the steps above the balloon own top, at every bet and RTP', () => {
     let capped = 0;
     for (const rtpBp of RTPS) {
-      for (const { ladder } of GAME_CONFIG.difficulties) {
+      for (const ladder of SWEPT) {
         for (const betCents of betsFor(ladder)) {
           const top = topRungForBet(ladder, betCents, limits.maxPayoutCents);
           if (top < ladder.length) capped += 1;
@@ -147,20 +154,33 @@ describe('a balloon card and its row of steps', () => {
   });
 
   it('takes the top from the balloon, not from the length of the ladder', () => {
-    const ladder = GAME_CONFIG.difficulties[0]?.ladder ?? [];
+    const ladder = BASE.ladder;
     const view = balloon({ rung: 1, topRung: 3, multiplierHundredths: multiplierAt(ladder, 1) });
     expect(lockedFrom(card(view, ladder))).toBe(4);
   });
 
   it('marks the step the balloon is on and the one its next pump goes for', () => {
-    for (const { ladder } of GAME_CONFIG.difficulties) {
-      const all = states(card(inPlay(ladder, GAME_CONFIG.rtpBp, 100, 2), ladder));
-      expect(all.slice(0, 4)).toEqual(['passed', 'current', 'next', 'ahead']);
+    // On every rung a $1 balloon can be in play on: steps below are passed,
+    // then the one it is on, the next, the rest it can reach, then locked.
+    // The long made ladder makes sure "ahead" is always checked.
+    for (const ladder of [...SWEPT, MADE_LONG.ladder]) {
+      const top = topRungForBet(ladder, 100, limits.maxPayoutCents);
+      for (let rung = 1; rung < top; rung += 1) {
+        const all = states(card(inPlay(ladder, GAME_CONFIG.rtpBp, 100, rung), ladder));
+        const want = ladder.map((_, index) => {
+          const step = index + 1;
+          if (step > top) return 'locked';
+          if (step < rung) return 'passed';
+          if (step === rung) return 'current';
+          return step === rung + 1 ? 'next' : 'ahead';
+        });
+        expect(all).toEqual(want);
+      }
     }
   });
 
   it('keeps the place before the first step, and keeps exactly one place in view', () => {
-    const ladder = GAME_CONFIG.difficulties[0]?.ladder ?? [];
+    const ladder = BASE.ladder;
     for (const rung of [0, 1, 2, 5]) {
       const html = card(inPlay(ladder, GAME_CONFIG.rtpBp, 100, rung), ladder);
       const all = places(html);
@@ -175,7 +195,7 @@ describe('a balloon card and its row of steps', () => {
   });
 
   it('does not move the row for the small line under the amount', () => {
-    const ladder = GAME_CONFIG.difficulties[0]?.ladder ?? [];
+    const ladder = BASE.ladder;
     const view = inPlay(ladder, GAME_CONFIG.rtpBp, 100, 3);
     const plain = card(view, ladder);
     // A Patch that stopped a pop puts long words in the small line.
@@ -190,7 +210,7 @@ describe('a balloon card and its row of steps', () => {
 describe('a preview card and its row of steps', () => {
   it('locks what the engine says the bet cannot reach, before the round starts', () => {
     let capped = 0;
-    for (const { ladder } of GAME_CONFIG.difficulties) {
+    for (const ladder of SWEPT) {
       for (const betCents of betsFor(ladder)) {
         const top = topRungForBet(ladder, betCents, limits.maxPayoutCents);
         if (top < ladder.length) capped += 1;
@@ -206,7 +226,7 @@ describe('a preview card and its row of steps', () => {
 
   it('follows the payout cap it is given', () => {
     // With a tenth of the cap, the largest bet must be cut shorter on some ladder.
-    const shorter = GAME_CONFIG.difficulties.some(({ ladder }) => {
+    const shorter = SWEPT.some((ladder) => {
       const full = lockedFrom(preview(ladder, limits.maxBetCents, limits.maxPayoutCents));
       const tenth = Math.floor(limits.maxPayoutCents / 10);
       const cut = lockedFrom(preview(ladder, limits.maxBetCents, tenth));
@@ -217,13 +237,13 @@ describe('a preview card and its row of steps', () => {
   });
 
   it('locks nothing while there is no valid bet', () => {
-    for (const { ladder } of GAME_CONFIG.difficulties) {
+    for (const ladder of SWEPT) {
       expect(states(preview(ladder, null, limits.maxPayoutCents))).not.toContain('locked');
     }
   });
 
   it('shows the first step as the one the first pump goes for', () => {
-    const ladder = GAME_CONFIG.difficulties[0]?.ladder ?? [];
+    const ladder = BASE.ladder;
     expect(states(preview(ladder, 100, limits.maxPayoutCents)).slice(0, 2)).toEqual([
       'next',
       'ahead',
@@ -232,7 +252,7 @@ describe('a preview card and its row of steps', () => {
 });
 
 describe('the "next" line under a balloon', () => {
-  const ladder = GAME_CONFIG.difficulties[0]?.ladder ?? [];
+  const ladder = BASE.ladder;
   // A number no step of the ladder has, to tell the server's own number
   // for the next pump from one looked up on the ladder.
   const odd = { popChance: { num: 1, den: 2 }, multiplierHundredths: 12_345, patchPriceCents: null };
@@ -288,7 +308,7 @@ describe('the "next" line under a balloon', () => {
 });
 
 describe('what a screen reader gets instead of the row', () => {
-  const ladder = GAME_CONFIG.difficulties[0]?.ladder ?? [];
+  const ladder = BASE.ladder;
   const view = inPlay(ladder, GAME_CONFIG.rtpBp, 100, 2);
   const next = formatMultiplier(multiplierAt(ladder, 3));
   const top = formatMultiplier(multiplierAt(ladder, view.topRung));

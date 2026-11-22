@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import type { BalloonStatus } from '../src/api/contract';
 import { stepAnchor, stepRow, stepWords, type StepRowInput } from '../src/game/stepRow';
 import { formatMultiplier } from '../src/money';
+import { MADE_CAPPED } from './fixtures';
 
 /**
- * The row of multiplier steps shown with a balloon. Every ladder comes from
- * the config, so nothing here pins a number from one.
+ * The row of multiplier steps shown with a balloon. The ladders come from
+ * the config (plus one made in fixtures.ts), so nothing here pins a number
+ * from a live ladder.
  */
 
 const { limits } = GAME_CONFIG;
@@ -26,11 +28,15 @@ function* everyState(ladder: readonly number[], topRung: number): Generator<Step
   }
 }
 
+// Every configured ladder, and one made here that the cap cuts short, so
+// the locked steps are looked at whatever the config holds.
+const LADDERS = [...GAME_CONFIG.difficulties.map((d) => d.ladder), MADE_CAPPED.ladder];
+
 function* everyCase(): Generator<StepRowInput> {
-  for (const difficulty of GAME_CONFIG.difficulties) {
+  for (const ladder of LADDERS) {
     for (const betCents of bets) {
-      const topRung = topRungForBet(difficulty.ladder, betCents, limits.maxPayoutCents);
-      yield* everyState(difficulty.ladder, topRung);
+      const topRung = topRungForBet(ladder, betCents, limits.maxPayoutCents);
+      yield* everyState(ladder, topRung);
     }
   }
 }
@@ -58,8 +64,8 @@ describe('the row of multiplier steps', () => {
         expect(step.state === 'locked').toBe(step.rung > input.topRung);
       }
     }
-    // The largest bet is cut short by the payout cap on some ladder, so the
-    // locked steps really were looked at.
+    // The largest bet is cut short by the payout cap on some ladder (the
+    // made one at least), so the locked steps really were looked at.
     expect(capped).toBeGreaterThan(0);
   });
 
@@ -125,7 +131,7 @@ describe('the row of multiplier steps', () => {
   it('shows a refunded balloon with nothing passed, current, next or popped', () => {
     // A refunded bet was never pumped: its whole ladder is simply ahead.
     const status: BalloonStatus = 'refunded';
-    for (const { ladder } of GAME_CONFIG.difficulties) {
+    for (const ladder of LADDERS) {
       const steps = stepRow({ ladder, rung: 0, topRung: ladder.length, status });
       expect(steps.every((step) => step.state === 'ahead')).toBe(true);
     }
