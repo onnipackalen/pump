@@ -3360,3 +3360,18 @@ free.
 
 Not checked: a real iPhone. Whether the slide stays at "sheet up" when the
 public wins join is exactly the kind of thing only the phone shows.
+
+## 2026-11-22: README: problems we'd like to solve (cent rounding)
+
+- Added "Problems we'd like to solve" to the README, after Known issues,
+  and a link to it at the top. It covers cent rounding on small amounts:
+  the worst Patch (48.18% at 94%, 49.88% at 97% and 99%) and the worst
+  cash-out (86.24% at 94%, 88.99% at 97%), how many Patches it touches at
+  $0.10, $1 and $10, and three ways to solve it with their costs. Nothing
+  in the game changed.
+- The numbers come from a scratch script over every legal bet at 9400,
+  9700 and 9900 using the engine's own `patchPriceCents` and
+  `cashOutCents`; the 97% worst cases match `npm run rtp`.
+- Nothing turned out wrong. The first draft said the verify page would
+  change with a Patch rule; it replays through the engine, so that line
+  now names `npm run rtp` instead.
