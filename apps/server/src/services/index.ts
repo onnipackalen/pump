@@ -47,7 +47,7 @@ export function buildServices(runtime: Runtime): Services {
 
   const wallet = walletService(ledger);
   const fairness = fairnessService(runtime, players, seeds, rounds);
-  const game = gameService(runtime, players, seeds, rounds, wallet);
+  const game = gameService(runtime, players, seeds, rounds, wallet, fairness);
   const publicWins = publicWinsService(runtime, rounds);
   return {
     wallet,

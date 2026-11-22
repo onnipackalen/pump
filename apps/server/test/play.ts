@@ -89,6 +89,11 @@ export class Seat {
     return this.send<ActionResult>('POST', '/api/rounds', { difficultyId, betsCents }, key);
   }
 
+  /** A round start with any body at all, to test what the route accepts. */
+  startWith(body: object, key = newKey()) {
+    return this.send<ActionResult>('POST', '/api/rounds', body, key);
+  }
+
   pump(
     round: RoundView,
     balloonIndex: number,

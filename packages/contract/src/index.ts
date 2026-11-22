@@ -47,11 +47,13 @@
  *
  * Errors come back as { error: ApiErrorBody }. A 409 "conflict" means the
  * balloon was not in the state the request expected; the body carries the
- * current state so the screen can catch up.
+ * current state so the screen can catch up. A 409 "seeds_changed" means a
+ * round start named seeds (expectedSeeds) that are no longer the player's;
+ * the body carries the seeds as they are now.
  *
  * Status codes: invalid_request 400, no_session 401, insufficient_funds 402,
- * not_found 404, conflict, round_active and seed_not_revealed 409,
- * key_reused 422, internal_error 500.
+ * not_found 404, conflict, round_active, seeds_changed and seed_not_revealed
+ * 409, key_reused 422, internal_error 500.
  *
  * Three things a client must do:
  * - Load GET /api/session first, alone. It is the only request that creates
@@ -208,10 +210,32 @@ export interface SessionView {
   readonly activeRound: RoundView | null;
 }
 
+/**
+ * The seeds a screen showed before a round start: the server seed hash, the
+ * client seed and the nonce the next round uses (FairnessView.nextNonce).
+ */
+export interface ExpectedSeeds {
+  /** 64 lowercase hex characters. */
+  readonly serverSeedHash: string;
+  /** 1 to 64 characters from A-Z, a-z, 0-9, _ and -. */
+  readonly clientSeed: string;
+  /** A whole number, 0 or more. */
+  readonly nonce: number;
+}
+
 export interface StartRoundRequest {
   readonly difficultyId: string;
   /** One bet per balloon, 1 to 3 of them. */
   readonly betsCents: readonly number[];
+  /**
+   * The seeds the screen showed when Bet was pressed. If any part is not the
+   * player's seeds now (another tab played a round or changed a seed, say),
+   * the start is refused with 409 "seeds_changed": nothing is charged, no
+   * nonce is used and no round is made. So a round is never played on seeds
+   * the screen did not show. Left out, the start is not checked this way.
+   * The game screen always sends it.
+   */
+  readonly expectedSeeds?: ExpectedSeeds;
 }
 
 export interface PumpBody {
@@ -262,6 +286,8 @@ export type ApiErrorCode =
   | 'insufficient_funds'
   | 'invalid_request'
   | 'round_active'
+  /** A round start named seeds (expectedSeeds) that are not the player's now. Nothing was done. */
+  | 'seeds_changed'
   | 'seed_not_revealed'
   | 'not_found'
   /** No valid player cookie. Load GET /api/session first: it creates the player. */
@@ -497,4 +523,6 @@ export interface ApiErrorBody {
   /** Sent with "conflict": the state as it is now. */
   readonly round?: RoundView | null;
   readonly wallet?: WalletView;
+  /** Sent with "seeds_changed": the player's seeds as they are now. */
+  readonly fairness?: FairnessView;
 }
