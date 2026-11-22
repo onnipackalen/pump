@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  copiesWithSameNonce,
   forgetStarting,
   MAX_SHOWN,
   MAX_STARTING,
@@ -75,12 +76,24 @@ describe('what this browser showed before each round, kept in this browser', () 
     let list = withShown([], 'r0', shown(SHOWN), 3);
     for (const id of ['r1', 'r2', 'r3']) list = withShown(list, id, shown(SHOWN), 3);
     expect(list.map(([id]) => id)).toEqual(['r3', 'r2', 'r1']);
-    // Saving a round again moves it to the front instead of adding it twice.
-    expect(withShown(list, 'r1', shown(OTHER, 'x', 9), 3)).toEqual([
-      ['r1', OTHER, 'x', 9],
+    // Saving the same copy again (a retry's answer) moves it to the front
+    // instead of adding it twice.
+    expect(withShown(list, 'r1', shown(SHOWN), 3)).toEqual([
+      ['r1', SHOWN, 'player-seed', 4],
       ['r3', SHOWN, 'player-seed', 4],
       ['r2', SHOWN, 'player-seed', 4],
     ]);
+  });
+
+  it('keeps an older copy under the same id when the new one has other values', () => {
+    // Only a server that gives two starts one id does this. Wiping the first
+    // copy would hide it from copiesWithSameNonce.
+    const storage = new MemoryStorage();
+    rememberShown('reused', shown(SHOWN, 'mine', 0), storage);
+    rememberShown('reused', shown(SHOWN, 'mine', 1), storage);
+    expect(shownFor('reused', storage)).toEqual(shown(SHOWN, 'mine', 1));
+    expect(copiesWithSameNonce(SHOWN, 0, 'real-round', storage)).toEqual([['reused', SHOWN, 'mine', 0]]);
+    expect(parseShown(storage.getItem(KEY))).toHaveLength(2);
   });
 
   it(`never holds more than ${MAX_SHOWN} rounds in storage`, () => {
@@ -205,8 +218,22 @@ describe('what this browser showed before each round, kept in this browser', () 
     rememberShown('round-2', shown(SHOWN.toUpperCase()), storage);
     rememberShown('round-3', shown(SHOWN, 'player-seed​'), storage);
     rememberShown('round-4', shown(SHOWN, 'mine', -1), storage);
-    rememberShown('', shown(SHOWN), storage);
     expect(storage.items.size).toBe(0);
+  });
+
+  it('saves a copy under a stand-in for a round id no real server sends, found by hash and nonce only', () => {
+    const storage = new MemoryStorage();
+    const long = 'r'.repeat(200);
+    rememberShown(long, shown(SHOWN, 'mine', 1), storage);
+    rememberShown('', shown(SHOWN, 'mine', 2), storage);
+    // Not found by the id the server gave: this browser can't keep that id.
+    expect(shownFor(long, storage)).toBeNull();
+    expect(shownFor('', storage)).toBeNull();
+    // Still found by its hash and nonce, under the stand-in.
+    expect(copiesWithSameNonce(SHOWN, 1, 'real-round', storage)).toEqual([[`?${long}`.slice(0, 128), SHOWN, 'mine', 1]]);
+    expect(copiesWithSameNonce(SHOWN, 2, 'real-round', storage)).toEqual([['?', SHOWN, 'mine', 2]]);
+    // Kept, and read back, as a valid entry.
+    expect(parseShown(storage.getItem(KEY))).toHaveLength(2);
   });
 
   it('knows a valid set of seeds', () => {
@@ -215,6 +242,38 @@ describe('what this browser showed before each round, kept in this browser', () 
     expect(validSeeds({ serverSeedHash: SHOWN, clientSeed: 'mine', nonce: '0' })).toBe(false);
     expect(validSeeds({ serverSeedHash: SHOWN, clientSeed: 'mine​', nonce: 0 })).toBe(false);
     expect(validSeeds({ serverSeedHash: SHOWN.toUpperCase(), clientSeed: 'mine', nonce: 0 })).toBe(false);
+  });
+});
+
+describe('copies found by their hash and nonce', () => {
+  it('are the copies under other ids with the same hash and nonce, newest first', () => {
+    const storage = new MemoryStorage();
+    rememberShown('older', shown(SHOWN, 'first', 3), storage);
+    rememberShown('other-nonce', shown(SHOWN, 'mine', 4), storage);
+    rememberShown('other-hash', shown(OTHER, 'mine', 3), storage);
+    rememberShown('asked', shown(SHOWN, 'mine', 3), storage);
+    rememberShown('newer', shown(SHOWN, 'second', 3), storage);
+    expect(copiesWithSameNonce(SHOWN, 3, 'asked', storage)).toEqual([
+      ['newer', SHOWN, 'second', 3],
+      ['older', SHOWN, 'first', 3],
+    ]);
+    expect(copiesWithSameNonce(SHOWN, 9, 'asked', storage)).toEqual([]);
+  });
+
+  it('never include an older build’s copy, which has no nonce', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(OLD_KEY, JSON.stringify([['old-round', SHOWN]]));
+    expect(copiesWithSameNonce(SHOWN, 0, 'asked', storage)).toEqual([]);
+  });
+
+  it('never throw on junk, blocked or missing storage', () => {
+    const storage = new MemoryStorage();
+    for (const junk of ['{', '{"a":1}', '[1,2]', JSON.stringify([['x', SHOWN, 'mine']]), JSON.stringify([['x', SHOWN, 'mine', '3']])]) {
+      storage.setItem(KEY, junk);
+      expect(copiesWithSameNonce(SHOWN, 3, 'asked', storage)).toEqual([]);
+    }
+    expect(copiesWithSameNonce(SHOWN, 3, 'asked', broken)).toEqual([]);
+    expect(copiesWithSameNonce(SHOWN, 3, 'asked', null)).toEqual([]);
   });
 });
 

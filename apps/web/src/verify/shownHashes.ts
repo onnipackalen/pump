@@ -15,7 +15,8 @@
  *
  * Three keys:
  * - 'pump.shownSeeds': what this build saves, newest first, at most MAX_SHOWN
- *   rounds (under 100 KB): [roundId, serverSeedHash, clientSeed, nonce].
+ *   rounds (under 100 KB with the server's ids):
+ *   [roundId, serverSeedHash, clientSeed, nonce].
  * - 'pump.shownSeedHashes': [roundId, serverSeedHash] pairs saved by older
  *   builds, which kept only the hash. Read here, never written. For those
  *   rounds the hash check still works, and this browser has no copy of the
@@ -30,6 +31,12 @@
  * touches the new key. And every entry under the new key was saved by this
  * build with all three values, so a partial or junk entry there is skipped,
  * never read as a hash-only copy.
+ *
+ * A copy is found by round id (shownFor), and also by the hash and nonce it
+ * saved (copiesWithSameNonce). The second is for a server that gives a round
+ * another id in its answers: then no copy is found under the round's real
+ * id, but one server seed and nonce belong to one round only, so a copy
+ * saved with the same hash and nonce under another id is still found.
  */
 
 import { CLIENT_SEED_PATTERN } from '../game/clientSeed';
@@ -88,8 +95,26 @@ export interface HashStorage {
 /** A server seed hash: SHA-256 as 64 lowercase hex characters. */
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
 
+/** The longest round id kept. The server's ids are UUIDs (36 characters). */
+const MAX_ID = 128;
+
 function isRoundId(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= 128;
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_ID;
+}
+
+/**
+ * The id a copy is saved under: the round's own id, or, for an id no real
+ * server sends (empty, too long, not text), a stand-in made from it: '?'
+ * and then the id, cut to fit. A copy under a stand-in is never found by the
+ * id the server gave, so the verify page says it has no copy of that round,
+ * which is true. But it is still found by its hash and nonce
+ * (copiesWithSameNonce), so a server can't make the copy go away just by
+ * sending such an id.
+ */
+function idToKeep(roundId: unknown): string {
+  if (isRoundId(roundId)) return roundId;
+  const text = typeof roundId === 'string' || typeof roundId === 'number' ? String(roundId) : '';
+  return `?${text}`.slice(0, MAX_ID);
 }
 
 function isHash(value: unknown): value is string {
@@ -164,15 +189,23 @@ export function parseOldShown(text: string | null): readonly OldShownEntry[] {
   return listFrom(text, oldEntryFrom, MAX_SHOWN);
 }
 
-/** The list with this round put first (replacing an older entry for it), cut to `max`. */
+/**
+ * The list with this round put first, cut to `max`. The same entry saved
+ * again (a retry's answer) moves to the front instead of being kept twice.
+ * An older entry under the same id with other values is kept too: an honest
+ * server never gives two starts one id, and a server that did so would
+ * otherwise wipe out the first copy, which copiesWithSameNonce still needs
+ * to find. shownFor finds the newest.
+ */
 export function withShown(
   list: readonly ShownEntry[],
   roundId: string,
   shown: SeedsBeforeRound,
   max = MAX_SHOWN,
 ): readonly ShownEntry[] {
-  const others = list.filter(([id]) => id !== roundId);
   const entry: ShownEntry = [roundId, shown.serverSeedHash, shown.clientSeed, shown.nonce];
+  const same = (e: ShownEntry): boolean => e.every((part, i) => part === entry[i]);
+  const others = list.filter((e) => !same(e));
   return [entry, ...others].slice(0, Math.max(0, max));
 }
 
@@ -187,18 +220,19 @@ function browserStorage(): HashStorage | null {
 
 /**
  * Saves what was shown before a round, all three values in one write. Does
- * nothing for a round id or values not in a valid form (a round is never
- * started on those), or if storage fails.
+ * nothing for values not in a valid form (a round is never started on
+ * those), or if storage fails. A round id no real server sends gets a
+ * stand-in (see idToKeep).
  */
 export function rememberShown(
   roundId: string,
   shown: SeedsBeforeRound,
   storage: HashStorage | null = browserStorage(),
 ): void {
-  if (!storage || !isRoundId(roundId) || !validSeeds(shown)) return;
+  if (!storage || !validSeeds(shown)) return;
   try {
     const list = parseShown(storage.getItem(KEY));
-    storage.setItem(KEY, JSON.stringify(withShown(list, roundId, shown)));
+    storage.setItem(KEY, JSON.stringify(withShown(list, idToKeep(roundId), shown)));
   } catch {
     // Full or blocked: the verify page will say it has no copy of this round.
   }
@@ -220,6 +254,32 @@ export function shownFor(
     return old ? { serverSeedHash: old[1], clientSeed: null, nonce: null } : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * The copies this browser saved, under round ids other than `roundId`, with
+ * this hash and this nonce, newest first. Only this build's copies have a
+ * nonce, so an older build's copy is never among them. Never throws.
+ *
+ * A server seed and nonce belong to one round only. So when this browser has
+ * no copy under a round's id, a copy with that round's hash and nonce under
+ * another id may be the copy of that same round, whose start the server
+ * answered under another id.
+ */
+export function copiesWithSameNonce(
+  serverSeedHash: string,
+  nonce: number,
+  roundId: string,
+  storage: HashStorage | null = browserStorage(),
+): readonly ShownEntry[] {
+  if (!storage) return [];
+  try {
+    return parseShown(storage.getItem(KEY)).filter(
+      ([id, hash, , savedNonce]) => id !== roundId && hash === serverSeedHash && savedNonce === nonce,
+    );
+  } catch {
+    return [];
   }
 }
 
