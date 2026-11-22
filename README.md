@@ -620,3 +620,7 @@ messages to the AI chats, not from the commits.
 
 The AI chats kept working while I was away (overnight and during the
 competition), so the project ran for longer than my hours.
+
+**What I cut:** the development of a special game mode, one that keeps
+growing, like a rocket game. I'd like to build it, but left it out to fit
+the time.
