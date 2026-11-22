@@ -517,7 +517,7 @@ off without touching the game's math.
 - **`PUBLIC_WINS`.** Run from this repo with nothing set, it's on, so you
   see it. On a host with nothing set, it's off: showing players' results to
   others has to be a written choice. A word that is neither `on` nor `off`
-  means off, with a warning in the log. The live site has it off. Write the
+  means off, with a warning in the log. The live site has it on. Write the
   value in quotes in `render.yaml`, because a bare `on` or `off` in YAML can
   be read as `true` or `false`. The server can't see a typo in the
   variable's name, so it logs `public wins: ON` or `OFF` at every start.

@@ -51,11 +51,11 @@ deploy the same service again.
   copy before starting the new one, so two versions never write to the same
   database. Balances and rounds in play are kept.
 - A Manual Deploy builds the new code but does not apply `render.yaml`'s
-  settings. Only a Blueprint sync does. The service was made before
-  `PUBLIC_WINS` existed, so today its log says "PUBLIC_WINS is not set". It
-  is off all the same, because nothing set means off on a host. To switch
-  public wins on, set `PUBLIC_WINS` to `"on"` in `render.yaml`, sync the
-  Blueprint on Render, then read the `public wins:` line in the log.
+  settings. Only a Blueprint sync does. To change a setting, such as
+  `PUBLIC_WINS`, change it in `render.yaml`, push, sync the Blueprint on
+  Render, then read the log: for public wins, the `public wins:` line.
+- Public wins are on: `render.yaml` sets `PUBLIC_WINS` to `"on"`, and the
+  Blueprint was synced on 2026-11-22.
 
 ## Where the wallets are
 

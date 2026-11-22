@@ -52,13 +52,14 @@ services:
       # (apps/server/src/db/location.ts).
       - key: DATABASE_PATH
         value: /var/data/pump.db
-      # The lists of players' wins that anyone can read (GET /api/wins). Off
-      # here until the game screen has the switch that lets a player keep
-      # their own wins private; then "on" is the owner's call. In quotes: a
-      # bare on or off in a YAML file can be read as true or false. Without
-      # this entry the server keeps them off on a host anyway.
+      # The lists of players' wins that anyone can read (GET /api/wins). On,
+      # by the owner's choice, now that the game screen has the switch that
+      # lets a player keep their own wins private. In quotes: a bare on or
+      # off in a YAML file can be read as true or false. Without this entry
+      # the server keeps them off on a host. A change here reaches the live
+      # site only through a Blueprint sync, not a Manual Deploy.
       - key: PUBLIC_WINS
-        value: "off"
+        value: "on"
 
     # The only files that survive a deploy or a restart are the ones under
     # mountPath. Render takes a snapshot of the disk once a day. That is a
