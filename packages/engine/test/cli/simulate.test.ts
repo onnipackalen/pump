@@ -5,6 +5,7 @@ import { rtpOf } from '../../cli/proof';
 import {
   climbPlay,
   expectedFor,
+  PASS_MARK,
   REAL_ENGINE,
   report,
   SIM_BETS,
@@ -89,6 +90,7 @@ describe.each(DIFFICULTIES)('simulating $id', (difficulty) => {
     it('finds the engine doing exactly what the rules say, every time', () => {
       expect(result.mismatches).toEqual({
         chances: 0,
+        rolls: 0,
         outcomes: 0,
         payouts: 0,
         patchPrices: 0,
@@ -236,10 +238,61 @@ describe('the simulator catches an engine that is wrong', () => {
     expect(stats.exact).toBe(false);
     expect(result.mismatches.chances).toBe(result.pumps[1]?.attempts);
     expect(result.mismatches.first).toBe('pump 1 was drawn at 92/101, the rules give 97/101');
-    // ...and by counting: the RTP, the pump counts and pump 1 alone are all far off.
-    expect(Math.abs(stats.z)).toBeGreaterThan(4);
-    expect(stats.worstPumpZ).toBeGreaterThan(5);
-    expect(stats.pumpOneZ).toBeGreaterThan(5);
+    // ...and by counting: the RTP, the pump counts and pump 1 alone are all
+    // past the mark npm run sim fails at.
+    expect(Math.abs(stats.z)).toBeGreaterThan(PASS_MARK);
+    expect(stats.worstPumpZ).toBeGreaterThan(PASS_MARK);
+    expect(stats.pumpOneZ).toBeGreaterThan(PASS_MARK);
+  });
+
+  it('a roll swapped on a pump the main run hardly ever plays', () => {
+    // An unpatched pump onto the top rung always pops: the engine plays and
+    // records den - 1, whatever roll it was handed. Its record agrees with
+    // what it did, so only the roll it was handed gives it away.
+    const engine: EnginePort = {
+      ...REAL_ENGINE,
+      pump: (round, request, draw) => {
+        const balloon = round.balloons[request.balloonIndex];
+        if (request.patch || balloon === undefined || balloon.rung + 1 !== balloon.topRung) {
+          return REAL_ENGINE.pump(round, request, draw);
+        }
+        return REAL_ENGINE.pump(round, request, (den) => {
+          draw(den);
+          return den - 1;
+        });
+      },
+    };
+    const { result, stats } = run(engine);
+    // A handful of pumps in the run go this way, and each one is caught...
+    expect(stats.exact).toBe(false);
+    expect(result.mismatches.rolls).toBeGreaterThan(0);
+    expect(result.mismatches.outcomes).toBe(0);
+    expect(result.mismatches.first).toMatch(
+      /^pump 24 recorded roll 124 below 125, it was handed \d+ below 125$/,
+    );
+    // ...but they are far too few to show in the counts.
+    expect(Math.abs(stats.z)).toBeLessThan(PASS_MARK);
+    expect(stats.worstPumpZ).toBeLessThan(PASS_MARK);
+  });
+
+  it('two draws for one pump', () => {
+    // Every pump draws twice and plays the second roll. That roll is as
+    // random as the first, so no count can see it, but the draws can.
+    const engine: EnginePort = {
+      ...REAL_ENGINE,
+      pump: (round, request, draw) =>
+        REAL_ENGINE.pump(round, request, (den) => {
+          draw(den);
+          return draw(den);
+        }),
+    };
+    const { result, stats } = run(engine);
+    expect(stats.exact).toBe(false);
+    const pumps = result.pumps.reduce((sum, pump) => sum + pump.attempts, 0);
+    expect(result.mismatches.rolls).toBe(pumps);
+    expect(result.mismatches.first).toBe('pump 1 made 2 draws, the rules give 1');
+    expect(Math.abs(stats.z)).toBeLessThan(PASS_MARK);
+    expect(stats.worstPumpZ).toBeLessThan(PASS_MARK);
   });
 
   it('a top rung one too low', () => {

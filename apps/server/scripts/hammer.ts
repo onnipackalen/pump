@@ -7,8 +7,10 @@
  *       fresh database file), hammers it over real HTTP, and stops it.
  *
  *   npm run hammer -- --url=http://localhost:3000 --db=data/pump.db
- *       Hammers a server you already have running. --db is that server's
- *       SQLite file, which is opened read-only for the final check.
+ *       Hammers a server you already have running. --db must come with
+ *       --url: it is that server's SQLite file (its DATABASE_PATH), opened
+ *       read-only for the final check. Through npm, a relative path starts
+ *       in apps/server, where data/pump.db is the server's own default.
  *
  *   --players=20 --rounds=8     how hard to hit it (these are the defaults)
  *
@@ -22,26 +24,37 @@
  *     Cash Out, or two Pumps: exactly one may succeed, the other gets a 409;
  *   - several "start a round" requests at once: one round, one set of bets.
  *
+ * First comes the storm: one moment with well over 1,000 requests in flight
+ * at once. Every player starts a three-balloon round, and then every request
+ * for every balloon of every player goes out together, in two waves (see
+ * stormWave). Then the players play their rounds, step by step. Each one
+ * bets only what its balance covers, and a player whose balance cannot
+ * cover the smallest bet stops playing.
+ *
  * Every round in every answer is also checked: no balloon shows a reveal
  * ("where it would have popped") while its round is still in progress.
  *
- * Then it reads the database and runs the full reconcile: every balance
- * equals the sum of its ledger rows, the ledger chain is unbroken, every
- * balloon was charged and paid exactly what its round says, and every
- * finished round holds exactly the reveals it should.
+ * Then it reads the database. First it makes sure the file is the one the
+ * server uses: each player of this run has a client seed no other run uses
+ * (see RUN_TAG), and the file must hold each of them once (other players
+ * may be there too). Only then does it run the full reconcile: every
+ * balance equals the sum of its ledger rows, the ledger chain is unbroken,
+ * every balloon was charged and paid exactly what its round says, and
+ * every finished round holds exactly the reveals it should.
  *
  * It exits with an error if anything is wrong.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve as fullPath } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { GAME_CONFIG } from '@pump/engine';
 import { z } from 'zod';
-import { int } from '../src/db/rows';
-import { reconcile } from '../src/services/reconcile';
+import { int, text } from '../src/db/rows';
+import { reconcile, type ReconcileReport } from '../src/services/reconcile';
 
 // The parts of the server's answers this script reads. Every answer is
 // checked against these, so a malformed answer fails the run.
@@ -65,9 +78,17 @@ const roundShape = z.object({
   ),
 });
 type RoundView = z.infer<typeof roundShape>;
+const walletShape = z.object({ balanceCents: z.int() });
 const successShape = z.object({ round: roundShape });
+/** A successful start, pump or cash-out, and GET /api/session, carry the wallet. */
+const walletAnswerShape = z.object({ wallet: walletShape });
 const refusalShape = z.object({ error: z.object({ round: roundShape.nullish() }) });
-const sessionShape = z.object({ wallet: z.object({ balanceCents: z.int() }) });
+/** A 402 refusal carries the wallet as it is once the request was refused. */
+const refusalWalletShape = z.object({ error: z.object({ wallet: walletShape }) });
+const sessionShape = z.object({
+  wallet: walletShape,
+  activeRound: roundShape.nullable(),
+});
 
 function option(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -118,20 +139,60 @@ function checkOptions(): void {
       '--db is the database of the server given by --url. Without --url the hammer starts its own server on a fresh database.',
     );
   }
+  // Without it the final check would read some other file and could pass
+  // about a database this run never touched.
+  if (option('url') !== undefined && option('db') === undefined) {
+    throw new Error(
+      '--url needs --db: the SQLite file that server was started with (its DATABASE_PATH), which the final check reads. ' +
+        'Like this: npm run hammer -- --url=http://localhost:3000 --db=data/pump.db',
+    );
+  }
 }
 
 checkOptions();
 const PLAYERS = wholeOption('players', 20);
 const ROUNDS = wholeOption('rounds', 8);
 
+/**
+ * This run's mark, random so that no other run has it. Each player's client
+ * seed is this mark and the player's number, so the final check can find
+ * exactly this run's players in the database. (A client seed is 1 to 64
+ * characters from A-Z, a-z, 0-9, _ and -. These are at most 40 long.)
+ */
+const RUN_TAG = `hammer-${String(process.pid)}-${randomBytes(4).toString('hex')}`;
+
+/** Balloons in each player's storm round: the most a round may have. */
+const STORM_BALLOONS = GAME_CONFIG.limits.maxBalloons;
+/**
+ * Different requests each balloon gets in a storm wave, each sent twice: as
+ * many as it takes for the first wave to have at least 1,000 in flight at
+ * once, whatever --players says.
+ */
+const STORM_PER_BALLOON = Math.max(3, Math.ceil(1000 / (PLAYERS * STORM_BALLOONS * 2)));
+/** The storm is played on the ladder whose first pump pops least, so most balloons reach wave two. */
+const STORM_DIFFICULTY = [...GAME_CONFIG.difficulties].sort(
+  (a, b) => (a.ladder[0] ?? 0) - (b.ladder[0] ?? 0),
+)[0];
+/** Each storm bet, in cents: $1, or the smallest bet allowed if that is more. */
+const STORM_BET_CENTS = Math.max(100, GAME_CONFIG.limits.minBetCents);
+
 // --- counting -------------------------------------------------------------
 
 let fired = 0;
 let inFlight = 0;
-let peakInFlight = 0;
+/** The most requests a storm wave put in flight at the same moment. */
+let stormPeak = 0;
 const statusCounts = new Map<number, number>();
 const failures: string[] = [];
-const checks = { pairs: 0, repeats: 0, starts: 0, refusedSeedChanges: 0, rounds: 0 };
+const checks = {
+  pairs: 0,
+  repeats: 0,
+  starts: 0,
+  /** Groups of four starts all refused, rightly, because the balance did not cover the bets. */
+  unaffordableStarts: 0,
+  refusedSeedChanges: 0,
+  rounds: 0,
+};
 /**
  * Each reveal seen on a finished round, once: round id and balloon index. The
  * same reveal comes back in the winning answer, its repeat and every late 409,
@@ -163,7 +224,6 @@ async function send(
 ): Promise<Answer & { setCookie: string | null }> {
   fired += 1;
   inFlight += 1;
-  peakInFlight = Math.max(peakInFlight, inFlight);
   try {
     const response = await fetch(baseUrl + path, {
       method,
@@ -224,10 +284,29 @@ const BETS = [10, 11, 99, 100, 250, 1234, 5000, 100_000] as const;
 
 class Player {
   cookie = '';
+  /** Unique to this run (see RUN_TAG), so the final check can find this player. */
+  readonly clientSeed: string;
+  /**
+   * The balance the server last reported, in cents. Bets are picked so that
+   * it covers them. In the storm a player's balloons are played at the same
+   * time, so the last answer to arrive may not be the latest; finishRound
+   * reads the session after the storm, which puts it right.
+   */
+  balanceCents = 0;
+  /** Set once this player's balance cannot cover a bet. They play no more rounds. */
+  outOfMoney = false;
   private readonly pick: (below: number) => number;
 
   constructor(readonly number: number) {
     this.pick = generator(1000 + number);
+    this.clientSeed = `${RUN_TAG}-${String(number)}`;
+  }
+
+  /** Keeps the balance a successful answer carries. */
+  private noteBalance(answer: Answer): void {
+    if (answer.status === 200) {
+      this.balanceCents = walletAnswerShape.parse(answer.json).wallet.balanceCents;
+    }
   }
 
   async join(): Promise<void> {
@@ -238,7 +317,17 @@ class Player {
       return;
     }
     this.cookie = token;
-    await send(this.cookie, 'PUT', '/api/fairness/client-seed', { clientSeed: `hammer-${String(this.number)}` }, newKey());
+    this.noteBalance(first);
+    const seeded = await send(
+      this.cookie,
+      'PUT',
+      '/api/fairness/client-seed',
+      { clientSeed: this.clientSeed },
+      newKey(),
+    );
+    if (seeded.status !== 200) {
+      fail(`player ${String(this.number)} could not set a client seed (${String(seeded.status)})`);
+    }
   }
 
   private pump(round: RoundView, balloonIndex: number, drawIndex: number, patch: boolean, key: string) {
@@ -305,12 +394,30 @@ class Player {
       if (answer !== winners[0] && (answer.status === 200 || answer.status === 409)) roundIn(answer);
     }
     const winner = winners[0];
-    return winner ? roundIn(winner) : null;
+    if (!winner) return null;
+    // The losers changed nothing, so the winner's wallet is the balance now.
+    this.noteBalance(winner);
+    return roundIn(winner);
   }
 
   private async startRound(): Promise<RoundView | null> {
     const difficulty = GAME_CONFIG.difficulties[this.pick(GAME_CONFIG.difficulties.length)];
-    const betsCents = Array.from({ length: 1 + this.pick(3) }, () => BETS[this.pick(BETS.length)] ?? 10);
+    // One to three bets, each covered by what is left of the balance.
+    const wanted = 1 + this.pick(3);
+    const betsCents: number[] = [];
+    let left = this.balanceCents;
+    for (let i = 0; i < wanted; i += 1) {
+      const fits = BETS.filter((bet) => bet <= left);
+      const bet = fits.length > 0 ? fits[this.pick(fits.length)] : undefined;
+      if (bet === undefined) break;
+      betsCents.push(bet);
+      left -= bet;
+    }
+    if (betsCents.length === 0) {
+      // Not even the smallest bet fits, so this player stops playing.
+      this.outOfMoney = true;
+      return null;
+    }
     const body = { difficultyId: difficulty?.id ?? 'easy', betsCents };
     // Four starts at once, with four different keys: one round, one set of bets.
     const answers = await Promise.all(
@@ -319,6 +426,10 @@ class Player {
       ),
     );
     checks.starts += 1;
+    if (answers.every((answer) => answer.status === 402)) {
+      await this.checkUnaffordable(answers, betsCents);
+      return null;
+    }
     const started = answers.filter((answer) => answer.status === 200);
     if (started.length !== 1) {
       fail(`player ${String(this.number)}: ${String(started.length)} of 4 simultaneous starts succeeded`);
@@ -329,7 +440,40 @@ class Player {
       }
     }
     const winner = started[0];
-    return winner ? roundIn(winner) : null;
+    if (!winner) return null;
+    this.noteBalance(winner);
+    return roundIn(winner);
+  }
+
+  /**
+   * All four starts were refused with 402. Bets are picked to fit the
+   * balance the server last reported, so this should not happen; if it
+   * does, the refusals are right only if the balance really is below the
+   * bets and they charged nothing. Each refusal says what the balance was
+   * once it was refused, and all four must match the balance read
+   * afterwards. Either way this player stops playing.
+   */
+  private async checkUnaffordable(answers: readonly Answer[], betsCents: readonly number[]): Promise<void> {
+    const costCents = betsCents.reduce((sum, bet) => sum + bet, 0);
+    const told = answers.map((answer) => refusalWalletShape.parse(answer.json).error.wallet.balanceCents);
+    const after = await this.balance();
+    const wrong = [
+      ...(after !== null && after >= costCents
+        ? [`the balance of ${String(after)} covers the bets of ${String(costCents)}`]
+        : []),
+      ...(after === null || told.some((balance) => balance !== after)
+        ? [`the refusals said the balance was ${told.join(', ')} and afterwards it was ${String(after)}`]
+        : []),
+    ];
+    if (wrong.length > 0) {
+      fail(
+        `player ${String(this.number)}: all 4 simultaneous starts were refused for want of money, ` +
+          `but ${wrong.join(', and ')}`,
+      );
+    } else {
+      checks.unaffordableStarts += 1;
+    }
+    this.outOfMoney = true;
   }
 
   async playRound(): Promise<void> {
@@ -384,7 +528,86 @@ class Player {
 
   async balance(): Promise<number | null> {
     const answer = await send(this.cookie, 'GET', '/api/session');
-    return answer.status === 200 ? sessionShape.parse(answer.json).wallet.balanceCents : null;
+    if (answer.status !== 200) return null;
+    this.balanceCents = sessionShape.parse(answer.json).wallet.balanceCents;
+    return this.balanceCents;
+  }
+
+  /** This player's round in progress, as the server has it now, or null. */
+  async currentRound(): Promise<RoundView | null> {
+    const answer = await send(this.cookie, 'GET', '/api/session');
+    if (answer.status !== 200) {
+      fail(`player ${String(this.number)}: GET /api/session answered ${String(answer.status)}`);
+      return null;
+    }
+    this.noteBalance(answer);
+    const round = sessionShape.parse(answer.json).activeRound;
+    return round === null ? null : roundIn({ ...answer, json: { round } });
+  }
+
+  /** Starts this player's storm round: STORM_BALLOONS balloons of STORM_BET_CENTS. */
+  async startStormRound(): Promise<void> {
+    const body = {
+      difficultyId: STORM_DIFFICULTY?.id ?? 'easy',
+      betsCents: Array.from({ length: STORM_BALLOONS }, () => STORM_BET_CENTS),
+    };
+    const answer = await send(this.cookie, 'POST', '/api/rounds', body, newKey());
+    if (answer.status !== 200) {
+      fail(`player ${String(this.number)}: the storm round did not start (${String(answer.status)})`);
+    }
+    this.noteBalance(answer);
+  }
+
+  /**
+   * One storm wave for this player: for every balloon still in play,
+   * STORM_PER_BALLOON different requests made from the same screen, each
+   * sent twice with its own key, all at once (burst). On a balloon not
+   * pumped yet they are all pumps, since nothing can be cashed out before
+   * the first pump. On a pumped balloon they mix Cash Out, Pump and
+   * Patch + Pump. Each balloon's group must have exactly one winner.
+   *
+   * Every request is sent before this returns its promise: `send` counts a
+   * request as in flight before its first await. So when the waves of all
+   * players are started in one go, all of their requests are in flight
+   * together.
+   */
+  stormWave(round: RoundView | null, wave: number): Promise<unknown> {
+    if (round === null) return Promise.resolve();
+    const live = round.balloons.filter((balloon) => balloon.status === 'active');
+    return Promise.all(
+      live.map(({ index, drawIndex, rung }) => {
+        const label = `storm wave ${String(wave)}: player ${String(this.number)} round ${round.id} balloon ${String(index)}`;
+        const requests = Array.from({ length: STORM_PER_BALLOON }, (_, i) => {
+          const kind = rung === 0 ? 1 : i % 3;
+          if (kind === 0) return (key: string) => this.cashOut(round, index, drawIndex, key);
+          return (key: string) => this.pump(round, index, drawIndex, kind === 2, key);
+        });
+        return this.burst(label, requests);
+      }),
+    );
+  }
+
+  /**
+   * Ends this player's round in progress, one balloon at a time: a balloon
+   * never pumped is pumped once, a pumped one is cashed out.
+   */
+  async finishRound(): Promise<void> {
+    for (let step = 0; step < 4 * STORM_BALLOONS; step += 1) {
+      const round = await this.currentRound();
+      const balloon = round?.balloons.find((b) => b.status === 'active');
+      if (!round || !balloon) return;
+      const answer =
+        balloon.rung === 0
+          ? await this.pump(round, balloon.index, balloon.drawIndex, false, newKey())
+          : await this.cashOut(round, balloon.index, balloon.drawIndex, newKey());
+      if (answer.status !== 200) {
+        fail(`player ${String(this.number)}: finishing the storm round got ${String(answer.status)}`);
+        return;
+      }
+      this.noteBalance(answer);
+      roundIn(answer);
+    }
+    fail(`player ${String(this.number)}: the storm round did not finish`);
   }
 }
 
@@ -426,7 +649,10 @@ interface Target {
 async function target(): Promise<Target> {
   const url = option('url');
   if (url !== undefined) {
-    return { url: url.replace(/\/$/, ''), databasePath: option('db') ?? 'data/pump.db', child: null };
+    // checkOptions has made sure --db came with it.
+    const databasePath = option('db');
+    if (databasePath === undefined) throw new Error('--url needs --db');
+    return { url: url.replace(/\/$/, ''), databasePath: fullPath(databasePath), child: null };
   }
   const port = await freePort();
   const databasePath = join(mkdtempSync(join(tmpdir(), 'pump-hammer-')), 'hammer.db');
@@ -435,6 +661,81 @@ async function target(): Promise<Target> {
     stdio: 'ignore',
   });
   return { url: `http://127.0.0.1:${String(port)}`, databasePath, child };
+}
+
+// --- the final check ------------------------------------------------------
+
+/** What the final check read from the database, or why it read nothing. */
+type Books =
+  | { readonly ok: false; readonly why: string }
+  | {
+      readonly ok: true;
+      readonly report: ReconcileReport;
+      /** Every stored balance added up, in cents. */
+      readonly storedTotal: number;
+      /** Players whose stored balance is below zero. */
+      readonly negative: number;
+    };
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/**
+ * Why the database is not the one the server under test uses, or null if
+ * it is. It must hold each of this run's players exactly once, found by
+ * their client seeds (see RUN_TAG), and no other player with this run's tag.
+ */
+function notThisRun(db: DatabaseSync, path: string, players: readonly Player[]): string | null {
+  const prefix = `${RUN_TAG}-`;
+  let seeds: string[];
+  try {
+    seeds = db
+      .prepare('SELECT client_seed FROM players WHERE substr(client_seed, 1, :length) = :prefix')
+      .all({ length: prefix.length, prefix })
+      .map((row) => text(row, 'client_seed'));
+  } catch (error) {
+    return `Could not read the players in ${path}: ${messageOf(error)}.`;
+  }
+  const ours = new Set(players.map((player) => player.clientSeed));
+  const found = new Set(seeds.filter((seed) => ours.has(seed)));
+  if (found.size === ours.size && seeds.length === ours.size) return null;
+  if (found.size === 0) {
+    return `${path} holds none of this run's ${String(ours.size)} players, so it is not the database of the server that was hammered.`;
+  }
+  return (
+    `${path} should hold each of this run's ${String(ours.size)} players once, ` +
+    `but holds ${String(found.size)} of them in ${String(seeds.length)} rows.`
+  );
+}
+
+/**
+ * Reads the books from the database file, read-only. First it makes sure
+ * the file is the one the server under test uses (notThisRun). Another
+ * server's database, or an older one, says nothing about this run, so then
+ * nothing more is read.
+ */
+function readBooks(path: string, players: readonly Player[]): Books {
+  let db: DatabaseSync;
+  try {
+    db = new DatabaseSync(path, { readOnly: true });
+  } catch (error) {
+    return { ok: false, why: `Could not open the database ${path}: ${messageOf(error)}.` };
+  }
+  try {
+    const why = notThisRun(db, path, players);
+    if (why !== null) return { ok: false, why };
+    const report = reconcile(db);
+    // COALESCE: a sum over no rows is NULL, not 0.
+    const total = db.prepare('SELECT COALESCE(SUM(balance_cents), 0) AS total FROM players').get();
+    const negative = db.prepare('SELECT COUNT(*) AS n FROM players WHERE balance_cents < 0').get();
+    return {
+      ok: true,
+      report,
+      storedTotal: total ? int(total, 'total') : -1,
+      negative: negative ? int(negative, 'n') : -1,
+    };
+  } finally {
+    db.close();
+  }
 }
 
 // --- run ------------------------------------------------------------------
@@ -458,17 +759,34 @@ async function run(): Promise<number> {
 
   const players = Array.from({ length: PLAYERS }, (_, i) => new Player(i + 1));
   await Promise.all(players.map((player) => player.join()));
-  // Everyone plays at once; within each player, every step is a burst.
+
+  // The storm. Each wave starts every player's requests in one go, so they
+  // are all in flight at the same moment (see stormWave).
+  await Promise.all(players.map((player) => player.startStormRound()));
+  for (let wave = 1; wave <= 2; wave += 1) {
+    const rounds = await Promise.all(players.map((player) => player.currentRound()));
+    const inFlightBefore = inFlight;
+    const waveDone = Promise.all(players.map((player, i) => player.stormWave(rounds[i] ?? null, wave)));
+    stormPeak = Math.max(stormPeak, inFlight - inFlightBefore);
+    await waveDone;
+  }
+  await Promise.all(players.map((player) => player.finishRound()));
+  const stormFired = fired;
+
+  // Everyone plays at once; within each player, every step is a burst. A
+  // player whose balance no longer covers a bet stops.
   await Promise.all(
     players.map(async (player) => {
-      for (let round = 0; round < ROUNDS; round += 1) await player.playRound();
+      for (let round = 0; round < ROUNDS && !player.outOfMoney; round += 1) await player.playRound();
     }),
   );
   const balances = await Promise.all(players.map((player) => player.balance()));
+  const stopped = players.filter((player) => player.outOfMoney).length;
 
   console.log(
-    `Fired ${fired.toLocaleString('en-US')} requests from ${String(PLAYERS)} players, ` +
-      `up to ${String(peakInFlight)} in flight at once.`,
+    `Fired ${fired.toLocaleString('en-US')} requests from ${String(PLAYERS)} players: ` +
+      `${stormFired.toLocaleString('en-US')} in the storm, with up to ${stormPeak.toLocaleString('en-US')} ` +
+      `in flight at once, then the rest round by round.`,
   );
   console.log(
     `Answers: ${[...statusCounts.entries()]
@@ -476,20 +794,24 @@ async function run(): Promise<number> {
       .map(([status, n]) => `${String(status)} x ${n.toLocaleString('en-US')}`)
       .join(', ')}`,
   );
+  if (stopped > 0) {
+    console.log(
+      `${String(stopped)} of ${String(PLAYERS)} players stopped early: their balance could no longer cover a bet.`,
+    );
+  }
 
-  // The final check reads the server's own database file, read-only.
-  const db = new DatabaseSync(server.databasePath, { readOnly: true });
-  const report = reconcile(db);
-  const storedBalances = db.prepare('SELECT SUM(balance_cents) AS total FROM players').get();
-  const negative = db.prepare('SELECT COUNT(*) AS n FROM players WHERE balance_cents < 0').get();
-  db.close();
-
+  // The final check reads the server's own database file, read-only, once
+  // it is sure the file is that server's (see readBooks).
+  const books = readBooks(server.databasePath, players);
   const seenTotal = balances.reduce<number>((sum, balance) => sum + (balance ?? 0), 0);
-  const storedTotal = storedBalances ? int(storedBalances, 'total') : -1;
   const before = failures.length;
 
   console.log('');
-  line('At least 1,000 overlapping requests were fired', fired >= 1000, `${fired.toLocaleString('en-US')} fired`);
+  line(
+    'At least 1,000 requests were in flight at the same moment',
+    stormPeak >= 1000,
+    `${stormPeak.toLocaleString('en-US')} at once, ${fired.toLocaleString('en-US')} fired in all`,
+  );
   line('The server never answered with a 5xx', ![...statusCounts.keys()].some((s) => s >= 500), '');
   line(
     'A repeated key always got the same answer',
@@ -504,7 +826,10 @@ async function run(): Promise<number> {
   line(
     'One round from four simultaneous starts',
     !failures.some((f) => f.includes('simultaneous starts') || f.includes('losing start')),
-    `${checks.starts.toLocaleString('en-US')} times`,
+    `${checks.starts.toLocaleString('en-US')} times` +
+      (checks.unaffordableStarts > 0
+        ? `, ${checks.unaffordableStarts.toLocaleString('en-US')} of them all refused: the balance was too low`
+        : ''),
   );
   line(
     'Seeds could not be rotated mid-round',
@@ -516,25 +841,41 @@ async function run(): Promise<number> {
     !failures.some((f) => f.includes('reveal was shown')),
     `${checks.rounds.toLocaleString('en-US')} rounds seen, ${revealsSeen.size.toLocaleString('en-US')} reveals on finished ones`,
   );
-  line('No balance is below zero', negative !== undefined && int(negative, 'n') === 0, '');
   line(
-    'Balances the players see equal the stored balances',
-    !server.child || seenTotal === storedTotal,
-    server.child ? `$${(storedTotal / 100).toLocaleString('en-US')} in total` : 'skipped: other players exist',
+    "The database holds each of this run's players",
+    books.ok,
+    books.ok ? `${String(PLAYERS)} found by client seed` : 'so its books were not checked',
   );
-  line(
-    'The ledger reconciles',
-    report.problems.length === 0,
-    `${String(report.players)} players, ${report.ledgerRows.toLocaleString('en-US')} ledger rows, ` +
-      `${report.rounds.toLocaleString('en-US')} rounds`,
-  );
+  if (books.ok) {
+    line('No balance is below zero', books.negative === 0, '');
+    line(
+      'Balances the players see equal the stored balances',
+      !server.child || seenTotal === books.storedTotal,
+      server.child
+        ? `$${(books.storedTotal / 100).toLocaleString('en-US')} in total`
+        : 'skipped: other players exist',
+    );
+    line(
+      'The ledger reconciles',
+      books.report.problems.length === 0,
+      `${String(books.report.players)} players, ${books.report.ledgerRows.toLocaleString('en-US')} ledger rows, ` +
+        `${books.report.rounds.toLocaleString('en-US')} rounds`,
+    );
+  }
 
   const problems = [
+    // First, as nothing about the books can be said without it.
+    ...(books.ok
+      ? []
+      : [
+          books.why +
+            (server.child ? '' : ' Is --db the file that server was started with (its DATABASE_PATH)?'),
+        ]),
     ...failures,
-    ...report.problems,
-    ...(fired >= 1000 ? [] : ['fewer than 1,000 requests were fired']),
-    ...(server.child && seenTotal !== storedTotal
-      ? [`players see ${String(seenTotal)} cents in total but the database holds ${String(storedTotal)}`]
+    ...(books.ok ? books.report.problems : []),
+    ...(stormPeak >= 1000 ? [] : ['fewer than 1,000 requests were in flight at the same moment']),
+    ...(books.ok && server.child && seenTotal !== books.storedTotal
+      ? [`players see ${String(seenTotal)} cents in total but the database holds ${String(books.storedTotal)}`]
       : []),
   ];
   if (problems.length > 0) {

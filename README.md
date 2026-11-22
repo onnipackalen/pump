@@ -240,7 +240,11 @@ A Patch is cheap on an early pump and expensive near the top, because both
 the risk and what's at stake grow. The price is on the Patch button before
 you buy. There is no upper limit: the largest single Patch is $25,773.20
 (Hard, $500 bet, pump 13). The price is worked out with whole-number
-BigInt math, because its numerator can pass 2^53.
+BigInt math. Its numerator, bet in cents × h_(k-1) × (h_k − h_(k-1)) × 100,
+is at most 8.0 × 10^15 on these ladders (Expert, $20 bet, pump 10). That is
+just under 2^53, about 9.0 × 10^15, where ordinary numbers stop being
+exact. Ladders are config, and another ladder can pass it: the fixed Expert
+test ladder in `game-spec.json` reaches 9.375 × 10^15.
 
 ### Rounding: which way, and why
 
@@ -251,9 +255,11 @@ round up.**
 - **Why:** the brief allows rounding to push the RTP just under, never
   over. Rounding toward the house is the only direction that can never pay
   back more than the RTP, for every legal bet, not only round ones.
-- **What it costs:** at most one cent per payment. Nothing on a $10 bet, a
-  lot on a 10-cent one. `npm run rtp` checks every legal bet from $0.10 to
-  $1,000 on every rung and prints the worst cases. At 97%:
+- **What it costs:** under a cent per payment. Cash-outs on whole-dollar
+  bets lose nothing, but a Patch price can round up at any bet. Rounding
+  costs most on cheap Patches and tiny bets. `npm run rtp` checks every
+  legal bet from $0.10 to $1,000 on every rung and prints the worst cases.
+  At 97%:
   - worst cash-out: 88.99% (Easy, $0.10 bet, rung 2: 1.09x of 10 cents is
     10.9 cents, paid as 10)
   - worst Patch: 49.88% (Easy, $0.12 bet, pump 3)
@@ -298,7 +304,9 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
 - [docs/fairness.md](docs/fairness.md) is the recipe for players, with
   worked examples.
 - `packages/engine/test/fair/reference/fair_reference.py` is a separate
-  copy in Python, written from that page alone. The engine tests must match
+  copy in Python, written from that page and the Provably fair rules in
+  `CLAUDE.md`. It uses no game code. Its test ladders come from the fixed
+  ones in `game-spec.json`, plus one made up. The engine tests must match
   its vectors.
 
 ### What the verify page trusts
@@ -400,7 +408,10 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
   balloon, and a finished round, from ever changing again. A draw index can
   be recorded for one pump only.
 - **The server seed stays secret.** Only its SHA-256 is shown until the
-  player rotates. The code that reads seeds can't read an active one.
+  player rotates. An active seed is read in one place only
+  (`secretForDrawing` in `apps/server/src/repositories/seeds.ts`), by the
+  game service, to work out draws inside the transaction that makes them;
+  it never goes into an answer.
 - **Players are anonymous.** A random token in an httpOnly cookie; the
   database stores only its hash.
 - **The books can be checked from the data alone.** `reconcile()` compares
@@ -411,8 +422,9 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
 
 - Each pump and cash-out says which state of the balloon it was made from:
   `expectedDrawIndex`, the number of draws made on it so far.
-- The first to arrive changes that number, so the second is refused with a
-  409 and the current round.
+- The first to arrive either moves that number on (a pump) or ends the
+  balloon (a cash-out), so the second is refused with a 409 and the
+  current round.
 - The rung wouldn't be enough: a pump saved by a Patch uses a draw without
   moving the rung.
 
@@ -440,11 +452,23 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
 
 - `npm run hammer` starts its own server as a separate process on a fresh
   database and has 20 players play at once.
-- Every step is a burst sent at the same moment: the same key twice, Pump
-  with Cash Out, two Pumps, two Cash Outs, four round starts.
+- First a storm: each player starts a three-balloon round, then every
+  balloon of every player gets 9 different requests (Pump, Patch + Pump,
+  Cash Out), each sent twice with its own key, all in the same moment. The
+  first wave puts 1,080 requests in flight at once; a second does the same
+  for the balloons still in play. Each balloon must have exactly one
+  winner, and each pair of sends the very same answer.
+- Then they play rounds, and every step is a burst sent at the same
+  moment: the same key twice, Pump with Cash Out, two Pumps, two Cash Outs,
+  four round starts. About 6,500 requests in all.
 - Then it opens the database and reconciles it.
 - To aim it at a server you already run:
   `npm run hammer -- --url=http://localhost:3000 --db=data/pump.db`.
+  `--db` must come with `--url`: it is the file that server was started
+  with (a relative path starts in `apps/server`, where `data/pump.db` is
+  the server's default). Each run's players get client seeds no other run
+  has, and the check fails unless that file holds every one of those
+  players, once each, so it can't pass about another server's database.
 
 ## The API
 
@@ -544,15 +568,18 @@ All of these run from the repo root.
 | `npm run typecheck` | Strict TypeScript over every package                      |
 | `npm run rtp`       | Exact RTP check: every rung, every Patch, every legal bet |
 | `npm run sim`       | Simulator, 10M rounds per difficulty through the engine   |
-| `npm run hammer`    | 4,000 overlapping requests at a server, then reconciles   |
+| `npm run hammer`    | 1,080 requests at once, 6,500 in all, then reconciles     |
 
 Conventions:
 
 - Tests live in a `test/` folder next to `src/`, named `*.test.ts`.
 - TypeScript stays on 6.0.x until typescript-eslint supports 7.
-- npm blocks dependency install scripts unless `allowScripts` in the root
-  `package.json` allows them. A dependency that needs to compile native
-  code has to be approved there.
+- `allowScripts` in the root `package.json` sets esbuild and fsevents to
+  `false`, so npm skips their install scripts. With npm 11.20, any other
+  dependency's install script still runs, with a warning that it isn't
+  listed; only `--strict-allow-scripts` makes that an error. List a new
+  dependency with an install script there: `true` to run it, `false` to
+  skip it.
 
 ## Tradeoffs
 

@@ -8,13 +8,15 @@
  * The engine is never asked what the right answer is. Every yardstick comes
  * from the rules worked out apart from it (cli/rules.ts):
  *
- *   - Exact checks, with no luck in them. Every draw must use the chance the
- *     rules give for that pump. Every outcome must follow from the roll.
- *     Every payout, every Patch charge and every top rung must be the rules'
- *     number to the cent. One mismatch is a failure.
+ *   - Exact checks, with no luck in them. Every pump must make one draw, at
+ *     the chance the rules give for that pump, and keep the roll it was
+ *     handed. Every outcome must follow from that roll. Every payout, every
+ *     Patch charge and every top rung must be the rules' number to the cent.
+ *     One mismatch is a failure.
  *   - Counts, where luck plays a part. The simulated RTP is compared with the
  *     exact RTP of the way the simulator plays, and each pump's survival
- *     count with its exact chance, both taken from the rules.
+ *     count with its exact chance, both taken from the rules. PASS_MARK
+ *     says how far luck may move them.
  *
  * Two ways of playing (see Play):
  *   SPREAD   Each balloon bets one of SIM_BETS, picks a target rung, lower
@@ -83,6 +85,32 @@ const RICH = Number.MAX_SAFE_INTEGER;
 const PUMP_LIMIT = 100_000;
 
 /**
+ * The pass mark, in standard errors, for every check where luck plays a
+ * part: the RTP, each pump's survival count and pump 1 alone.
+ *
+ * It is set for the whole run, not for one check. On the shipped ladders a
+ * run makes 170 such checks: the RTP, every pump and pump 1 alone, in the
+ * main run and the climb of each difficulty. Under the normal approximation
+ * one check lands more than 6 standard errors out once in 500 million, so a
+ * correct engine fails a run by luck about once in 3 million. Every check
+ * adds the same small share, so more difficulties or longer ladders change
+ * this little: it takes about 5,000 checks to reach once in 100,000.
+ *
+ * The RTP check needs the room most. Its standard error comes from the
+ * sample, and runs small when rare big wins are missing, so the RTP lands
+ * far out on the low side more often than the normal curve says, most of
+ * all in short runs.
+ *
+ * A wide mark loses little. The checks to the cent have no luck in them and
+ * carry the strictness: one wrong cent, chance or roll fails the run. And at
+ * the default 10 million rounds a pump chance one point off (50% played as
+ * 49%) is still more than 12.9 standard errors out at an RTP of 94%, 97% or
+ * 99%, on every pump of every shipped ladder. The closest is Hard's pump 13,
+ * which the climb tries about 418,000 times at 94% and 440,000 at 99%.
+ */
+export const PASS_MARK = 6;
+
+/**
  * How often each rung is the target: rung t gets weight floor(10^9 / h_t), so
  * a rung with twice the multiplier is aimed for half as often. Every rung is
  * played, but the rare huge wins do not drown the result in noise.
@@ -108,6 +136,11 @@ export interface BiggestWin {
 export interface Mismatches {
   /** Draws made with a chance that is not the rules' chance for that pump. */
   chances: number;
+  /**
+   * Pumps that did not make exactly one draw at the rules' den, or whose
+   * record of the draw is not the den and roll they were handed.
+   */
+  rolls: number;
   /** Pumps whose outcome or new state did not follow from the roll. */
   outcomes: number;
   /** Payouts that are not bet x multiplier rounded down. */
@@ -212,10 +245,22 @@ export function simulate(
     }
     return table;
   };
-  const draw = (den: number): number => rng.below(den);
+  // Each pump's draws are watched: how many it makes, the den it asks for and
+  // the roll it is handed. The engine's own record of the draw is held up
+  // against these, so it cannot play a roll other than the one it was given.
+  let drawsMade = 0;
+  let denAsked = 0;
+  let rollHanded = 0;
+  const draw = (den: number): number => {
+    drawsMade += 1;
+    denAsked = den;
+    rollHanded = rng.below(den);
+    return rollHanded;
+  };
 
   const mismatches: Mismatches = {
     chances: 0,
+    rolls: 0,
     outcomes: 0,
     payouts: 0,
     patchPrices: 0,
@@ -223,7 +268,7 @@ export function simulate(
     first: '',
   };
   const mismatch = (
-    kind: 'chances' | 'outcomes' | 'payouts' | 'patchPrices' | 'topRungs',
+    kind: 'chances' | 'rolls' | 'outcomes' | 'payouts' | 'patchPrices' | 'topRungs',
     what: () => string,
   ): void => {
     mismatches[kind] += 1;
@@ -303,6 +348,7 @@ export function simulate(
         const pumpNumber = balloon.rung + 1;
         const patch =
           balloon.rung >= 1 && (play.patchOneIn === 1 || rng.below(play.patchOneIn) === 0);
+        drawsMade = 0;
         const result = engine.pump(
           round,
           {
@@ -324,6 +370,26 @@ export function simulate(
               `pump ${String(pumpNumber)} was drawn at ` +
               `${String(result.draw.num)}/${String(result.draw.den)}, ` +
               `the rules give ${String(num)}/${String(den)}`,
+          );
+        }
+        // The pump must make one draw, at the rules' den, and its record must
+        // hold the roll it was handed. Then the outcome below, which follows
+        // the record, follows that roll too.
+        if (
+          drawsMade !== 1 ||
+          denAsked !== den ||
+          result.draw.den !== denAsked ||
+          result.draw.roll !== rollHanded
+        ) {
+          mismatch('rolls', () =>
+            drawsMade !== 1
+              ? `pump ${String(pumpNumber)} made ${String(drawsMade)} draws, the rules give 1`
+              : denAsked !== den
+                ? `pump ${String(pumpNumber)} asked for a roll below ${String(denAsked)}, ` +
+                  `the rules give ${String(den)}`
+                : `pump ${String(pumpNumber)} recorded roll ${String(result.draw.roll)} below ` +
+                  `${String(result.draw.den)}, it was handed ${String(rollHanded)} below ` +
+                  String(denAsked),
           );
         }
         // The outcome must follow from the roll, the Patch and the top rung.
@@ -528,7 +594,7 @@ export function report(
 
   const mean = result.sumRatio / result.rounds;
   const volatility = Math.sqrt(Math.max(result.sumRatioSq / result.rounds - mean * mean, 0));
-  const { chances, outcomes, payouts, patchPrices, topRungs } = result.mismatches;
+  const { chances, rolls, outcomes, payouts, patchPrices, topRungs } = result.mismatches;
   return {
     rtp,
     expectedRtp,
@@ -541,6 +607,6 @@ export function report(
     pumpOneRtp,
     pumpOneError,
     pumpOneZ,
-    exact: chances + outcomes + payouts + patchPrices + topRungs === 0,
+    exact: chances + rolls + outcomes + payouts + patchPrices + topRungs === 0,
   };
 }

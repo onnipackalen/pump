@@ -13,9 +13,10 @@ export type FairnessService = ReturnType<typeof fairnessService>;
  * The seeds a player's rounds are drawn from.
  *
  * The server seed is secret while it is in use: only its hash is shown.
- * Rotating retires it, reveals it, and starts a new one. Nothing here can
- * return an active seed, because the repository does not read that column
- * until the seed has been revealed.
+ * Rotating retires it, reveals it, and starts a new one. Nothing here reads
+ * an active seed's value: the repository gives it out in one place only,
+ * secretForDrawing, which the game service uses to work out draws. Here only
+ * revealed seeds are read.
  */
 export function fairnessService(
   runtime: Runtime,
