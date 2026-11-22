@@ -363,6 +363,32 @@ describe('what the screen showed for a start is never thrown away', () => {
     expect(startsOnTheirWay(storage)).toEqual([]);
   });
 
+  it('a refused start keeps a stand-in when a round for its bets is in play, and only then', async () => {
+    const { client, fairness } = await demo(new DemoClient(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    const { round } = await startRoundShown(client, REQUEST, fairness, storage);
+    const otherBets: RoundView = {
+      ...round,
+      balloons: round.balloons.map((b) => ({ ...b, betCents: b.betCents + 1 })),
+    };
+    const refused = { ...REQUEST, shown: seedsAt(4) };
+
+    // A round for other bets: the refusal stands, and the start is dropped.
+    rememberStarting(refused, storage);
+    markRefused(refused, storage);
+    keepLostStartCopy(otherBets, storage);
+    expect(standIns(storage)).toEqual([]);
+
+    // A round for its bets, under an id that already has a copy (a server
+    // can reuse an older round's id): the refusal is in doubt, so it is kept.
+    rememberStarting(refused, storage);
+    markRefused(refused, storage);
+    keepLostStartCopy(round, storage);
+    expect(standIns(storage)).toEqual([[`?start:4:${H}`, H, 'player-seed', 4]]);
+    expect(shownFor(round.id, storage)).toEqual(copyOf(fairness));
+    expect(startsOnTheirWay(storage)).toEqual([]);
+  });
+
   it('after a start goes through: a start with the same hash and nonce is dropped, any other keeps a stand-in', async () => {
     const { client, fairness } = await demo(new DemoClient(GAME_CONFIG, 0));
     const storage = memoryStorage();

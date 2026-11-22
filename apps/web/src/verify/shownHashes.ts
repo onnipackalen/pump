@@ -27,8 +27,9 @@
  *   ends as a copy: under its round's id, or under a stand-in id
  *   (rememberStandIn), so what the screen showed is never thrown away. The
  *   only ones dropped are a start the server refused with no round in its
- *   answer (markRefused), which made no round, and a start with the same
- *   hash and nonce as one that went through, whose copy then stands for it.
+ *   answer (markRefused), which made no round, when no round for its bets
+ *   turns up in play, and a start with the same hash and nonce as one that
+ *   went through, whose copy then stands for it.
  *
  * Why a new key, not longer entries under the old one: an older build still
  * open in another tab rewrites the old key with only the two-part entries it
@@ -92,8 +93,9 @@ export interface StartOnItsWay {
   /**
    * Set once the server refused it with no round in its answer (too little
    * money, or seeds_changed, say). For an honest server that start made no
-   * round, so it never gets a stand-in copy: one could only give an honest
-   * round a false alarm. See keepLostStartCopy in game/session.ts.
+   * round, so it gets no stand-in copy (one could only give an honest round
+   * a false alarm), unless a round for its bets turns up in play: then the
+   * refusal is in doubt. See keepLostStartCopy in game/session.ts.
    */
   readonly refused?: true;
 }

@@ -17,7 +17,7 @@ import { roundToCheck, Workbench } from '../src/components/VerifyPage';
 import { DemoClient } from '../src/demo/DemoClient';
 import { afterFailure, finishedRefusal, seedsInRefusal } from '../src/game/refusal';
 import { isOlder } from '../src/game/roundOrder';
-import { keepLostStartCopy, startRoundShown } from '../src/game/session';
+import { keepLostStartCopy, openGame, startRoundShown } from '../src/game/session';
 import {
   copiesWithSameNonce,
   isStandIn,
@@ -308,6 +308,61 @@ class RefusesWithFinishedRound extends DemoClient {
   }
 }
 
+/**
+ * The reviewers' probe for a refused start. A cheating server makes the
+ * rigged start's round anyway, on a client seed it picked, at the hash and
+ * nonce the panel showed, and answers with a refusal that carries no round:
+ * "Something went wrong on our side" (500), or a lying "seeds_changed".
+ * While the round is played it calls it by an EARLIER round's id, one this
+ * browser already has a copy under, and shows the player's client seed.
+ */
+class RefusesStartAndReusesId extends DemoClient {
+  rigNext: 'internal_error' | 'seeds_changed' | null = null;
+  alias: string | null = null;
+  realId: string | null = null;
+
+  override async startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
+    const refusal = this.rigNext;
+    if (refusal === null) return super.startRound(request, k);
+    this.rigNext = null;
+    await super.setClientSeed('server-picked', key());
+    this.realId = (await super.startRound(unchecked(request), k)).round.id;
+    if (refusal === 'internal_error') {
+      throw new ApiFailure({ code: 'internal_error', message: 'Something went wrong on our side.' });
+    }
+    const { fairness, wallet } = await this.getSession();
+    throw new ApiFailure({ code: 'seeds_changed', message: 'Changed.', fairness, wallet });
+  }
+
+  private out(round: RoundView): RoundView {
+    if (round.id !== this.realId) return round;
+    return { ...round, clientSeed: 'player-seed', ...(this.alias !== null ? { id: this.alias } : {}) };
+  }
+
+  private into(roundId: string): string {
+    return this.alias !== null && roundId === this.alias && this.realId !== null ? this.realId : roundId;
+  }
+
+  override async getSession(): Promise<SessionView> {
+    const s = await super.getSession();
+    return {
+      ...s,
+      fairness: { ...s.fairness, clientSeed: s.fairness.clientSeed === null ? null : 'player-seed' },
+      activeRound: s.activeRound ? this.out(s.activeRound) : null,
+    };
+  }
+
+  override async pump(roundId: string, body: PumpBody, k: string): Promise<PumpResult> {
+    const r = await super.pump(this.into(roundId), body, k);
+    return { ...r, round: this.out(r.round) };
+  }
+
+  override async cashOut(roundId: string, body: CashOutBody, k: string): Promise<ActionResult> {
+    const r = await super.cashOut(this.into(roundId), body, k);
+    return { ...r, round: this.out(r.round) };
+  }
+}
+
 describe('a cheating server cannot make a start’s copy go away', () => {
   it('a lost start whose round is called by an older round’s id keeps its copy under a stand-in (finding 1)', async () => {
     const storage = memoryStorage();
@@ -406,6 +461,60 @@ describe('a cheating server cannot make a start’s copy go away', () => {
     expect(checksOut).toBe(false);
     expect(html).toContain('“player-seed”');
   });
+
+  for (const [refusal, after] of [
+    ['internal_error', 'a reload'],
+    ['seeds_changed', 'its resync, with no reload'],
+  ] as const) {
+    it(`a start refused with no round (${refusal}), played anyway and called by an older round’s id after ${after}, keeps a stand-in`, async () => {
+      const storage = memoryStorage();
+      const { client, fairness } = await demo(new RefusesStartAndReusesId(GAME_CONFIG, 0));
+      const first = await honestRound(client, fairness, storage);
+
+      const shown = (await client.getSession()).fairness;
+      client.rigNext = refusal;
+      const failure = await startRoundShown(client, BETS, shown, storage).catch((e: unknown) => e);
+      expect(failure instanceof ApiFailure && failure.code).toBe(refusal);
+      expect(startsOnTheirWay(storage).map((s) => s.refused)).toEqual([true]);
+      expect(afterFailure(failure)).toBe(refusal === 'internal_error' ? 'none' : 'resync');
+
+      // The game loads the whole state again and finds the round in play,
+      // called by the first round's id, which already has a copy.
+      client.alias = first;
+      let activeRound: RoundView | null;
+      if (refusal === 'internal_error') {
+        ({ activeRound } = (await openGame(client, undefined, storage)).session);
+      } else {
+        ({ activeRound } = await client.getSession());
+        keepLostStartCopy(activeRound, storage);
+      }
+      if (!activeRound) throw new Error('the start was applied');
+      expect(activeRound.id).toBe(first);
+      expect(startsOnTheirWay(storage)).toEqual([]);
+      // A round for its bets turned up, so the refusal is in doubt: its seeds are kept.
+      expect(copies(storage).filter(([id]) => isStandIn(id)).map((e) => e.slice(1))).toEqual([
+        [shown.serverSeedHash, 'player-seed', shown.nextNonce],
+      ]);
+
+      await finishRound(client, activeRound);
+      await client.rotateSeed(key());
+      const realId = client.realId;
+      if (realId === null) throw new Error('a rigged round expected');
+      const { record, html, checksOut } = await verdictOf(client, realId, storage);
+      expect(record).toMatchObject({
+        clientSeed: 'server-picked',
+        nonce: shown.nextNonce,
+        serverSeedHash: shown.serverSeedHash,
+      });
+      expect(verifyRound(record).ok).toBe(true);
+      expect(shownFor(realId, storage)).toBeNull();
+      expect(checksOut).toBe(false);
+      expect(html).toContain('“server-picked”');
+      expect(html).toContain('“player-seed”');
+      // The honest first round still checks out.
+      expect((await verdictOf(client, first, storage)).checksOut).toBe(true);
+    });
+  }
 });
 
 /**
@@ -612,6 +721,18 @@ class LosesNextStart extends DemoClient {
     this.tries += 1;
     if (this.tries === 2) this.lose = null;
     throw new NetworkFailure('Could not reach the game server. Check your connection.');
+  }
+}
+
+/** The same, and it can also refuse the next start, as a real one would for a balance too small. */
+class RefusesOrLosesNextStart extends LosesNextStart {
+  refuseNext = false;
+  override startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
+    if (!this.refuseNext) return super.startRound(request, k);
+    this.refuseNext = false;
+    return Promise.reject(
+      new ApiFailure({ code: 'insufficient_funds', message: 'Not enough money.', wallet: { balanceCents: 5 } }),
+    );
   }
 }
 
@@ -925,5 +1046,55 @@ describe('an honest server never gets a false alarm from these copies', () => {
     const { record, checksOut } = await verdictOf(client, id, storage);
     expect(record).toMatchObject({ clientSeed: 'tab-a-seed', nonce: fairness.nextNonce });
     expect(checksOut).toBe(true);
+  });
+
+  it('two tabs: a stale tab presses Bet while the other tab’s round is in play: refused, and every round checks out', async () => {
+    const storage = memoryStorage(); // one browser, shared by both tabs
+    const { client, fairness: tabB } = await demo(new DemoClient(GAME_CONFIG, 0));
+    // Tab A saves a new client seed and starts a round with the same bets.
+    const tabA = await client.setClientSeed('tab-a-seed', key());
+    const { round } = await startRoundShown(client, BETS, tabA, storage);
+
+    // Tab B still shows the old client seed. The demo's "round_active"
+    // carries no round, so the start is marked refused, and the resync
+    // finds tab A's round in play, which already has its copy.
+    const refusal = await startRoundShown(client, BETS, tabB, storage).catch((e: unknown) => e);
+    expect(refusal instanceof ApiFailure && refusal.code).toBe('round_active');
+    expect(afterFailure(refusal)).toBe('resync');
+    const { activeRound } = await client.getSession();
+    expect(activeRound?.id).toBe(round.id);
+    keepLostStartCopy(activeRound, storage);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+    expect(shownFor(round.id, storage)?.clientSeed).toBe('tab-a-seed');
+
+    await finishRound(client, round);
+    const next = await honestRound(client, (await client.getSession()).fairness, storage);
+    await client.rotateSeed(key());
+    expect((await verdictOf(client, round.id, storage)).checksOut).toBe(true);
+    expect((await verdictOf(client, next, storage)).checksOut).toBe(true);
+  });
+
+  it('a refused start, a client seed change, then a lost start: the round gets the newest start’s copy and checks out', async () => {
+    const storage = memoryStorage();
+    const { client, fairness } = await demo(new RefusesOrLosesNextStart(GAME_CONFIG, 0));
+    client.refuseNext = true;
+    await expect(startRoundShown(client, BETS, fairness, storage)).rejects.toBeInstanceOf(ApiFailure);
+    const changed = await client.setClientSeed('new-seed', key());
+    client.lose = 'after';
+    await expect(startRoundShown(client, BETS, changed, storage)).rejects.toBeInstanceOf(NetworkFailure);
+
+    // The next load finds the round in play. Both starts asked for its bets.
+    const opened = await openGame(client, undefined, storage);
+    const activeRound = opened.session.activeRound;
+    if (!activeRound) throw new Error('the start was applied');
+    expect(shownFor(activeRound.id, storage)?.clientSeed).toBe('new-seed');
+    expect(startsOnTheirWay(storage)).toEqual([]);
+    const id = await finishRound(client, activeRound);
+    const next = await honestRound(client, (await client.getSession()).fairness, storage);
+    await client.rotateSeed(key());
+    const { record, checksOut } = await verdictOf(client, id, storage);
+    expect(record).toMatchObject({ clientSeed: 'new-seed', nonce: fairness.nextNonce });
+    expect(checksOut).toBe(true);
+    expect((await verdictOf(client, next, storage)).checksOut).toBe(true);
   });
 });

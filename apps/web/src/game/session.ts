@@ -185,7 +185,8 @@ export function shownBefore(fairness: FairnessView | null): SeedsBeforeRound | n
  *   check it (keepLostStartCopy);
  * - any other refusal: it is marked refused (for an honest server it made no
  *   round), and the next full load of the state, or the next start that
- *   goes through, settles it;
+ *   goes through, settles it. It is dropped then, unless a round for its
+ *   bets is in play at that load (see keepLostStartCopy);
  * - both tries lose the answer: the same, unmarked.
  *
  * Throws SeedsNotShown, sending nothing, if the screen shows no valid seeds.
@@ -239,7 +240,8 @@ function roundIn(error: ApiFailure): RoundView | null {
  * kinds are dropped instead:
  * - a start the server refused with no round in its answer (marked
  *   refused). For an honest server it made no round, so a stand-in could
- *   only make a later honest round on the same nonce look wrong.
+ *   only make a later honest round on the same nonce look wrong. (If a
+ *   round for its bets is in play, keepLostStartCopy keeps it before this.)
  * - after a start went through (`wentThrough`, the seeds it was bet
  *   against): a start with the same hash and nonce. One server seed and
  *   nonce belong to one round only, so it made no other round, and any
@@ -297,19 +299,33 @@ function askedFor(start: StartOnItsWay, round: RoundView): boolean {
  * here, so a server that refused a start and still made its round is
  * checked too.
  *
- * Then every other start on its way is settled (settleStarts): kept under
- * a stand-in id, or dropped if it was refused.
+ * Every other start that asked for these bets keeps its seeds under a
+ * stand-in id, even one marked refused: a round for its bets turned up, so
+ * the refusal is in doubt. That covers a round this browser already has a
+ * copy under (a server can name the round it made by an older round's id),
+ * and the starts older than the one taken. The verify page finds such a
+ * stand-in by the hash and nonce of the round it made.
+ *
+ * Then every start that did not ask for these bets is settled
+ * (settleStarts): kept under a stand-in id, or dropped if it was refused.
+ * So a refused start is dropped only when no round for its bets turned up.
  */
 export function keepLostStartCopy(round: RoundView | null, storage?: HashStorage | null): void {
   const starting = startsOnTheirWay(storage);
   if (starting.length === 0) return;
-  let rest = starting;
-  if (round !== null && shownFor(round.id, storage) === null) {
-    const start = starting.find((s) => askedFor(s, round));
-    if (start) {
-      rememberShown(round.id, start.shown, storage);
-      rest = starting.filter((s) => s !== start);
-    }
+  if (round === null) {
+    settleStarts(starting, storage);
+    return;
   }
-  settleStarts(rest, storage);
+  const forRound = starting.filter((s) => askedFor(s, round));
+  const [newest] = forRound;
+  const taken = newest !== undefined && shownFor(round.id, storage) === null ? newest : null;
+  if (taken !== null) rememberShown(round.id, taken.shown, storage);
+  for (const start of forRound) {
+    if (start !== taken) rememberStandIn(start.shown, storage);
+  }
+  settleStarts(
+    starting.filter((s) => !forRound.includes(s)),
+    storage,
+  );
 }
