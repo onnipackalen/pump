@@ -9,6 +9,8 @@ The game's art lives where the game uses it, so there is only one copy.
 | Balloon, floor pump and hose, and every attribute they take | `apps/web/src/balloon/Balloon.tsx` |
 | Balloon colours and every animation | `apps/web/src/balloon/balloon.css` (app-side switches in `balloon-app.css`) |
 | Favicon and app icons | `apps/web/public/` |
+| The scene behind the balloons: Dusk, the default | `apps/web/src/background.css` |
+| The night scenes picked in Settings > Background | `apps/web/src/scenes/` (one block each in `scenes.css`, small SVGs beside it) |
 
 ## Rules
 

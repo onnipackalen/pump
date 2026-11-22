@@ -522,8 +522,9 @@ off without touching the game's math.
   be read as `true` or `false`. The server can't see a typo in the
   variable's name, so it logs `public wins: ON` or `OFF` at every start.
   Read that line after changing it.
-- **Player settings.** Sound, Animations off and Keep my wins private are in
-  the game's settings menu. Animations off removes movement but keeps the
+- **Player settings.** Sound, Animations off, Background (Dusk, or one of
+  seven night scenes) and Keep my wins private are in the game's settings
+  menu. Animations off removes movement but keeps the
   same timing, so a result never shows sooner.
 
 ## Scripts

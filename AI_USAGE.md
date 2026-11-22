@@ -23,6 +23,9 @@
     button before you buy.
   - the after-round reveal, the start animation, the phone layout and
     auto-bet.
+  - the night backgrounds in Settings: which scenes, all at night with
+    stars, and Dusk kept as the default. The AI drew them; I judged a
+    demo before they went in.
 - I had the game plan, and I oversaw the whole build. I looked over
   everything as it came in, made sure it was right, and made sure the
   pieces fitted together and the game flowed well.
