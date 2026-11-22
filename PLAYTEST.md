@@ -1,7 +1,8 @@
 # Playtest
 
-- **Not just one session.** I went back to the other games again and
-  again while ours was built, not only in the session below. I judged them
+- **Not just one session.** I went back to Stake's Pump and the other
+  games again and again while ours was built, not only in the session
+  below. I judged them
   critically: what they do well came over into ours, and I looked at their
   flaws to make sure ours didn't copy them.
 - **They weren't perfect.** For example, I found SmartSoft's Balloon's
@@ -9,8 +10,8 @@
   game needed calm, simple graphics, more like Stake's.
 - **The sit-down session:** Friday evening, 20 November, about 40 minutes
   in all.
-- **What:** Stake's Pump first, then two similar games: SmartSoft's
-  Balloon and InOut's Chicken Road. I spoke my notes out loud as I played.
+- **What:** 30 minutes on Stake's Pump first, then two similar games:
+  SmartSoft's Balloon and InOut's Chicken Road. I spoke my notes out loud as I played.
 - **Then ours.** I had also been playing it at points while it was built.
 
 ## What theirs does better
