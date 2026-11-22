@@ -3159,3 +3159,26 @@ What turned out wrong, and how it was caught:
   included), and the squeak went up. The pump sound still carries about
   13 dB more sound energy than the old puff, mostly because it lasts five
   times longer; it now sits just under the squeak.
+
+## 2026-11-21: 8bb3204 deployed to the live site
+
+On the user's "Merge and deploy" and "ok deploy it". `sheet-stays-down`
+was merged with main (the sound remake, 7ddc187 and ad47240, came along)
+and main was fast-forwarded to 8bb3204.
+
+- Before the push: 1,923 tests, typecheck, lint and build, all passing.
+  Since the last deploy (754293f) nothing changed in apps/server or
+  packages/, so there was no database step and the deploy is not one-way.
+- GitHub's check on the push: green. Render: Manual Deploy > Deploy
+  latest commit, live after 1 m 23 s.
+- Log: `opened the existing file, 8 players`, `public wins: ON`. The live
+  page serves `index-BFwVvIT3.css`, the same file as the local build, and it
+  holds the new `scroll-snap-type: none` rule.
+- No test round was played on the live site: with public wins on, a test
+  player's cash-out would show in the public list, and this deploy changes
+  no server code.
+
+Not checked yet: the fix itself on the user's iPhone (swipe the sheet up,
+press Bet, play to the end of the round, and the sheet should stay down).
+An independent review of what this deploy ships was still running when it
+went live.
