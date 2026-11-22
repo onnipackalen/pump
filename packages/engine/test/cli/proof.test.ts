@@ -14,9 +14,12 @@ import {
 import {
   bestStrategyEdge,
   proveRungs,
+  REAL_MATH,
   rtpOf,
   scanBets,
   strategyExpectation,
+  type BetScan,
+  type MathPort,
 } from '../../cli/proof';
 import { DIFFICULTIES, LIMITS, RTP_BP } from '../../src/config';
 import { cashOutCents, patchPriceCents, surviveChance } from '../../src/math';
@@ -141,6 +144,61 @@ describe('the worst cases of cent rounding at 97%', () => {
     // With a cap of one cent nothing is reachable, so there is nothing to check.
     const none = scanBets(9700, ladderOf('expert'), { ...LIMITS, maxPayoutCents: 1 }, [10]);
     expect([none.cashOuts, none.patches, none.worstPatch]).toEqual([0, 0, null]);
+  });
+});
+
+describe('the proof catches an engine that is wrong', () => {
+  // On the fixed Expert ladder $1,000 tops out at rung 6, which pays $47,500.
+  const expert = ladderOf('expert');
+  /** The lines npm run rtp prints from a bet scan, true for PASS. */
+  const lines = (scan: BetScan) => ({
+    topRungsRight: scan.topRungsRight,
+    payoutsRoundDown: scan.payoutsRoundDown,
+    pricesRoundUp: scan.pricesRoundUp,
+    wholeDollarsExact: scan.wholeDollarsExact,
+    underCap: scan.underCap,
+    cashOutsWithinRtp: scan.cashOutsWithinRtp,
+    patchesWithinRtp: scan.patchesWithinRtp,
+  });
+  const allPass = {
+    topRungsRight: true,
+    payoutsRoundDown: true,
+    pricesRoundUp: true,
+    wholeDollarsExact: true,
+    underCap: true,
+    cashOutsWithinRtp: true,
+    patchesWithinRtp: true,
+  };
+
+  it.each(RTPS)('passes the real engine at %i', (rtpBp) => {
+    expect(lines(scanBets(rtpBp, expert, LIMITS, BETS, REAL_MATH))).toEqual(allPass);
+  });
+
+  it.each(RTPS)('a top rung one too high for capped bets fails the cap line at %i', (rtpBp) => {
+    const engine: MathPort = {
+      ...REAL_MATH,
+      topRungForBet: (ladder, bet, cap) => {
+        const real = REAL_MATH.topRungForBet(ladder, bet, cap);
+        return real < ladder.length ? real + 1 : real;
+      },
+    };
+    // $1,000 now tops out on rung 7, and its automatic cash-out pays $125,000.
+    const top = engine.topRungForBet(expert, 100_000, LIMITS.maxPayoutCents);
+    expect([top, cashOutCents(100_000, expert, top)]).toEqual([7, 12_500_000]);
+    expect(scanBets(rtpBp, expert, LIMITS, [100_000], engine).underCap).toBe(false);
+    // Every payout is still rounded right, so the cap line fails on its own.
+    expect(lines(scanBets(rtpBp, expert, LIMITS, BETS, engine))).toEqual({
+      ...allPass,
+      topRungsRight: false,
+      underCap: false,
+    });
+  });
+
+  it('does not look for payouts past the end of the ladder', () => {
+    // 10 cents climbs all 10 rungs under the cap. There is no rung 11 to pay out on.
+    const engine: MathPort = { ...REAL_MATH, topRungForBet: (ladder) => ladder.length + 1 };
+    const scan = scanBets(RTP_BP, expert, LIMITS, [10], engine);
+    expect([scan.topRungsRight, scan.underCap]).toEqual([false, true]);
   });
 });
 

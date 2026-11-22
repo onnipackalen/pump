@@ -148,7 +148,10 @@ export interface BetScan {
   readonly pricesRoundUp: boolean;
   /** Every bet that is a whole number of dollars is paid bet x multiplier exactly. */
   readonly wholeDollarsExact: boolean;
-  /** No payout is above the payout cap. */
+  /**
+   * No payout is above the payout cap, on any rung up to the engine's own top
+   * rung for the bet, where the balloon cashes out by itself.
+   */
   readonly underCap: boolean;
   /** For every bet, the engine's top rung is the highest one under the cap. */
   readonly topRungsRight: boolean;
@@ -229,7 +232,15 @@ export function scanBets(
     betCount += 1;
     // The rungs to check are the ones the rules allow, not the ones the engine says.
     const top = ruleTopRung(ladder, bet, limits.maxPayoutCents);
-    if (engine.topRungForBet(ladder, bet, limits.maxPayoutCents) !== top) topRungsRight = false;
+    const engineTop = engine.topRungForBet(ladder, bet, limits.maxPayoutCents);
+    if (engineTop !== top) topRungsRight = false;
+    // A balloon can climb as far as the engine's top rung, and is paid there
+    // by itself. On the rules' rungs a payout rounded down always fits under
+    // the cap, so the cap is also checked on any rung of the ladder above them
+    // that the engine lets this bet reach. With a right engine there is none.
+    for (let rung = top + 1; rung <= Math.min(engineTop, ladder.length); rung += 1) {
+      if (engine.cashOutCents(bet, ladder, rung) > limits.maxPayoutCents) underCap = false;
+    }
     const betBig = BigInt(bet);
     for (let rung = 1; rung <= top; rung += 1) {
       cashOuts += 1;
