@@ -408,6 +408,55 @@ describe('a cheating server cannot make a start’s copy go away', () => {
   });
 });
 
+/**
+ * A cheating server that plays the rigged start on a nonce already used
+ * (with the player's own client seed), so the round has the rolls of an
+ * earlier round. It loses both answers, moves the next nonce on as if the
+ * nonce on screen was used, and calls the round by another round's id
+ * while it is played.
+ */
+class ReusesNonce extends DemoClient {
+  rigNonce: number | null = null;
+  alias: string | null = null;
+  realId: string | null = null;
+
+  override async startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
+    if (this.rigNonce === null) return super.startRound(request, k);
+    if (this.realId === null) {
+      // The demo keeps its next nonce in a private field; a cheating server sets its own.
+      const seeds = this as unknown as { nonce: number };
+      const next = seeds.nonce;
+      seeds.nonce = this.rigNonce;
+      this.realId = (await super.startRound(unchecked(request), k)).round.id;
+      seeds.nonce = next + 1;
+    }
+    throw new NetworkFailure('The game server did not answer properly (502).');
+  }
+
+  private out(round: RoundView): RoundView {
+    return this.alias !== null && round.id === this.realId ? { ...round, id: this.alias } : round;
+  }
+
+  private into(roundId: string): string {
+    return this.alias !== null && roundId === this.alias && this.realId !== null ? this.realId : roundId;
+  }
+
+  override async getSession(): Promise<SessionView> {
+    const s = await super.getSession();
+    return { ...s, activeRound: s.activeRound ? this.out(s.activeRound) : null };
+  }
+
+  override async pump(roundId: string, body: PumpBody, k: string): Promise<PumpResult> {
+    const r = await super.pump(this.into(roundId), body, k);
+    return { ...r, round: this.out(r.round) };
+  }
+
+  override async cashOut(roundId: string, body: CashOutBody, k: string): Promise<ActionResult> {
+    const r = await super.cashOut(this.into(roundId), body, k);
+    return { ...r, round: this.out(r.round) };
+  }
+}
+
 describe('a cheating server cannot pick which start’s seeds a round is checked against', () => {
   it('a refused start, a new client seed, then a lost start played on the old seed does not check out', async () => {
     const storage = memoryStorage();
@@ -481,6 +530,35 @@ describe('a cheating server cannot pick which start’s seeds a round is checked
     expect(checksOut).toBe(false);
     expect(html).toContain('“new-seed”');
     expect((await verdictOf(client, first, storage)).checksOut).toBe(true);
+  });
+
+  it('a renamed round that reuses an earlier nonce’s rolls does not check out, though the client seed is the same', async () => {
+    const storage = memoryStorage();
+    const { client } = await demo(new ReusesNonce(GAME_CONFIG, 0));
+    const honest: string[] = [];
+    for (let n = 0; n < 3; n += 1) {
+      honest.push(await honestRound(client, (await client.getSession()).fairness, storage));
+    }
+    const shown = (await client.getSession()).fairness;
+    expect(shown.nextNonce).toBe(3);
+    client.rigNonce = 1;
+    client.alias = honest[2] ?? null;
+    await expect(startRoundShown(client, BETS, shown, storage)).rejects.toBeInstanceOf(NetworkFailure);
+    const { activeRound } = await client.getSession();
+    if (!activeRound) throw new Error('the start was applied');
+    keepLostStartCopy(activeRound, storage);
+    await finishRound(client, activeRound);
+    await client.rotateSeed(key());
+
+    const realId = client.realId;
+    if (realId === null) throw new Error('a rigged round expected');
+    const { record, html, checksOut } = await verdictOf(client, realId, storage);
+    expect(record).toMatchObject({ clientSeed: 'player-seed', nonce: 1 });
+    expect(verifyRound(record).ok).toBe(true);
+    expect(checksOut).toBe(false);
+    expect(html).toContain(`used the rolls of round ${honest[1] ?? ''} again`);
+    // The honest rounds still check out.
+    for (const id of honest) expect((await verdictOf(client, id, storage)).checksOut).toBe(true);
   });
 
   it('a start refused with a finished round in its body is caught at once, with no reload', async () => {
