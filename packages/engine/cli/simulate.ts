@@ -14,7 +14,8 @@
  *     number to the cent. One mismatch is a failure.
  *   - Counts, where luck plays a part. The simulated RTP is compared with the
  *     exact RTP of the way the simulator plays, and each pump's survival
- *     count with its exact chance, both taken from the rules.
+ *     count with its exact chance, both taken from the rules. PASS_MARK
+ *     says how far luck may move them.
  *
  * Two ways of playing (see Play):
  *   SPREAD   Each balloon bets one of SIM_BETS, picks a target rung, lower
@@ -81,6 +82,32 @@ const RICH = Number.MAX_SAFE_INTEGER;
 
 /** No balloon needs this many pumps. Reaching it means the engine never ended the balloon. */
 const PUMP_LIMIT = 100_000;
+
+/**
+ * The pass mark, in standard errors, for every check where luck plays a
+ * part: the RTP, each pump's survival count and pump 1 alone.
+ *
+ * It is set for the whole run, not for one check. On the shipped ladders a
+ * run makes 170 such checks: the RTP, every pump and pump 1 alone, in the
+ * main run and the climb of each difficulty. Under the normal approximation
+ * one check lands more than 6 standard errors out once in 500 million, so a
+ * correct engine fails a run by luck about once in 3 million. Every check
+ * adds the same small share, so more difficulties or longer ladders change
+ * this little: it takes about 5,000 checks to reach once in 100,000.
+ *
+ * The RTP check needs the room most. Its standard error comes from the
+ * sample, and runs small when rare big wins are missing, so the RTP lands
+ * far out on the low side more often than the normal curve says, most of
+ * all in short runs.
+ *
+ * A wide mark loses little. The checks to the cent have no luck in them and
+ * carry the strictness: one wrong cent, chance or roll fails the run. And at
+ * the default 10 million rounds a pump chance one point off (50% played as
+ * 49%) is still at least 13 standard errors out, on every pump of every
+ * shipped ladder. The closest is Hard's pump 13, tried 431,000 times in the
+ * climb.
+ */
+export const PASS_MARK = 6;
 
 /**
  * How often each rung is the target: rung t gets weight floor(10^9 / h_t), so

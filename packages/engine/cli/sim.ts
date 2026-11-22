@@ -19,11 +19,13 @@
  *    mismatch in millions is a FAIL.
  * 2. By counting. Luck moves a simulated RTP, and it moves it a lot on
  *    ladders with rare huge prizes. So the result is compared with the exact
- *    RTP of the way the simulator plays, cent rounding included, and must
- *    land within 4 standard errors of it. Each pump's survival count must
- *    land within 5 standard errors of its exact chance. The first pump is the
+ *    RTP of the way the simulator plays, cent rounding included. Each pump's
+ *    survival count is compared with its exact chance. The first pump is the
  *    only one the RTP sets, so its count alone gives the RTP to within a few
- *    hundredths of a point, and must agree with the configured RTP.
+ *    hundredths of a point, and is compared with the configured RTP. Each
+ *    must land within 6 standard errors. That mark is set for the whole run,
+ *    which makes many such checks, not for one check (see PASS_MARK in
+ *    cli/simulate.ts).
  *
  * Each difficulty is played two ways (cli/simulate.ts): the main run, which
  * cashes out all over the ladder, and a smaller climb in which every balloon
@@ -41,6 +43,7 @@ import { createRng } from './prng';
 import { rtpOf } from './proof';
 import {
   climbPlay,
+  PASS_MARK,
   PATCH_ONE_IN,
   report,
   SIM_BETS,
@@ -50,8 +53,6 @@ import {
   type SimResult,
 } from './simulate';
 
-const RTP_LIMIT = 4;
-const PUMP_LIMIT = 5;
 /** The main run's exact RTP may sit this far under the configured RTP, from cent rounding. */
 const ROUNDING_ROOM = 0.005;
 /** The climb plays one round for every this many of the main run, and at least CLIMB_MIN. */
@@ -200,7 +201,7 @@ function judge(
 
   const shortfall = toNumber(rtp) - toNumber(stats.expectedRtp);
   const figureOk = compare(stats.expectedRtp, rtp) <= 0 && (room === null || shortfall <= room);
-  const rtpOk = Math.abs(stats.z) <= RTP_LIMIT && figureOk;
+  const rtpOk = Math.abs(stats.z) <= PASS_MARK && figureOk;
   console.log(
     `  RTP            ${pct(stats.rtp, 3)} simulated; ${percent(stats.expectedRtp, 3)} is the ` +
       'exact figure for this way of playing',
@@ -220,12 +221,12 @@ function judge(
   console.log(
     `  pump counts    worst of ${String(difficulty.ladder.length)} pumps is pump ` +
       `${String(stats.worstPump)}, ${stats.worstPumpZ.toFixed(2)} standard errors from its ` +
-      `exact chance ... ${verdict(stats.worstPumpZ <= PUMP_LIMIT)}`,
+      `exact chance ... ${verdict(stats.worstPumpZ <= PASS_MARK)}`,
   );
   console.log(
     `  pump 1 alone   puts the RTP at ${pct(stats.pumpOneRtp, 3)}, give or take ` +
       `${pct(stats.pumpOneError, 3)}; configured ${percent(rtp)} ... ` +
-      verdict(stats.pumpOneZ <= PUMP_LIMIT),
+      verdict(stats.pumpOneZ <= PASS_MARK),
   );
 }
 

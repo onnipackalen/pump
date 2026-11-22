@@ -5,6 +5,7 @@ import { rtpOf } from '../../cli/proof';
 import {
   climbPlay,
   expectedFor,
+  PASS_MARK,
   REAL_ENGINE,
   report,
   SIM_BETS,
@@ -236,10 +237,11 @@ describe('the simulator catches an engine that is wrong', () => {
     expect(stats.exact).toBe(false);
     expect(result.mismatches.chances).toBe(result.pumps[1]?.attempts);
     expect(result.mismatches.first).toBe('pump 1 was drawn at 92/101, the rules give 97/101');
-    // ...and by counting: the RTP, the pump counts and pump 1 alone are all far off.
-    expect(Math.abs(stats.z)).toBeGreaterThan(4);
-    expect(stats.worstPumpZ).toBeGreaterThan(5);
-    expect(stats.pumpOneZ).toBeGreaterThan(5);
+    // ...and by counting: the RTP, the pump counts and pump 1 alone are all
+    // past the mark npm run sim fails at.
+    expect(Math.abs(stats.z)).toBeGreaterThan(PASS_MARK);
+    expect(stats.worstPumpZ).toBeGreaterThan(PASS_MARK);
+    expect(stats.pumpOneZ).toBeGreaterThan(PASS_MARK);
   });
 
   it('a top rung one too low', () => {
