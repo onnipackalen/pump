@@ -10,9 +10,13 @@ Before you play, the server picks a secret code (the **server seed**) and
 shows you only its fingerprint (the **hash**). You pick your own code (the
 **client seed**). Each round also has a counter (the **nonce**). A pump's
 result is mixed from all of these. The server can't change its seed after
-showing you the hash, and it didn't know your client seed when it picked
-its own. When you switch to a new server seed, the old one is shown in full.
-Then you can recompute every pump you played with it.
+showing you the hash. Your first client seed is made in your browser, so
+the server didn't know it when it picked its first seed. When you switch to
+a new server seed, the old one is shown in full, and you can recompute
+every pump you played with it. The server picks the new seed knowing the
+client seed you have then, so change your client seed after you switch,
+before your next round. Then the new seed was fixed before the server knew
+your client seed.
 
 ## The inputs
 
