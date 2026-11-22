@@ -3125,3 +3125,37 @@ phone, so the fix is only proven on the phone once it is live. No preview
 server was free (five other chats' servers), so the real game was not run
 at phone size here; the change is one CSS rule that applies only during a
 round.
+## 2026-11-21: better sounds
+
+The user asked to improve the audio and picked "better sounds" from four
+options (the others were a stretch sound that rises with risk, a volume
+slider, and background music). Same 8 cues, same rules, still no sound files.
+
+- `apps/web/src/sound/voices.ts` (new) says what each cue is made of;
+  `SoundBoard.ts` keeps the speaker, the on/off switch and the unlock.
+  `cues.ts` (which cue plays when) is unchanged, so its tests still hold.
+- Bet: a soft rubber flop as the flat balloon lands. Pump: a rising whoosh
+  of air for the whole stroke (about 0.2 s, it was 0.09 s) and a soft thud
+  at the bottom. Survived: a rubber squeak that climbs with the balloon.
+  Patch save: a tape slap, then two calm notes. Pop: a crisp but soft burst.
+  Money back: a wooden tick. Win and big win: struck bells instead of plain
+  tones; the big win adds four tiny high bells.
+- A limiter on the output, so three balloons and auto-play stacking cues
+  can't crackle.
+
+Checks: typecheck, lint, 678 web tests. Each cue rendered offline in the
+browser and measured (peak, loudness, length): no NaN, and the worst pile-up
+(three pumps, three squeaks and a big win at once) peaks at -15 dB. A round
+played against a local server made the expected sound nodes for bet, pump,
+win and pop, with no chime after the pop and no console errors. Nobody in
+this chat can hear: how it sounds is for the user to judge.
+
+What turned out wrong, and how it was caught:
+- The first new pop was 18 dB louder than the old one, and the pump whoosh
+  14 dB louder, while the "survived" squeak came out quieter. A loss would
+  have stood out more than before. Caught by measuring old and new cues side
+  by side in the browser. Fixed: the pop is again the quietest cue (about
+  -55 dB, below the neutral tick at -51.5 dB, the loudest of 20 pops
+  included), and the squeak went up. The pump sound still carries about
+  13 dB more sound energy than the old puff, mostly because it lasts five
+  times longer; it now sits just under the squeak.
