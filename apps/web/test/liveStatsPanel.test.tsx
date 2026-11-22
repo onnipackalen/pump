@@ -1,9 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { LiveStats, LiveStatsOpener } from '../src/stats/LiveStats';
 import { addRound, NO_LIVE_STATS, type LiveStats as Figures } from '../src/stats/liveTally';
 import { ProfitChart } from '../src/stats/ProfitChart';
-import { heldBy, type InPlay, type LiveStatsControl } from '../src/stats/useLiveStats';
+import { heldBy, tapOpener, type InPlay, type LiveStatsControl } from '../src/stats/useLiveStats';
 import { balloon, round } from './fixtures';
 
 function control(stats: Figures, open = true, held: InPlay = null): LiveStatsControl {
@@ -13,6 +14,9 @@ function control(stats: Figures, open = true, held: InPlay = null): LiveStatsCon
     open,
     heldBy: held,
     shown: open && held === null,
+    upright: false,
+    reveal: false,
+    revealed: nothing,
     panelId: 'live-panel',
     openerId: 'live-opener',
     toggle: nothing,
@@ -143,6 +147,41 @@ describe('heldBy', () => {
     // Beside the game it has its own room.
     expect(heldBy('round', false)).toBeNull();
     expect(heldBy('auto-play', false)).toBeNull();
+  });
+});
+
+describe('tapOpener', () => {
+  it('opens and closes the card beside the game', () => {
+    expect(tapOpener(false, false)).toEqual({ open: true, reveal: false });
+    expect(tapOpener(true, false)).toEqual({ open: false, reveal: false });
+  });
+
+  it('on an upright screen always shows the panel and slides the sheet up to it', () => {
+    // The panel sits at the bottom of the sheet, out of sight while the sheet
+    // is down: a tap that closed it would seem to do nothing.
+    expect(tapOpener(false, true)).toEqual({ open: true, reveal: true });
+    expect(tapOpener(true, true)).toEqual({ open: true, reveal: true });
+  });
+});
+
+describe('where the live stats sit on an upright screen', () => {
+  const css = readFileSync(new URL('../src/stats/live-stats.css', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const upright = css.slice(css.indexOf('@media (orientation: portrait) {'));
+
+  it('puts them at the end of the controls, after Manual | Auto, so Bet never moves', () => {
+    const controls = app.slice(app.indexOf('<aside className="controls"'), app.indexOf('</aside>'));
+    const inSheet = controls.indexOf('liveStats.shown && liveStats.upright && <LiveStats');
+    expect(inSheet).toBeGreaterThan(controls.indexOf('Manual'));
+    expect(inSheet).toBeGreaterThan(controls.indexOf('<BetPanel'));
+    // Beside the game only when the screen is not upright, so never twice.
+    expect(app).toContain('liveStats.shown && !liveStats.upright && <LiveStats');
+  });
+
+  it('styles them as part of the sheet, not as a strip above Bet', () => {
+    expect(upright).toMatch(/\.controls > \.live-stats \{[^}]*height: var\(--live-sheet-h/);
+    expect(upright).not.toContain('.layout > .live-stats');
+    expect(upright).not.toMatch(/margin-top: auto/);
   });
 });
 

@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react';
+import { useEffect, useId, useMemo, useRef } from 'react';
 import { formatCents, formatSignedCents } from '../money';
 import { thinLine } from './liveTally';
 import { ProfitChart } from './ProfitChart';
@@ -20,11 +20,12 @@ const iconProps = {
 } as const;
 
 /**
- * The small chart button that opens and closes the live stats. App puts it
- * in the top bar (see there for why).
+ * The small chart button that opens and closes the live stats (on an upright
+ * screen it opens them and slides the sheet up to them: tapOpener). App puts
+ * it in the top bar (see there for why).
  *
  * While the panel is held back (an upright screen during play), the button
- * says so: it is unavailable, unlit, and its title says when the panel
+ * says so: it is unavailable, greyed out, and its title says when the panel
  * comes back. It never claims to be open while nothing shows.
  */
 export function LiveStatsOpener({ live }: { readonly live: LiveStatsControl }) {
@@ -58,8 +59,17 @@ export function LiveStatsOpener({ live }: { readonly live: LiveStatsControl }) {
  * already speaks up when play is by hand.
  */
 export function LiveStats({ live }: { readonly live: LiveStatsControl }) {
-  const { stats } = live;
+  const { stats, reveal, revealed } = live;
   const titleId = useId();
+  const panel = useRef<HTMLElement>(null);
+  // A tap on the opener on an upright screen: slide the sheet up until this
+  // panel, its last part, is in sight. The page's snapping then rests it at
+  // "sheet up" (styles.css). Only a tap does this, never the end of a round.
+  useEffect(() => {
+    if (!reveal) return;
+    panel.current?.scrollIntoView({ block: 'end', behavior: motionReduced() ? 'auto' : 'smooth' });
+    revealed();
+  }, [reveal, revealed]);
   // The figures are exact; only the drawing is thinned on a very long visit.
   const line = useMemo(() => thinLine(stats.profit), [stats.profit]);
   // A round that paid back exactly what it cost is neither: say so where
@@ -67,7 +77,7 @@ export function LiveStats({ live }: { readonly live: LiveStatsControl }) {
   const evenNote = 'A round that paid back exactly its cost is neither a win nor a loss.';
 
   return (
-    <section id={live.panelId} className="live-stats" aria-labelledby={titleId}>
+    <section ref={panel} id={live.panelId} className="live-stats" aria-labelledby={titleId}>
       <div className="ls-head">
         <h2 id={titleId} className="ls-title">
           Live stats
@@ -123,4 +133,13 @@ export function LiveStats({ live }: { readonly live: LiveStatsControl }) {
       <ProfitChart profit={line} compact />
     </section>
   );
+}
+
+/** Animations off: the player's setting (motion.ts), or else the device's. */
+function motionReduced(): boolean {
+  const choice = document.documentElement.dataset.motion;
+  if (choice === 'reduce') return true;
+  if (choice === 'full') return false;
+  return typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }

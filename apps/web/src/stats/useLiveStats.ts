@@ -24,10 +24,25 @@ export interface LiveStatsControl {
   readonly heldBy: InPlay;
   /** Whether the panel is on screen now: open and not held back. */
   readonly shown: boolean;
+  /**
+   * An upright screen (a phone or tablet held upright): the panel is the
+   * last part of the bet sheet, under the bet controls, instead of a card
+   * beside the game.
+   */
+  readonly upright: boolean;
+  /**
+   * True from a tap on the opener on an upright screen until the panel has
+   * been brought into view (the sheet slid up to it). Never set by a round
+   * ending, so the sheet doesn't move by itself (styles.css).
+   */
+  readonly reveal: boolean;
+  /** The panel calls this once it has brought itself into view. */
+  readonly revealed: () => void;
   /** The panel's element id, for the opener's aria-controls. */
   readonly panelId: string;
   /** The opener's element id, so closing the panel can hand focus back to it. */
   readonly openerId: string;
+  /** The opener's tap: see tapOpener. */
   readonly toggle: () => void;
   /** Closes the panel and puts focus back on the opener. */
   readonly close: () => void;
@@ -41,6 +56,23 @@ export interface LiveStatsControl {
  */
 export function heldBy(playing: InPlay, upright: boolean): InPlay {
   return upright ? playing : null;
+}
+
+/**
+ * What a tap on the opener does.
+ *
+ * Beside the game (a wide screen) it opens and closes the card, which is
+ * always in sight.
+ *
+ * On an upright screen the panel sits at the bottom of the bet sheet, out of
+ * sight while the sheet is down, so Bet never moves out of Pump's place. A
+ * tap there always shows it: it opens the panel if needed and slides the
+ * sheet up to it. Closing it on that tap would hide a panel the player can't
+ * see, and the tap would seem to do nothing; the panel's own Close button
+ * closes it.
+ */
+export function tapOpener(open: boolean, upright: boolean): { open: boolean; reveal: boolean } {
+  return upright ? { open: true, reveal: true } : { open: !open, reveal: false };
 }
 
 // The same test as the CSS that lays the page out for an upright screen.
@@ -80,14 +112,24 @@ export function useLiveStats(shown: ShownGame, playing: InPlay): LiveStatsContro
   if (next !== watch) setWatch(next);
 
   const [open, setOpen] = useState(false);
+  const [reveal, setReveal] = useState(false);
   const upright = useSyncExternalStore(watchUpright, isUpright, () => false);
   const held = heldBy(playing, upright);
+  // Play began before the panel came into view: the tap is dropped, so the
+  // end of that round can never slide the sheet up.
+  if (reveal && held !== null) setReveal(false);
   const panelId = useId();
   const openerId = useId();
 
-  const toggle = useCallback(() => setOpen((was) => !was), []);
+  const toggle = useCallback(() => {
+    const next = tapOpener(open, upright);
+    setOpen(next.open);
+    setReveal(next.reveal);
+  }, [open, upright]);
+  const revealed = useCallback(() => setReveal(false), []);
   const close = useCallback(() => {
     setOpen(false);
+    setReveal(false);
     // The Close button is about to go: focus goes back where the panel came from.
     document.getElementById(openerId)?.focus();
   }, [openerId]);
@@ -98,6 +140,11 @@ export function useLiveStats(shown: ShownGame, playing: InPlay): LiveStatsContro
     open,
     heldBy: held,
     shown: open && held === null,
+    upright,
+    // A tap is only taken while nothing holds the panel back, so the panel
+    // is there to bring into view.
+    reveal: reveal && open && held === null,
+    revealed,
     panelId,
     openerId,
     toggle,
