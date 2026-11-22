@@ -7,7 +7,7 @@ import type {
   RoundView,
   SessionView,
 } from '@pump/contract';
-import { surviveChance, type Difficulty, type GameConfig } from '@pump/engine';
+import { GAME_CONFIG, surviveChance, type Difficulty, type GameConfig } from '@pump/engine';
 import { drawRoll } from '@pump/engine/fair';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../src/db/database';
@@ -182,13 +182,28 @@ export function clientSeedWhere(wanted: (clientSeed: string) => boolean): string
  * (a difficulty added, the list reordered, a ladder longer or shorter), so
  * a test asks for the shape it needs: it plays on the first configured
  * difficulty that has it, and only when none has it on one made here, added
- * to that test's config. The server refuses to start on a config that fails
- * its checks, so a made ladder that did not pass them would fail the test.
+ * to that test's config. madeLadders.test.ts checks that each passes the
+ * game's own start-up checks and has the shape it promises.
+ *
+ * Each made ladder's id is one no configured difficulty has (see freeId):
+ * with a clash, a lookup by id would find the configured one first, and
+ * the test would play on the wrong ladder.
  */
+
+/** `base`, or `base-2`, `base-3` and so on: the first that no difficulty in `config` has. */
+export function freeId(base: string, config: GameConfig = GAME_CONFIG): string {
+  const taken = new Set(config.difficulties.map((d) => d.id));
+  let id = base;
+  for (let n = 2; taken.has(id); n += 1) id = `${base}-${String(n)}`;
+  return id;
+}
+
+/** A short ladder, added by configuration alone, so tests can reach the top rung. */
+export const TINY: Difficulty = { id: freeId('test-tiny'), label: 'Tiny', ladder: [101, 111, 123] };
 
 /** 24 rungs, 1.01x to 25x. Even the largest bet climbs it all under the cap. */
 export const MADE_LONG: Difficulty = {
-  id: 'made-long',
+  id: freeId('made-long'),
   label: 'Made long',
   ladder: [
     101, 111, 123, 137, 153, 171, 192, 216, 244, 277, 316, 362, 416, 480, 555, 645, 752, 881,
@@ -198,10 +213,13 @@ export const MADE_LONG: Difficulty = {
 
 /** 5 rungs up to 15,000x. The cap stops the largest bet at rung 3; $1 climbs it all. */
 export const MADE_CAPPED: Difficulty = {
-  id: 'made-capped',
+  id: freeId('made-capped'),
   label: 'Made capped',
   ladder: [150, 1000, 10_000, 120_000, 1_500_000],
 };
+
+/** Every ladder made here. */
+export const MADE_DIFFICULTIES: readonly Difficulty[] = [TINY, MADE_LONG, MADE_CAPPED];
 
 /**
  * The first difficulty in `config` that `wanted` is true for, and the config

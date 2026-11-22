@@ -9,7 +9,6 @@ import {
   ladderProblems,
   LIMITS,
   surviveChance,
-  type Difficulty,
   type GameConfig,
   type Limits,
   type RevealOutcome,
@@ -31,6 +30,7 @@ import {
   newKey,
   Seat,
   secretSeed,
+  TINY,
   willSurvive,
   type Foretold,
   type Reply,
@@ -44,8 +44,6 @@ import {
 /** The three RTP values reviewers will try, plus whatever is configured now. */
 const RTPS = [...new Set([9400, 9700, 9900, GAME_CONFIG.rtpBp])];
 
-/** A short ladder, added by configuration alone, so tests can reach the top rung. */
-const TINY: Difficulty = { id: 'tiny', label: 'Tiny', ladder: [101, 111, 123] };
 
 function configAt(rtpBp: number): GameConfig {
   return { ...GAME_CONFIG, rtpBp, difficulties: [...GAME_CONFIG.difficulties, TINY] };
@@ -85,11 +83,11 @@ async function deal(
     serverSeed: secretSeed(world.db),
     nonce: 0,
     rtpBp: config.rtpBp,
-    ladder: ladderOf(config, 'tiny'),
+    ladder: ladderOf(config, TINY.id),
   };
   const clientSeed = clientSeedWhere((seed) => wanted({ ...base, clientSeed: seed }));
   await seat.setClientSeed(clientSeed);
-  const started = await seat.start('tiny', bets);
+  const started = await seat.start(TINY.id, bets);
   expect(started.status).toBe(200);
   return { world, seat, round: started.body.round, foretold: { ...base, clientSeed } };
 }
@@ -570,7 +568,7 @@ describe('a reveal across RTPs', () => {
     for (const { world, seat, rtpBp } of worlds) {
       expect(secretSeed(world.db)).toBe(serverSeed);
       await seat.setClientSeed(clientSeed);
-      const started = ok(await seat.start('tiny', [1000])).round;
+      const started = ok(await seat.start(TINY.id, [1000])).round;
       expect(started.rtpBp).toBe(rtpBp);
       const pumped = ok(await seat.pump(started, 0)).round;
       reveals.push(ok(await seat.cashOut(pumped, 0)).round.balloons[0]?.afterRound);
@@ -592,7 +590,7 @@ describe.each(RTPS)('a database from before reveals existed, at RTP %i', (rtpBp)
     // pumped once (it survived), then cashed out on rung 1 of 3 and paid
     // 1.01x. It finished with no reveal, and its seed was then revealed.
     const serverSeed = 'a'.repeat(64);
-    const ladder = ladderOf(config, 'tiny');
+    const ladder = ladderOf(config, TINY.id);
     const base = { serverSeed, nonce: 0, rtpBp, ladder };
     const clientSeed = clientSeedWhere((seed) => survives(1)({ ...base, clientSeed: seed }));
     const chance = surviveChance(rtpBp, ladder, 1);
@@ -610,7 +608,7 @@ describe.each(RTPS)('a database from before reveals existed, at RTP %i', (rtpBp)
       UPDATE server_seeds SET next_nonce = 1;
       INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
                           server_seed_id, client_seed, nonce, started_at, last_action_at)
-        VALUES ('old', 'p1', 'active', 'tiny', ${String(rtpBp)}, '${JSON.stringify(ladder)}',
+        VALUES ('old', 'p1', 'active', '${TINY.id}', ${String(rtpBp)}, '${JSON.stringify(ladder)}',
                 ${String(config.limits.maxPayoutCents)}, 1, '${clientSeed}', 0, '${at}', '${at}');
       INSERT INTO balloons (round_id, balloon_index, bet_cents, status, rung, draw_index, top_rung)
         VALUES ('old', 0, 1000, 'active', 0, 0, 3);
@@ -668,7 +666,7 @@ describe.each(RTPS)('a database from before reveals existed, at RTP %i', (rtpBp)
     db.exec(`INSERT INTO server_seeds (player_id, seed, seed_hash, created_at)
              VALUES ('p1', '${'b'.repeat(64)}', 'hash-b', '${at}')`);
     db.exec("UPDATE players SET client_seed = 'seed'");
-    const started = immediate(db, () => game.start('p1', { difficultyId: 'tiny', betsCents: [1000] }));
+    const started = immediate(db, () => game.start('p1', { difficultyId: TINY.id, betsCents: [1000] }));
     expect(roundsRepository(db).find(started.round.id)).toMatchObject({
       maxPayoutCents: GAME_CONFIG.limits.maxPayoutCents,
       revealsRecorded: true,
@@ -683,7 +681,7 @@ describe.each(RTPS)('a database from before reveals existed, at RTP %i', (rtpBp)
     // An older server's round still in play: a $10 Tiny balloon pumped once
     // (it survived), on rung 1 of 3.
     const serverSeed = 'c'.repeat(64);
-    const ladder = ladderOf(config, 'tiny');
+    const ladder = ladderOf(config, TINY.id);
     const base = { serverSeed, nonce: 0, rtpBp, ladder };
     const clientSeed = clientSeedWhere((seed) => survives(1)({ ...base, clientSeed: seed }));
     const chance = surviveChance(rtpBp, ladder, 1);
@@ -702,7 +700,7 @@ describe.each(RTPS)('a database from before reveals existed, at RTP %i', (rtpBp)
       UPDATE server_seeds SET next_nonce = 1;
       INSERT INTO rounds (id, player_id, status, difficulty_id, rtp_bp, ladder, max_payout_cents,
                           server_seed_id, client_seed, nonce, started_at, last_action_at)
-        VALUES ('old', 'p1', 'active', 'tiny', ${String(rtpBp)}, '${JSON.stringify(ladder)}',
+        VALUES ('old', 'p1', 'active', '${TINY.id}', ${String(rtpBp)}, '${JSON.stringify(ladder)}',
                 ${String(config.limits.maxPayoutCents)}, 1, '${clientSeed}', 0, '${at}', '${at}');
       INSERT INTO balloons (round_id, balloon_index, bet_cents, status, rung, draw_index, top_rung)
         VALUES ('old', 0, 1000, 'active', 0, 0, 3);
