@@ -117,6 +117,8 @@ describe('surviveChance and popChance', () => {
 });
 
 describe('pumpSurvives', () => {
+  // Every roll of every pump: a few seconds on a ladder of 100 rungs or
+  // more, where dens run to millions. So it gets a longer time limit.
   it('survives on exactly num of the den rolls', () => {
     for (const { ladder } of DIFFICULTIES) {
       for (let pump = 1; pump <= ladder.length; pump += 1) {
@@ -128,7 +130,7 @@ describe('pumpSurvives', () => {
         expect(survived).toBe(chance.num);
       }
     }
-  });
+  }, 60_000);
 
   it('survives below num and pops at num', () => {
     const chance = { num: 101, den: 111 };
@@ -245,7 +247,7 @@ describe('patchPriceCents', () => {
           expect(worthTop * 10_000n <= BigInt(rtpBp) * price * worthBottom).toBe(true);
         }
       }
-    });
+    }, 60_000);
   });
 });
 

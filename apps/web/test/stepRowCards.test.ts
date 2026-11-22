@@ -131,6 +131,8 @@ const lockedFrom = (html: string): number => {
 };
 
 describe('a balloon card and its row of steps', () => {
+  // Cards for several bets per rung of every ladder: seconds on a ladder of
+  // 100 rungs or more, so it gets a longer time limit.
   it('locks exactly the steps above the balloon own top, at every bet and RTP', () => {
     let capped = 0;
     for (const rtpBp of RTPS) {
@@ -151,7 +153,7 @@ describe('a balloon card and its row of steps', () => {
     }
     // Some bet really was cut short by the cap, so locked steps were drawn.
     expect(capped).toBeGreaterThan(0);
-  });
+  }, 60_000);
 
   it('takes the top from the balloon, not from the length of the ladder', () => {
     const ladder = BASE.ladder;
