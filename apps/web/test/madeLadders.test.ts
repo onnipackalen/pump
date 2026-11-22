@@ -4,6 +4,7 @@ import {
   BASE,
   cappedDifficulty,
   difficultyWithRungs,
+  freeId,
   MADE_CAPPED,
   MADE_DIFFICULTIES,
   MADE_LONG,
@@ -24,6 +25,17 @@ describe('the ladders made for tests', () => {
   it('never share an id with a configured difficulty', () => {
     const ids = new Set(GAME_CONFIG.difficulties.map((d) => d.id));
     for (const made of MADE_DIFFICULTIES) expect(ids.has(made.id), made.id).toBe(false);
+  });
+
+  it('get an id no difficulty has, even when the config already uses the one asked for', () => {
+    const ladder = [300, 1000];
+    const list = [
+      ...GAME_CONFIG.difficulties,
+      { id: 'made-long', label: 'Long', ladder },
+      { id: 'made-long-2', label: 'Long 2', ladder },
+    ];
+    expect(freeId('made-long', list)).toBe('made-long-3');
+    for (const d of list) expect(freeId(d.id, list)).not.toBe(d.id);
   });
 
   it('have the shape they promise', () => {

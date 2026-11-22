@@ -11,11 +11,27 @@ import type { BalloonView, RoundView } from '../src/api/contract';
  * ladders. Only when no configured ladder has that shape does it get one of
  * the ladders made below, so the check never quietly goes away.
  * madeLadders.test.ts checks that these pass the game's own start-up checks.
+ *
+ * Each made ladder's id is one no configured difficulty has (see freeId):
+ * with a clash, configWith would leave the made ladder out and a lookup by
+ * id would find the configured one, so the test would play on the wrong
+ * ladder.
  */
+
+/** `base`, or `base-2`, `base-3` and so on: the first that no difficulty in `difficulties` has. */
+export function freeId(
+  base: string,
+  difficulties: readonly Difficulty[] = GAME_CONFIG.difficulties,
+): string {
+  const taken = new Set(difficulties.map((d) => d.id));
+  let id = base;
+  for (let n = 2; taken.has(id); n += 1) id = `${base}-${String(n)}`;
+  return id;
+}
 
 /** 24 rungs, 1.01x to 25x. Even the largest bet climbs it all under the cap. */
 export const MADE_LONG: Difficulty = {
-  id: 'made-long',
+  id: freeId('made-long'),
   label: 'Made long',
   ladder: [
     101, 111, 123, 137, 153, 171, 192, 216, 244, 277, 316, 362, 416, 480, 555, 645, 752, 881,
@@ -25,7 +41,7 @@ export const MADE_LONG: Difficulty = {
 
 /** 5 rungs up to 15,000x. The cap stops the largest bet at rung 3; $1 climbs it all. */
 export const MADE_CAPPED: Difficulty = {
-  id: 'made-capped',
+  id: freeId('made-capped'),
   label: 'Made capped',
   ladder: [150, 1000, 10_000, 120_000, 1_500_000],
 };

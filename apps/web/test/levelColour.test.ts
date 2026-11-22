@@ -15,7 +15,7 @@ import {
   levelOf,
   MAX_LEVEL_MARKS,
 } from '../src/game/level';
-import { balloon } from './fixtures';
+import { balloon, freeId } from './fixtures';
 
 const css = readFileSync(new URL('../src/balloon/balloon.css', import.meta.url), 'utf8');
 const pageCss = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -162,7 +162,7 @@ describe('levelOf', () => {
 
   it('still draws a difficulty added to the config, in the fallback colour', () => {
     // An id no configured difficulty has and no colour is kept for.
-    const id = 'made-extra';
+    const id = freeId('made-extra');
     expect(difficulties.some((d) => d.id === id) || Object.hasOwn(LEVEL_COLOURS, id)).toBe(false);
     const extra: Difficulty = { id, label: 'Made extra', ladder: [300, 1000] };
     const level = levelOf(id, [...difficulties, extra]);
