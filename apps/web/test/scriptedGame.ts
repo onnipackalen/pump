@@ -1,8 +1,7 @@
-import { GAME_CONFIG } from '@pump/engine';
 import type { BalloonView, RoundView } from '../src/api/contract';
 import type { DemoClient } from '../src/demo/DemoClient';
 import type { GameActions } from '../src/game/useGame';
-import { balloon, round } from './fixtures';
+import { balloon, BASE, round } from './fixtures';
 
 /** One request the scripted game was sent, in the order it got them. */
 export interface SentRequest {
@@ -31,14 +30,14 @@ export interface ScriptedGame {
  * balloon is no longer in play, so a double send shows up as a failure.
  *
  * `pops(roundNumber, balloonIndex, rung)` says whether the pump from `rung`
- * pops. A cash-out pays floor(bet * multiplier) on the configured first
- * ladder, as the engine does, in whole cents.
+ * pops. A cash-out pays floor(bet * multiplier) on the BASE ladder
+ * (fixtures.ts), as the engine does, in whole cents.
  */
 export function scriptedGame(
   startBalanceCents: number,
   pops: (roundNumber: number, balloonIndex: number, rung: number) => boolean,
 ): ScriptedGame {
-  const ladder = GAME_CONFIG.difficulties[0]?.ladder ?? [];
+  const ladder = BASE.ladder;
   let balanceCents = startBalanceCents;
   let current: RoundView | null = null;
   let rounds = 0;
