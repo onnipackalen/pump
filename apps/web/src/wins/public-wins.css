@@ -9,9 +9,10 @@
  *   screen, the exact size and place it has without the card, and the page
  *   scrolls down to the card (styles.css, "Public wins under the game").
  * - Upright phone or tablet: the last part of the sheet, under the bet
- *   panel, as wide as the sheet. The sheet keeps its two resting places
- *   (down at the top of the page, up with its bottom at the screen's
- *   bottom); one more swipe up goes on to the table's end, a third place.
+ *   panel (and the live stats, when open), as wide as the sheet. The sheet
+ *   keeps its two resting places (down at the top of the page, up with its
+ *   bottom at the screen's bottom; one more above open live stats); one
+ *   more swipe up goes on to the table's end.
  *   While the sheet is down the table waits off the page, so a quick flick
  *   cannot fly past sheet up to it (wins/sheetFirst.ts). The stage stays
  *   stuck under the top bar and does not move.

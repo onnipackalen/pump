@@ -606,10 +606,11 @@ export function App() {
           <div className="slots-gone" ref={goneRef} aria-hidden="true" />
         </section>
 
-        {/* Live stats: between the stage and the controls, so on an upright
-            phone it is the top of the sheet. Where it sits at each size is
-            in stats/live-stats.css. */}
-        {liveStats.shown && <LiveStats live={liveStats} />}
+        {/* Live stats beside the game: under the controls on a computer.
+            On an upright screen it is the last part of the bet sheet
+            instead (at the end of the controls, below). Where it sits at
+            each size is in stats/live-stats.css. */}
+        {liveStats.shown && !liveStats.upright && <LiveStats live={liveStats} />}
 
         {state.phase !== 'loading' && (
           <aside className="controls" aria-label="Controls">
@@ -711,6 +712,11 @@ export function App() {
                 )}
               </>
             )}
+
+            {/* Upright screen: the live stats are the sheet's last part, under
+                every bet control, so Bet never moves out of Pump's place. The
+                chart button slides the sheet up to them. */}
+            {liveStats.shown && liveStats.upright && <LiveStats live={liveStats} />}
           </aside>
         )}
       </main>

@@ -1,7 +1,8 @@
-import { useId, useMemo } from 'react';
+import { useEffect, useId, useMemo, useRef } from 'react';
 import { formatCents, formatSignedCents } from '../money';
 import { thinLine } from './liveTally';
 import { ProfitChart } from './ProfitChart';
+import { slideSheetUp } from './slideSheet';
 import type { LiveStatsControl } from './useLiveStats';
 import './stats.css';
 import './live-stats.css';
@@ -20,12 +21,15 @@ const iconProps = {
 } as const;
 
 /**
- * The small chart button that opens and closes the live stats. App puts it
- * in the top bar (see there for why).
+ * The small chart button that opens and closes the live stats (on an upright
+ * screen it opens them and slides the sheet up to them: tapOpener). App puts
+ * it in the top bar (see there for why).
  *
  * While the panel is held back (an upright screen during play), the button
- * says so: it is unavailable, unlit, and its title says when the panel
- * comes back. It never claims to be open while nothing shows.
+ * says so: it is unavailable, greyed out, and its title says when the panel
+ * comes back. It never claims to be open while the panel is not on the page.
+ * (On an upright screen an open panel can be on the page but out of sight,
+ * at the bottom of the sheet: the button is lit, and a tap brings it up.)
  */
 export function LiveStatsOpener({ live }: { readonly live: LiveStatsControl }) {
   const waitingFor = live.heldBy === 'round' ? 'this round' : 'auto-play';
@@ -35,7 +39,13 @@ export function LiveStatsOpener({ live }: { readonly live: LiveStatsControl }) {
       type="button"
       className="btn icon-btn live-opener"
       aria-label="Live stats"
-      title={live.heldBy === null ? 'Live stats' : `Live stats after ${waitingFor}`}
+      title={
+        live.heldBy !== null
+          ? `Live stats after ${waitingFor}`
+          : live.upright && live.shown
+            ? 'Show live stats'
+            : 'Live stats'
+      }
       aria-expanded={live.shown}
       aria-controls={live.shown ? live.panelId : undefined}
       aria-disabled={live.heldBy === null ? undefined : true}
@@ -58,8 +68,22 @@ export function LiveStatsOpener({ live }: { readonly live: LiveStatsControl }) {
  * already speaks up when play is by hand.
  */
 export function LiveStats({ live }: { readonly live: LiveStatsControl }) {
-  const { stats } = live;
+  const { stats, reveal, revealed } = live;
   const titleId = useId();
+  const panel = useRef<HTMLElement>(null);
+  // A tap on the opener on an upright screen: slide the sheet up to "sheet
+  // up", where this panel, its last part, is in sight (slideSheet.ts). Only
+  // a tap does this, never the end of a round. Focus follows, so a screen
+  // reader hears where the button went.
+  useEffect(() => {
+    if (!reveal) return;
+    revealed();
+    const here = panel.current;
+    const sheet = here?.closest('.controls');
+    if (!here || !sheet) return;
+    slideSheetUp(sheet, !motionReduced());
+    here.focus({ preventScroll: true });
+  }, [reveal, revealed]);
   // The figures are exact; only the drawing is thinned on a very long visit.
   const line = useMemo(() => thinLine(stats.profit), [stats.profit]);
   // A round that paid back exactly what it cost is neither: say so where
@@ -67,7 +91,15 @@ export function LiveStats({ live }: { readonly live: LiveStatsControl }) {
   const evenNote = 'A round that paid back exactly its cost is neither a win nor a loss.';
 
   return (
-    <section id={live.panelId} className="live-stats" aria-labelledby={titleId}>
+    <section
+      ref={panel}
+      id={live.panelId}
+      className="live-stats"
+      aria-labelledby={titleId}
+      // Upright: the button moves focus here (it shows the panel, it doesn't
+      // toggle it), so the panel can take focus, though not by Tab.
+      tabIndex={live.upright ? -1 : undefined}
+    >
       <div className="ls-head">
         <h2 id={titleId} className="ls-title">
           Live stats
@@ -123,4 +155,13 @@ export function LiveStats({ live }: { readonly live: LiveStatsControl }) {
       <ProfitChart profit={line} compact />
     </section>
   );
+}
+
+/** Animations off: the player's setting (motion.ts), or else the device's. */
+function motionReduced(): boolean {
+  const choice = document.documentElement.dataset.motion;
+  if (choice === 'reduce') return true;
+  if (choice === 'full') return false;
+  return typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
