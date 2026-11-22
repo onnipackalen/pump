@@ -23,6 +23,9 @@ import {
   startRoundShown,
 } from '../src/game/session';
 import {
+  copiesWithSameNonce,
+  isStandIn,
+  parseShown,
   rememberShown,
   rememberStarting,
   shownFor,
@@ -272,6 +275,85 @@ describe('a start whose answer never came still gets its copy', () => {
     rememberShown(activeRound.id, saved, storage);
     keepLostStartCopy(activeRound, storage);
     expect(shownFor(activeRound.id, storage)).toEqual(saved);
+  });
+});
+
+describe('what the screen showed for a start is never thrown away', () => {
+  const H = 'a'.repeat(64);
+  const seedsAt = (nonce: number, clientSeed = 'player-seed') => ({ serverSeedHash: H, clientSeed, nonce });
+  const standIns = (storage: HashStorage) =>
+    parseShown(storage.getItem('pump.shownSeeds')).filter(([id]) => isStandIn(id));
+
+  it('a matching start whose round already has another copy under its id keeps a stand-in', async () => {
+    const { client, fairness } = await demo(new LosesEveryStartAnswer(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    await startRoundShown(client, REQUEST, fairness, storage).catch(() => null);
+    const { activeRound } = await client.getSession();
+    if (!activeRound) throw new Error('the start was applied');
+    // A copy from another start is already under this id (a server reusing an old round's id).
+    const other = { serverSeedHash: 'f'.repeat(64), clientSeed: 'other', nonce: 9 };
+    rememberShown(activeRound.id, other, storage);
+    keepLostStartCopy(activeRound, storage);
+    expect(shownFor(activeRound.id, storage)).toEqual(other);
+    expect(copiesWithSameNonce(fairness.serverSeedHash, fairness.nextNonce, activeRound.id, storage)).toEqual([
+      [`?start:${String(fairness.nextNonce)}:${fairness.serverSeedHash}`, fairness.serverSeedHash, 'player-seed', fairness.nextNonce],
+    ]);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+  });
+
+  it('of two starts with the same bets (two tabs), the round gets the one bet against its own seeds', async () => {
+    const { client, fairness } = await demo(new LosesEveryStartAnswer(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    await startRoundShown(client, REQUEST, fairness, storage).catch(() => null);
+    const { activeRound } = await client.getSession();
+    if (!activeRound) throw new Error('the start was applied');
+    // The other tab still showed the client seed from before, and its start came later.
+    rememberStarting({ ...REQUEST, shown: { ...copyOf(fairness), clientSeed: 'old-seed' } }, storage);
+    keepLostStartCopy(activeRound, storage);
+    expect(shownFor(activeRound.id, storage)).toEqual(copyOf(fairness));
+  });
+
+  it('a start that matches no round in play keeps a stand-in, found by hash and nonce only', () => {
+    const storage = memoryStorage();
+    rememberStarting({ ...REQUEST, shown: seedsAt(4) }, storage);
+    keepLostStartCopy(null, storage);
+    expect(standIns(storage)).toEqual([[`?start:4:${H}`, H, 'player-seed', 4]]);
+    expect(copiesWithSameNonce(H, 4, 'some-round', storage)).toHaveLength(1);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+  });
+
+  it('no stand-in for a start whose hash and nonce already have a copy (one seed and nonce, one round)', () => {
+    const storage = memoryStorage();
+    rememberShown('round-a', seedsAt(4, 'tab-a-seed'), storage);
+    rememberStarting({ ...REQUEST, shown: seedsAt(4) }, storage);
+    keepLostStartCopy(null, storage);
+    expect(standIns(storage)).toEqual([]);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+  });
+
+  it('after a start goes through: a start with the same hash and nonce is dropped, any other keeps a stand-in', async () => {
+    const { client, fairness } = await demo(new DemoClient(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    const shown = shownBefore(fairness);
+    if (!shown) throw new Error('valid seeds expected');
+    // Left on their way by earlier starts whose answers never came.
+    rememberStarting({ ...REQUEST, shown: { ...shown, clientSeed: 'old-seed' } }, storage);
+    rememberStarting({ ...REQUEST, shown: { ...shown, nonce: shown.nonce + 5 } }, storage);
+    const { round } = await startRoundShown(client, REQUEST, fairness, storage);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+    expect(shownFor(round.id, storage)).toEqual(copyOf(fairness));
+    expect(standIns(storage).map(([, , clientSeed, nonce]) => [clientSeed, nonce])).toEqual([
+      ['player-seed', fairness.nextNonce + 5],
+    ]);
+  });
+
+  it('the same stand-in is saved once, however often its start is settled', () => {
+    const storage = memoryStorage();
+    for (let n = 0; n < 3; n += 1) {
+      rememberStarting({ ...REQUEST, shown: seedsAt(4) }, storage);
+      keepLostStartCopy(null, storage);
+    }
+    expect(standIns(storage)).toHaveLength(1);
   });
 });
 

@@ -24,9 +24,12 @@
  * round's real one. So when there is no copy under the round's id, the page
  * also looks for a copy saved with the record's hash and nonce under another
  * id (one server seed and nonce belong to one round only), and says so if
- * it names another client seed. A server that also moved the round to a
- * nonce this browser has no copy for is not caught this way; the no-copy
- * note says that a missing copy can be a warning sign.
+ * it names another client seed. That copy may also be under a stand-in id:
+ * the seeds a start was bet against, kept when this browser never learned
+ * the id of the round it made (shownHashes, rememberStandIn). A server that
+ * also moved the round to a server seed or nonce this browser has no copy
+ * for is not caught this way; the no-copy note says that a missing copy can
+ * be a warning sign.
  *
  * All of these compare the record's values exactly as sent. The form, by
  * contrast, trims text and reads numbers from text, so a record whose hash,
@@ -37,7 +40,7 @@
  */
 
 import { recordHashProblem } from './hashCheck';
-import { MAX_SHOWN, validSeeds, type ShownEntry, type ShownSeeds } from './shownHashes';
+import { isStandIn, MAX_SHOWN, validSeeds, type ShownEntry, type ShownSeeds } from './shownHashes';
 
 /** The values the server's record names for a round. */
 export interface RecordSeeds {
@@ -133,6 +136,17 @@ export function recordIdProblem(askedId: string, recordId: string): string | nul
 export function sameNonceProblem(copy: ShownEntry, record: RecordSeeds): string | null {
   const [otherId, , clientSeed, nonce] = copy;
   if (clientSeed === record.clientSeed) return null;
+  if (isStandIn(otherId)) {
+    return (
+      `The server’s record says this round used the client seed “${record.clientSeed}” with ` +
+      `nonce ${String(nonce)}. This browser has no copy saved under this round’s id. But for a ` +
+      'round start whose round it never learned the id of (its answer was lost or refused, or ' +
+      'named the round with an id this game does not keep), it saved the same server seed hash ' +
+      `and nonce ${String(nonce)}, with the client seed “${clientSeed}”. One server seed and ` +
+      'nonce belong to one round only. So this may be that start’s round, played on a client ' +
+      'seed the server picked.'
+    );
+  }
   return (
     `The server’s record says this round used the client seed “${record.clientSeed}” with ` +
     `nonce ${String(nonce)}. This browser has no copy saved under this round’s id. But when it ` +

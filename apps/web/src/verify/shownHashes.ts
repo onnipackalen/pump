@@ -23,7 +23,9 @@
  *   client seed or nonce.
  * - 'pump.startsOnTheirWay': starts sent whose answer has not come yet, so a
  *   round whose start answer was lost still gets its copy (see
- *   rememberStarting, and keepLostStartCopy in game/session.ts).
+ *   rememberStarting, and keepLostStartCopy in game/session.ts). Each one
+ *   ends as a copy: under its round's id, or under a stand-in id
+ *   (rememberStandIn), so what the screen showed is never thrown away.
  *
  * Why a new key, not longer entries under the old one: an older build still
  * open in another tab rewrites the old key with only the two-part entries it
@@ -238,6 +240,47 @@ export function rememberShown(
   }
 }
 
+/** Whether this browser saved any copy with this hash and nonce, under any id. Never throws. */
+function hasCopyWith(serverSeedHash: string, nonce: number, storage: HashStorage): boolean {
+  try {
+    return parseShown(storage.getItem(KEY)).some(
+      ([, hash, , savedNonce]) => hash === serverSeedHash && savedNonce === nonce,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a copy is saved under a stand-in id ('?' and then something), not
+ * under an id a real server gave. Real round ids never start with '?'.
+ */
+export function isStandIn(roundId: string): boolean {
+  return roundId.startsWith('?');
+}
+
+/**
+ * Saves the seeds a round start was bet against under a stand-in id
+ * ('?start:', the nonce and the hash), for a start whose round this browser
+ * may never learn the id of: its answer was lost, or it named a round this
+ * browser already has another copy under. See keepLostStartCopy in
+ * game/session.ts.
+ *
+ * A stand-in is never found by a round id (shownFor), only by its hash and
+ * nonce (copiesWithSameNonce). Nothing is saved if this browser already has
+ * a copy with the same hash and nonce, under any id: one server seed and
+ * nonce belong to one round only, so that copy already stands for whichever
+ * round used them.
+ */
+export function rememberStandIn(
+  shown: SeedsBeforeRound,
+  storage: HashStorage | null = browserStorage(),
+): void {
+  if (!storage || !validSeeds(shown)) return;
+  if (hasCopyWith(shown.serverSeedHash, shown.nonce, storage)) return;
+  rememberShown(`?start:${String(shown.nonce)}:${shown.serverSeedHash}`, shown, storage);
+}
+
 /**
  * What this browser showed before the round, or null if it has no copy of
  * it. A round an older build saved has only the hash.
@@ -336,7 +379,7 @@ export function startsOnTheirWay(
   }
 }
 
-/** Forgets every start on its way: each has its answer, or none started a round still in play. */
+/** Forgets every start on its way. Callers first keep each one's seeds as a copy (see settleStarts in game/session.ts). */
 export function forgetStarting(storage: HashStorage | null = browserStorage()): void {
   if (!storage) return;
   try {
