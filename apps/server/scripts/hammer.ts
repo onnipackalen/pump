@@ -36,11 +36,11 @@
  *
  * Then it reads the database. First it makes sure the file is the one the
  * server uses: each player of this run has a client seed no other run uses
- * (see RUN_TAG), and the file must hold exactly those players. Only then
- * does it run the full reconcile: every balance equals the sum of its
- * ledger rows, the ledger chain is unbroken, every balloon was charged and
- * paid exactly what its round says, and every finished round holds exactly
- * the reveals it should.
+ * (see RUN_TAG), and the file must hold each of them once (other players
+ * may be there too). Only then does it run the full reconcile: every
+ * balance equals the sum of its ledger rows, the ledger chain is unbroken,
+ * every balloon was charged and paid exactly what its round says, and
+ * every finished round holds exactly the reveals it should.
  *
  * It exits with an error if anything is wrong.
  */
@@ -842,7 +842,7 @@ async function run(): Promise<number> {
     `${checks.rounds.toLocaleString('en-US')} rounds seen, ${revealsSeen.size.toLocaleString('en-US')} reveals on finished ones`,
   );
   line(
-    "The database holds exactly this run's players",
+    "The database holds each of this run's players",
     books.ok,
     books.ok ? `${String(PLAYERS)} found by client seed` : 'so its books were not checked',
   );
