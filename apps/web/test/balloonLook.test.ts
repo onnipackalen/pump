@@ -64,24 +64,40 @@ describe('balloonSize', () => {
   const firstJump = (top: number): number =>
     (balloonSize(1, top) - balloonSize(0, top)) / (1 - balloonSize(0, top));
   /**
-   * The longest top whose first pump still goes a fifth of the way. Easy, the
-   * longest ladder shipped, has 32. Above this each pump has less room, so
-   * the first gets a little less (17.9% at 45). Other tests still hold it to
-   * the biggest step and at least a tenth bigger.
+   * The first pump goes a fifth of the way to full size on every top up to
+   * this one. Easy, the longest ladder shipped, has 32. The jump shrinks as
+   * the top grows, so checking 34 checks every top below it too.
    */
   const FIFTH_UP_TO = 34;
+  /**
+   * Tops above that: those of any longer configured ladder, and two made
+   * here (a valid ladder has at most about 145 rungs: its steps must keep
+   * getting riskier in whole hundredths, under the cap), so this check
+   * never goes away. On these the first pump goes less than a fifth
+   * of the way today (17.9% at 45). That is a gap in the size curve
+   * (Balloon.tsx), reported to the owner, not a rule.
+   */
+  const longTops = [...new Set([45, 145, ...tops.filter((top) => top > FIFTH_UP_TO)])];
 
-  it('goes a fifth of the way on the first pump up to a top of 34, and a little less above', () => {
-    expect(firstJump(FIFTH_UP_TO)).toBeGreaterThanOrEqual(0.2);
-    expect(firstJump(FIFTH_UP_TO + 1)).toBeLessThan(0.2);
-  });
+  it.each([...new Set([...tops.filter((top) => top <= FIFTH_UP_TO), FIFTH_UP_TO])])(
+    'takes the balloon a fifth of the way to full size on its first pump (top %i)',
+    (top) => {
+      // The first pump lifts the flat balloon off the floor and blows it up:
+      // a clear jump, then the rest of the ladder shares what is left.
+      expect(firstJump(top)).toBeGreaterThanOrEqual(0.2);
+    },
+  );
 
-  it.each(tops)('takes the balloon a fifth of the way to full size on its first pump (top %i)', (top) => {
-    // The first pump lifts the flat balloon off the floor and blows it up:
-    // a clear jump, then the rest of the ladder shares what is left.
-    if (top <= FIFTH_UP_TO) expect(firstJump(top)).toBeGreaterThanOrEqual(0.2);
-    // Full size only at the top rung: the biggest balloon is unchanged,
-    // so three side by side at their biggest still do not touch.
+  it.each(longTops)(
+    'takes the balloon at least a tenth of the way on its first pump on a long ladder (top %i)',
+    (top) => {
+      expect(firstJump(top)).toBeGreaterThanOrEqual(0.1);
+    },
+  );
+
+  it.each(tops)('reaches full size only at the top rung (top %i)', (top) => {
+    // The biggest balloon is unchanged, so three side by side at their
+    // biggest still do not touch.
     expect(balloonSize(top, top)).toBe(1);
     if (top > 1) expect(balloonSize(top - 1, top)).toBeLessThan(1);
   });
