@@ -2,6 +2,7 @@ import type {
   ApiErrorBody,
   ApiErrorCode,
   ApiErrorResponse,
+  FairnessView,
   RoundView,
   WalletView,
 } from '@pump/contract';
@@ -13,6 +14,7 @@ const STATUS: Readonly<Record<ApiErrorCode, number>> = {
   not_found: 404,
   conflict: 409,
   round_active: 409,
+  seeds_changed: 409,
   seed_not_revealed: 409,
   key_reused: 422,
   internal_error: 500,
@@ -30,6 +32,8 @@ interface ApiErrorOptions {
    */
   readonly round?: () => RoundView | null;
   readonly wallet?: () => WalletView;
+  /** The player's seeds as they are now, for a "seeds_changed" refusal. Read the same way. */
+  readonly fairness?: () => FairnessView;
 }
 
 /**
@@ -58,6 +62,7 @@ export class ApiError extends Error {
       message: this.message,
       ...(this.options.round ? { round: this.options.round() } : {}),
       ...(this.options.wallet ? { wallet: this.options.wallet() } : {}),
+      ...(this.options.fairness ? { fairness: this.options.fairness() } : {}),
     };
     return { error: body };
   }

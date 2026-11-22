@@ -321,10 +321,31 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
   the record names another hash, client seed or nonce, is another round's
   record, or sends one of those values in a form this game never sends. The
   page says which in a plain line.
-- A start whose answer was lost gets its copy the next time the game loads
-  its state. A seed change and a round start are never on their way at
-  once, so pressing Bet just after saving a seed can't make an honest round
-  look wrong.
+- The start sends those same three values, and the server starts the round
+  only if they are the player's seeds now. If not (a round played, or a
+  seed changed, in another tab, or a seed change whose answer was lost), it
+  refuses with `seeds_changed` and changes nothing, and the panel shows the
+  seeds now. So an honest round matches its copy, apart from the rare
+  cases under [Known issues](#known-issues). A seed change and a round
+  start are never on their way at once.
+- A start whose answer was lost keeps its copy. It waits for the next full
+  load of the game's state, or the next start that goes through. Then the
+  copy goes under the id of the round in play, if that round asked for the
+  same bets and has no copy yet. If more than one start asked for those
+  bets, the newest one counts. The round's own seeds never pick, or the
+  server could pick by the seeds it played on.
+- Every other start on its way is kept under a stand-in id, which the page
+  finds by hash and nonce. It is skipped only if this browser already has
+  a copy of exactly the same three values, or if a start that went through
+  had the same hash and nonce (its copy then stands for them).
+- A refusal that carries a round, in play or over, does this at once, so
+  the round is checked before you can play it or verify it. A refusal
+  without a round (too little money, or `seeds_changed`) made no round on
+  an honest server, so that start is dropped and can't make a later honest
+  round look wrong. But if a round in play asked for its bets, the refusal
+  is in doubt: the start gives that round its copy if it has none yet, and
+  otherwise keeps a stand-in (a server could call the round it made by an
+  older round's id). See [Known issues](#known-issues).
 - What the copy can't prove: it is what the server's own answers put on
   the screen. So check that the panel shows your client seed before you
   bet.
@@ -334,9 +355,11 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
 - A server could also give a round another id while it is played, so no
   copy is saved under its real id. The page then looks for a copy with the
   record's hash and nonce under another id (one server seed and nonce
-  belong to one round only), and the round doesn't check out if that copy
-  names another client seed. This is not caught if the server also moved
-  the round to a server seed or nonce this browser has no copy for; see
+  belong to one round only). Under another round's id, the round never
+  checks out: it is that round again, or that round's rolls used again.
+  Under a stand-in, it doesn't check out if the copy names another client
+  seed. This is not caught if the server also moved the round to a server
+  seed or nonce this browser has no copy for; see
   [Known issues](#known-issues).
 - Rounds started by an older version of the game have a copy of the hash
   only, and the page says so.
@@ -483,11 +506,11 @@ All JSON. The exact shapes are TypeScript types in `packages/contract`.
 | `GET /api/settings` | The player's own choices: `{ winsPrivate }`. |
 | `PUT /api/settings` | Changes them. `{ winsPrivate: true }` takes all of the player's wins, past ones too, out of the public lists at once. |
 | `GET /api/wins` | The latest, largest and luckiest wins, ten of each, from players who haven't chosen private. Needs no cookie. When `PUBLIC_WINS` is off it answers `"enabled": false` with empty lists and reads nothing. |
-| `POST /api/rounds` | Starts a round: `{ difficultyId, betsCents }`, one bet per balloon. Charges the bets. |
+| `POST /api/rounds` | Starts a round: `{ difficultyId, betsCents, expectedSeeds }`, one bet per balloon. `expectedSeeds` is `{ serverSeedHash, clientSeed, nonce }` as the screen showed them; if any part is not the player's seeds now, the start is refused with `seeds_changed`. It can be left out, and the game screen always sends it. Charges the bets. |
 | `POST /api/rounds/:id/pump` | One pump: `{ balloonIndex, expectedDrawIndex, patch }`. With `patch: true` the Patch is bought and the pump made in one step. Answers `survived`, `saved`, `popped` or `top`. If it ends the round, each balloon cashed out below its top gets `afterRound`: where it would have popped. |
 | `POST /api/rounds/:id/cash-out` | Cashes out one balloon: `{ balloonIndex, expectedDrawIndex }`. If it ends the round, it carries `afterRound` like a pump. |
 | `GET /api/rounds/:id/verify` | A finished round with its revealed server seed, the RTP, ladder and payout cap it was played with, and each balloon's actions, draws and reveal. 409 until the seed has been rotated. |
-| `PUT /api/fairness/client-seed` | Sets the client seed. Never resets the nonce. |
+| `PUT /api/fairness/client-seed` | Sets the client seed. Never resets the nonce. A new player has none, so a client makes one and sends this before its first `POST /api/rounds` (until then a start gets 400 `invalid_request`). |
 | `POST /api/fairness/rotate` | Retires the server seed, reveals it, and starts a new one. Refused during a round. |
 
 Every request that changes something needs an `Idempotency-Key` header.
@@ -495,12 +518,13 @@ Errors always look like `{ "error": { "code", "message" } }`:
 
 | Code | Status | Meaning |
 | --- | --- | --- |
-| `invalid_request` | 400 | The request is malformed or breaks a rule. |
+| `invalid_request` | 400 | The request is malformed or breaks a rule. A body the server can't read at all gets this code with the web server's own status instead, such as 413 for a body over 16 KB. |
 | `no_session` | 401 | No player cookie. Only `GET /api/session` starts a player; the screen tells the player to reload. |
 | `insufficient_funds` | 402 | The balance doesn't cover the bets or the Patch. Nothing was charged. |
 | `not_found` | 404 | No such round for this player. |
 | `conflict` | 409 | The balloon isn't in the state the request expected. The body carries the round as it is now. |
 | `round_active` | 409 | A round is in progress: no second round, no seed changes. |
+| `seeds_changed` | 409 | A round start named seeds that are not the player's now. Nothing was charged and no nonce was used. The body carries the seeds as they are now (`fairness`). |
 | `seed_not_revealed` | 409 | The round can't be checked until its server seed is rotated. |
 | `key_reused` | 422 | This idempotency key was already used for a different request. |
 
@@ -621,6 +645,28 @@ Found in the final check before submitting, and not fixed on `main` yet:
   not long ago. Closing this fully needs the server's record to carry
   something the browser picked at the start, such as the start's
   idempotency key.
+- **A start refused with no round in its answer keeps its copy only if a
+  round for its bets turns up in play.** A dishonest server could refuse a
+  start, play the round anyway on a client seed it picked, and end it
+  before this browser sees it in play. That round can then get past the
+  copy check: the page says it has no copy of it, and calls that a warning
+  sign. Keeping a copy for every refused start would close this, but then
+  a tab left out of date could make honest rounds fail the check.
+- **Two tabs that press Bet at almost the same moment, on panels showing
+  different seeds** (one out of date): this browser can't tell which start
+  made the round, so the round gets the copy of the start pressed last. A
+  dishonest server could play on the seeds that tab showed and lose the
+  answers, and the round would check out. And if the other start made the
+  round honestly and its answer is lost too, an honest round fails the
+  check. The page then says another tab may be why.
+- **One honest round can still fail the copy check**, but only after a
+  chain of failures: a start lost on the way before it reached the server,
+  then a new client seed, then a start on the same nonce whose answer is
+  lost too, and that round never gets its own copy (the page is closed
+  until the 24-hour rule ends it, or another tab loads the game while that
+  start is on its way). Its record names the new client seed, but a copy
+  this browser kept for its hash and nonce names the old one. The page
+  says this can happen without cheating.
 - **`GET /api/session` has no limit.** Every visit without a cookie makes a
   new player, so a script could fill the database.
 - **The hammer never tries to overspend over HTTP.** That case is tested

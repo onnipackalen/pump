@@ -3,6 +3,7 @@ import type {
   AfterRoundView,
   BalloonView,
   CashOutBody,
+  ExpectedSeeds,
   PumpBody,
   PumpResult,
   RoundView,
@@ -30,10 +31,24 @@ import { assertInTransaction, immediate } from '../db/transaction';
 import { ApiError } from '../errors';
 import type { PlayersRepository } from '../repositories/players';
 import type { RoundsRepository, StoredRound } from '../repositories/rounds';
-import type { SeedsRepository } from '../repositories/seeds';
+import type { ActiveSeed, SeedsRepository } from '../repositories/seeds';
 import type { Runtime } from '../runtime';
 import { ABANDONED_AFTER_MS } from '../settings';
+import type { FairnessService } from './fairness';
 import type { WalletService } from './wallet';
+
+/**
+ * Whether the seeds a round start names are the player's seeds now: the
+ * active server seed's hash, the client seed and the next nonce, all three
+ * exactly.
+ */
+function sameSeeds(expected: ExpectedSeeds, seed: ActiveSeed, clientSeed: string): boolean {
+  return (
+    expected.serverSeedHash === seed.seedHash &&
+    expected.clientSeed === clientSeed &&
+    expected.nonce === seed.nextNonce
+  );
+}
 
 /**
  * Where a balloon would have popped, as the screen shows it. Only on a
@@ -120,6 +135,7 @@ export function gameService(
   seeds: SeedsRepository,
   rounds: RoundsRepository,
   wallet: WalletService,
+  fairness: FairnessService,
 ) {
   const walletOf = (playerId: string): WalletView => ({
     balanceCents: wallet.balanceOf(playerId),
@@ -309,6 +325,14 @@ export function gameService(
     /**
      * Starts a round: takes the next nonce of the player's server seed, stores
      * the round with its own copy of the RTP and ladder, and charges each bet.
+     *
+     * If the request names the seeds its screen showed (expectedSeeds), they
+     * must be the player's seeds now, all three parts. If not (a round
+     * played, or a seed changed, in another tab since that screen last
+     * loaded them), the start is refused before anything is charged or any
+     * nonce is used, and the answer carries the seeds as they are now. So
+     * this server never plays a round on seeds the screen did not show, and
+     * the browser's copy of them always matches the round's record.
      */
     start(playerId: string, request: StartRoundRequest): ActionResult {
       assertInTransaction(runtime.db);
@@ -323,6 +347,18 @@ export function gameService(
       const player = players.get(playerId);
       if (player.clientSeed === null) {
         throw new ApiError('invalid_request', 'Set a client seed before starting a round.');
+      }
+      const seed = seeds.active(playerId);
+      if (
+        request.expectedSeeds !== undefined &&
+        !sameSeeds(request.expectedSeeds, seed, player.clientSeed)
+      ) {
+        throw new ApiError(
+          'seeds_changed',
+          'No round was started: the seeds changed since this screen last showed them ' +
+            '(in another tab, say). Check Provably fair, then press Bet again.',
+          { fairness: () => fairness.view(playerId), wallet: () => walletOf(playerId) },
+        );
       }
 
       let started;
@@ -339,7 +375,6 @@ export function gameService(
 
       const id = runtime.newId();
       const at = runtime.now().toISOString();
-      const seed = seeds.active(playerId);
       rounds.insert({
         id,
         playerId,

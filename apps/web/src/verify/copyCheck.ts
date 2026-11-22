@@ -23,10 +23,17 @@
  * played, so the copy is saved under that id and none is found under the
  * round's real one. So when there is no copy under the round's id, the page
  * also looks for a copy saved with the record's hash and nonce under another
- * id (one server seed and nonce belong to one round only), and says so if
- * it names another client seed. A server that also moved the round to a
- * nonce this browser has no copy for is not caught this way; the no-copy
- * note says that a missing copy can be a warning sign.
+ * id (one server seed and nonce belong to one round only):
+ * - under another round's id: always a problem. That hash and nonce belong
+ *   to that other round, so this is that round under another id, or a round
+ *   that used its rolls again, even with the same client seed.
+ * - under a stand-in id (the seeds a start was bet against, kept when this
+ *   browser never learned the id of the round it made; shownHashes,
+ *   rememberStandIn): a problem if it names another client seed. With the
+ *   same one, it is this round's own copy.
+ * A server that also moved the round to a server seed or nonce this browser
+ * has no copy for is not caught this way; the no-copy note says that a
+ * missing copy can be a warning sign.
  *
  * All of these compare the record's values exactly as sent. The form, by
  * contrast, trims text and reads numbers from text, so a record whose hash,
@@ -37,7 +44,7 @@
  */
 
 import { recordHashProblem } from './hashCheck';
-import { MAX_SHOWN, validSeeds, type ShownEntry, type ShownSeeds } from './shownHashes';
+import { isStandIn, MAX_SHOWN, validSeeds, type ShownEntry, type ShownSeeds } from './shownHashes';
 
 /** The values the server's record names for a round. */
 export interface RecordSeeds {
@@ -126,13 +133,37 @@ export function recordIdProblem(askedId: string, recordId: string): string | nul
 
 /**
  * A problem with the server's record itself: this browser has no copy under
- * this round's id, but it saved this record's hash and nonce before it
- * started another round (`copy`), with another client seed. Null when the
- * client seeds agree.
+ * this round's id, but it saved this record's hash and nonce for another
+ * round start (`copy`). Under another round's id that is always a problem
+ * (see the top of this file). Under a stand-in id it is one only when the
+ * client seeds differ; null when they agree.
  */
 export function sameNonceProblem(copy: ShownEntry, record: RecordSeeds): string | null {
   const [otherId, , clientSeed, nonce] = copy;
-  if (clientSeed === record.clientSeed) return null;
+  if (isStandIn(otherId)) {
+    if (clientSeed === record.clientSeed) return null;
+    return (
+      `The server’s record says this round used the client seed “${record.clientSeed}” with ` +
+      `nonce ${String(nonce)}. This browser has no copy saved under this round’s id. But for a ` +
+      'round start whose round it never learned the id of (its answer was lost, or named another ' +
+      'round, or an id this game does not keep), it saved the same server seed hash and nonce ' +
+      `${String(nonce)}, with the client seed “${clientSeed}”. One server seed and nonce belong ` +
+      'to one round only. So this may be that start’s round, played on a client seed the server ' +
+      'picked. (Rarely it happens without cheating: a start that never reached the server, then ' +
+      'a new client seed, then a round on the same nonce whose start answer was lost too.)'
+    );
+  }
+  if (clientSeed === record.clientSeed) {
+    return (
+      `The server’s record says this round used nonce ${String(nonce)}, with the client seed ` +
+      `“${clientSeed}”. This browser has no copy saved under this round’s id. But when it started ` +
+      `round ${otherId}, it saved this same server seed hash, client seed and nonce. One server ` +
+      `seed and nonce belong to one round only. So this may be round ${otherId} under another id, ` +
+      `or a round that used the rolls of round ${otherId} again. (A round started in another tab ` +
+      'by an older version of this game, on a screen that still showed that nonce, would also ' +
+      `cause this. Then round ${otherId} shows another nonce when you check it.)`
+    );
+  }
   return (
     `The server’s record says this round used the client seed “${record.clientSeed}” with ` +
     `nonce ${String(nonce)}. This browser has no copy saved under this round’s id. But when it ` +
@@ -152,7 +183,8 @@ export function sameNonceProblem(copy: ShownEntry, record: RecordSeeds): string 
  * browser saved when the round started (`shown`, the copy for `askedId`).
  * With no full copy for `askedId`, `elsewhere` holds the copies saved under
  * other ids with the record's hash and nonce (see copiesWithSameNonce), and
- * any of those naming another client seed is a problem too. Empty when they
+ * each of those is a problem too (sameNonceProblem), except a stand-in that
+ * names the record's client seed. Empty when they
  * all agree, or when the ids agree and this browser has no copy at all. Any
  * of these means the round does not check out, whatever the draws say.
  */

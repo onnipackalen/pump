@@ -492,7 +492,8 @@ export function App() {
                 revealed={state.revealed}
                 // Also while a start is on its way: the round is bet against the seeds on screen.
                 locked={roundActive || autoRunning || state.starting}
-                onSaveClientSeed={game.setClientSeed}
+                changing={state.seedChanging}
+                onSaveClientSeed={game.saveClientSeed}
                 onRotate={game.rotateSeed}
               />
             )}
@@ -534,6 +535,7 @@ export function App() {
           revealedSeedHashes={state.revealed.map((seed) => seed.serverSeedHash)}
           initialRoundId={verifyRoundId}
           canRotate={!roundActive && !autoRunning && !state.starting && state.phase === 'ready'}
+          seedChanging={state.seedChanging}
           onRotate={game.rotateSeed}
           onBack={closeVerify}
         />

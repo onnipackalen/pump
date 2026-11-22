@@ -40,10 +40,27 @@ export const clientSeedBody = z.strictObject({
 /** The :roundId in an address. */
 export const roundParams = z.object({ roundId });
 
+/**
+ * The seeds the screen showed before a round start, in the exact form the
+ * server sends them: a hash of 64 lowercase hex characters, a client seed by
+ * the client seed rules, and a whole nonce of 0 or more.
+ */
+const expectedSeeds = z.strictObject({
+  serverSeedHash: z.string().regex(/^[0-9a-f]{64}$/, {
+    message: 'expectedSeeds.serverSeedHash is 64 lowercase hex characters.',
+  }),
+  clientSeed: z.string().refine(isClientSeed, {
+    message: 'expectedSeeds.clientSeed is 1 to 64 characters from A-Z, a-z, 0-9, _ and -.',
+  }),
+  // z.int() takes safe whole numbers only.
+  nonce: z.int().min(0),
+});
+
 /** POST /api/rounds */
 export const startRoundBody = z.strictObject({
   difficultyId: z.string().min(1).max(64),
   betsCents: z.array(z.int()).min(1).max(16),
+  expectedSeeds: expectedSeeds.optional(),
 });
 
 /** POST /api/rounds/:roundId/pump */

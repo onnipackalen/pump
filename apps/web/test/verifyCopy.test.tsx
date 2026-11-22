@@ -440,6 +440,15 @@ describe('the record is checked against this browser’s copy of the round asked
 });
 
 /**
+ * The start as a dishonest server treats it: it skips the check of the seeds
+ * the screen showed (expectedSeeds), so it can play on seeds of its own.
+ */
+const unchecked = (request: StartRoundRequest): StartRoundRequest => ({
+  difficultyId: request.difficultyId,
+  betsCents: request.betsCents,
+});
+
+/**
  * A server that plays the round on a client seed of its own, then loses
  * every answer to the start (both tries), so the browser never sees the
  * round's id from the start itself.
@@ -451,7 +460,7 @@ class RigsAndLosesStart extends DemoClient {
       this.rigged = true;
       await super.setClientSeed('server-picked', key());
     }
-    await super.startRound(request, k);
+    await super.startRound(unchecked(request), k);
     throw new NetworkFailure('The game server did not answer properly (502).');
   }
 }
@@ -493,7 +502,7 @@ class AnswersUnderAnotherId extends DemoClient {
 
   override async startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
     await super.setClientSeed('server-picked', key());
-    const answer = await super.startRound(request, k);
+    const answer = await super.startRound(unchecked(request), k);
     return { ...answer, round: { ...answer.round, id: this.idFor(answer.round.id), clientSeed: 'player-seed' } };
   }
 }
@@ -573,17 +582,33 @@ describe('a server that answers the start under another id', () => {
     expect(html).toContain('“player-seed”');
   });
 
-  it('an honest round with no copy under its id, but a copy with its hash, nonce and client seed, still checks out', async () => {
+  it('an honest round with no copy under its id, but a stand-in with its hash, nonce and client seed, still checks out', async () => {
+    // Its start answer was lost, and the round was over before the next load.
     const [r] = await playedRecords('player-seed', 1);
     if (!r) throw new Error('a round expected');
     const storage = memoryStorage();
-    rememberShown('another-round', copyOf(r), storage);
+    rememberShown(`?start:${String(r.nonce)}:${r.serverSeedHash}`, copyOf(r), storage);
     const toCheck = roundToCheck(r.id, r, storage);
     expect(toCheck.elsewhere).toHaveLength(1);
     expect(recordProblems(r.id, toCheck.shown, r, toCheck.elsewhere)).toEqual([]);
     const html = renderToStaticMarkup(<Workbench {...toCheck} />);
     expect(html).toContain(SUCCESS);
     expect(html).toContain('no copy of the hash, client seed and nonce');
+  });
+
+  it('a copy with its hash and nonce under another round’s id never checks out, even with the same client seed', async () => {
+    const [r] = await playedRecords('player-seed', 1);
+    if (!r) throw new Error('a round expected');
+    const storage = memoryStorage();
+    rememberShown('another-round', copyOf(r), storage);
+    const toCheck = roundToCheck(r.id, r, storage);
+    const problems = recordProblems(r.id, toCheck.shown, r, toCheck.elsewhere);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('when it started round another-round');
+    expect(problems[0]).toContain('used the rolls of round another-round again');
+    const html = renderToStaticMarkup(<Workbench {...toCheck} />);
+    expect(html).not.toContain(SUCCESS);
+    expect(html).toContain('data-verdict="mismatch"');
   });
 
   it('with a full copy under the round’s id, copies under other ids are not looked at', async () => {
@@ -618,7 +643,12 @@ describe('a server that answers the start under another id', () => {
     expect(line).toContain('when it started round alias-1');
     expect(line).toMatch(/One server seed and nonce belong to one round only/);
     expect(line).toMatch(/another tab or on another device just before round alias-1 started/);
-    expect(sameNonceProblem(['alias-1', SHOWN, 'record-seed', 7], r)).toBeNull();
+    // A stand-in that names the record's client seed is that round's own copy.
+    expect(sameNonceProblem([`?start:7:${SHOWN}`, SHOWN, 'record-seed', 7], r)).toBeNull();
+    // Under another round's id it is a problem whatever the client seed.
+    expect(sameNonceProblem(['alias-1', SHOWN, 'record-seed', 7], r)).toContain(
+      'One server seed and nonce belong to one round only',
+    );
     expect(recordProblems('round-1', null, r, [['alias-1', SHOWN, 'player-seed', 7]])).toHaveLength(1);
   });
 

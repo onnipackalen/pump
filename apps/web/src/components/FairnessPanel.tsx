@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import type { FairnessView, RevealedSeed } from '../api/contract';
 import { CLIENT_SEED_PATTERN } from '../game/clientSeed';
+import type { SeedSave } from '../game/useGame';
 
 interface FairnessPanelProps {
   readonly fairness: FairnessView;
   readonly revealed: readonly RevealedSeed[];
   /** Seeds can't change during a round. */
   readonly locked: boolean;
-  readonly onSaveClientSeed: (clientSeed: string) => Promise<boolean>;
+  /** A seed change is on its way: Save and Rotate wait for it. */
+  readonly changing: boolean;
+  readonly onSaveClientSeed: (clientSeed: string) => Promise<SeedSave>;
   readonly onRotate: () => void;
 }
 
@@ -20,6 +23,7 @@ export function FairnessPanel({
   fairness,
   revealed,
   locked,
+  changing,
   onSaveClientSeed,
   onRotate,
 }: FairnessPanelProps) {
@@ -35,6 +39,7 @@ export function FairnessPanel({
         key={fairness.clientSeed ?? ''}
         saved={fairness.clientSeed ?? ''}
         locked={locked}
+        changing={changing}
         onSave={onSaveClientSeed}
       />
 
@@ -43,7 +48,7 @@ export function FairnessPanel({
         this server seed and never goes back, even if you change the client seed.
       </p>
 
-      <button type="button" className="btn" disabled={locked} onClick={onRotate}>
+      <button type="button" className="btn" disabled={locked || changing} onClick={onRotate}>
         Rotate server seed
       </button>
       {locked && <p className="hint">Seeds are locked until the round ends.</p>}
@@ -70,22 +75,57 @@ export function FairnessPanel({
 interface ClientSeedFormProps {
   readonly saved: string;
   readonly locked: boolean;
-  readonly onSave: (clientSeed: string) => Promise<boolean>;
+  readonly changing: boolean;
+  readonly onSave: (clientSeed: string) => Promise<SeedSave>;
 }
 
-function ClientSeedForm({ saved, locked, onSave }: ClientSeedFormProps) {
+/** The line under the box after a save that did not go through, naming the seed still in use. */
+export function notSavedText(saved: string): string {
+  return saved === '' ? 'Not saved.' : `Not saved. Rounds still use “${saved}”.`;
+}
+
+/** The line under the box after a save whose answer was lost: the server may have saved it. */
+export const SAVE_UNSURE_TEXT = 'Not sure it was saved: the answer was lost.';
+
+/**
+ * The line under the box after the last save, or null. Only a save that
+ * surely did not go through says which seed is still in use. Once the
+ * server's seeds load again and name the new one, the box starts over with
+ * it (FairnessPanel keys the form by the saved seed), and the line goes.
+ */
+export function saveLine(outcome: SeedSave | null, saved: string): string | null {
+  if (outcome === 'not-saved') return notSavedText(saved);
+  if (outcome === 'unsure') return SAVE_UNSURE_TEXT;
+  return null;
+}
+
+/** Exported for tests. */
+export function ClientSeedForm({ saved, locked, changing, onSave }: ClientSeedFormProps) {
   const [text, setText] = useState(saved);
   const [saving, setSaving] = useState(false);
+  // How the last save went, while the box still shows the seed it sent.
+  const [outcome, setOutcome] = useState<SeedSave | null>(null);
   const valid = CLIENT_SEED_PATTERN.test(text);
+  const line = valid && text !== saved ? saveLine(outcome, saved) : null;
 
   return (
     <form
       className="client-seed"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!valid || text === saved) return;
+        if (!valid || text === saved || changing) return;
         setSaving(true);
-        void onSave(text).finally(() => setSaving(false));
+        setOutcome(null);
+        void onSave(text).then(
+          (result) => {
+            setSaving(false);
+            setOutcome(result);
+          },
+          () => {
+            setSaving(false);
+            setOutcome('unsure');
+          },
+        );
       }}
     >
       <label>
@@ -98,17 +138,21 @@ function ClientSeedForm({ saved, locked, onSave }: ClientSeedFormProps) {
           autoComplete="off"
           disabled={locked}
           aria-invalid={!valid}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            setText(event.target.value);
+            setOutcome(null);
+          }}
         />
       </label>
       <button
         type="submit"
         className="btn btn-small"
-        disabled={locked || saving || !valid || text === saved}
+        disabled={locked || changing || saving || !valid || text === saved}
       >
         Save
       </button>
       {!valid && <p className="bet-note error">1 to 64 of A–Z, a–z, 0–9, _ and -</p>}
+      {line !== null && <p className="bet-note error">{line}</p>}
     </form>
   );
 }

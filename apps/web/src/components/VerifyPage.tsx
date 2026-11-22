@@ -64,6 +64,8 @@ interface VerifyPageProps {
   readonly initialRoundId: string | null;
   /** The seed can be rotated now: no round or auto-play in progress. */
   readonly canRotate: boolean;
+  /** A seed change is on its way: Rotate waits for it. */
+  readonly seedChanging: boolean;
   readonly onRotate: () => void;
   readonly onBack: () => void;
 }
@@ -115,6 +117,7 @@ export function VerifyPage({
   revealedSeedHashes,
   initialRoundId,
   canRotate,
+  seedChanging,
   onRotate,
   onBack,
 }: VerifyPageProps) {
@@ -176,10 +179,19 @@ export function VerifyPage({
                 Rounds on your current server seed can be checked once you rotate it, which
                 reveals it.
               </p>
-              <button type="button" className="btn btn-small" disabled={!canRotate} onClick={onRotate}>
+              <button
+                type="button"
+                className="btn btn-small"
+                disabled={!canRotate || seedChanging}
+                onClick={onRotate}
+              >
                 Rotate server seed
               </button>
-              {!canRotate && <p className="hint">Finish the round in play first.</p>}
+              {seedChanging ? (
+                <p className="hint">A seed change is on its way.</p>
+              ) : (
+                !canRotate && <p className="hint">Finish the round in play first.</p>
+              )}
             </div>
           )}
           <form

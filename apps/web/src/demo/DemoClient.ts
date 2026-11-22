@@ -15,7 +15,8 @@
  *
  * It also keeps the server's promises the screen relies on: one active
  * round, idempotency keys, expected draw index checks (409 with the current
- * state), and seeds that stay fixed during a round.
+ * state), seeds that stay fixed during a round, and no round started on
+ * seeds the screen did not show (409 "seeds_changed" with the seeds now).
  *
  * Once a round is over it works out each reveal ("where it would have
  * popped") for every balloon cashed out below its top rung, as the server
@@ -64,6 +65,7 @@ import type {
   VerifiableRound,
 } from '../api/contract';
 import { CLIENT_SEED_PATTERN } from '../game/clientSeed';
+import { validSeeds } from '../verify/shownHashes';
 
 const STARTING_BALANCE_CENTS = 1_000_000;
 
@@ -219,6 +221,27 @@ export class DemoClient implements GameClient {
       const clientSeed = this.clientSeed;
       if (clientSeed === null) {
         fail({ code: 'invalid_request', message: 'Set a client seed first.' });
+      }
+      // As on the server: the seeds the screen showed must be the seeds now.
+      const expected = request.expectedSeeds;
+      if (expected !== undefined) {
+        if (!validSeeds(expected)) {
+          fail({ code: 'invalid_request', message: 'expectedSeeds is not in a valid form.' });
+        }
+        if (
+          expected.serverSeedHash !== this.serverSeedHash ||
+          expected.clientSeed !== clientSeed ||
+          expected.nonce !== this.nonce
+        ) {
+          fail({
+            code: 'seeds_changed',
+            message:
+              'No round was started: the seeds changed since this screen last showed them ' +
+              '(in another tab, say). Check Provably fair, then press Bet again.',
+            fairness: this.fairness(),
+            wallet: this.wallet(),
+          });
+        }
       }
       const started = this.engine(() =>
         engineStartRound(this.config, request.difficultyId, request.betsCents, this.balanceCents),

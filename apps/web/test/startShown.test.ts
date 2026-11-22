@@ -23,6 +23,10 @@ import {
   startRoundShown,
 } from '../src/game/session';
 import {
+  copiesWithSameNonce,
+  isStandIn,
+  markRefused,
+  parseShown,
   rememberShown,
   rememberStarting,
   shownFor,
@@ -100,11 +104,13 @@ class StartsThenSaysRoundActive extends DemoClient {
   }
 }
 
-/** Counts the starts sent, and the server never gets one it should not. */
+/** Counts the starts sent, and keeps what each one asked for. */
 class CountsStarts extends DemoClient {
   starts = 0;
+  readonly sent: StartRoundRequest[] = [];
   override startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
     this.starts += 1;
+    this.sent.push(request);
     return super.startRound(request, k);
   }
 }
@@ -141,6 +147,14 @@ describe('a round start saves what this browser showed before it', () => {
     expect(client.starts).toBe(2);
     expect((await client.getSession()).fairness.nextNonce).toBe(fairness.nextNonce + 1);
     expect(shownFor(result.round.id, storage)).toEqual(copyOf(fairness));
+  });
+
+  it('sends exactly the seeds it saves, as expectedSeeds, so the server can refuse other ones', async () => {
+    const { client, fairness } = await demo(new CountsStarts(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    const { round } = await startRoundShown(client, REQUEST, fairness, storage);
+    expect(client.sent).toEqual([{ ...REQUEST, expectedSeeds: copyOf(fairness) }]);
+    expect(shownFor(round.id, storage)).toEqual(client.sent[0]?.expectedSeeds);
   });
 
   it('saves no round copy for a start the server refuses', async () => {
@@ -262,6 +276,142 @@ describe('a start whose answer never came still gets its copy', () => {
     rememberShown(activeRound.id, saved, storage);
     keepLostStartCopy(activeRound, storage);
     expect(shownFor(activeRound.id, storage)).toEqual(saved);
+  });
+});
+
+describe('what the screen showed for a start is never thrown away', () => {
+  const H = 'a'.repeat(64);
+  const seedsAt = (nonce: number, clientSeed = 'player-seed') => ({ serverSeedHash: H, clientSeed, nonce });
+  const standIns = (storage: HashStorage) =>
+    parseShown(storage.getItem('pump.shownSeeds')).filter(([id]) => isStandIn(id));
+
+  it('a matching start whose round already has another copy under its id keeps a stand-in', async () => {
+    const { client, fairness } = await demo(new LosesEveryStartAnswer(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    await startRoundShown(client, REQUEST, fairness, storage).catch(() => null);
+    const { activeRound } = await client.getSession();
+    if (!activeRound) throw new Error('the start was applied');
+    // A copy from another start is already under this id (a server reusing an old round's id).
+    const other = { serverSeedHash: 'f'.repeat(64), clientSeed: 'other', nonce: 9 };
+    rememberShown(activeRound.id, other, storage);
+    keepLostStartCopy(activeRound, storage);
+    expect(shownFor(activeRound.id, storage)).toEqual(other);
+    expect(copiesWithSameNonce(fairness.serverSeedHash, fairness.nextNonce, activeRound.id, storage)).toEqual([
+      [`?start:${String(fairness.nextNonce)}:${fairness.serverSeedHash}`, fairness.serverSeedHash, 'player-seed', fairness.nextNonce],
+    ]);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+  });
+
+  it('of two starts with the same bets, the round gets the newest, never the one whose seeds agree with it', async () => {
+    const { client, fairness } = await demo(new LosesEveryStartAnswer(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    await startRoundShown(client, REQUEST, fairness, storage).catch(() => null);
+    const { activeRound } = await client.getSession();
+    if (!activeRound) throw new Error('the start was applied');
+    // A later start that asked for the same bets, on another client seed.
+    rememberStarting({ ...REQUEST, shown: { ...copyOf(fairness), clientSeed: 'later-seed' } }, storage);
+    keepLostStartCopy(activeRound, storage);
+    // The round's own seeds do not pick: else the server would pick by the seeds it played on.
+    expect(shownFor(activeRound.id, storage)).toEqual({ ...copyOf(fairness), clientSeed: 'later-seed' });
+    // The older start keeps a stand-in.
+    expect(standIns(storage).map(([, , clientSeed]) => clientSeed)).toEqual(['player-seed']);
+  });
+
+  it('the same when the newest of them was refused', async () => {
+    const { client, fairness } = await demo(new LosesEveryStartAnswer(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    await startRoundShown(client, REQUEST, fairness, storage).catch(() => null);
+    const { activeRound } = await client.getSession();
+    if (!activeRound) throw new Error('the start was applied');
+    const later = { ...REQUEST, shown: { ...copyOf(fairness), clientSeed: 'later-seed' } };
+    rememberStarting(later, storage);
+    markRefused(later, storage);
+    expect(startsOnTheirWay(storage)[0]?.refused).toBe(true);
+    keepLostStartCopy(activeRound, storage);
+    expect(shownFor(activeRound.id, storage)?.clientSeed).toBe('later-seed');
+  });
+
+  it('a start that matches no round in play keeps a stand-in, found by hash and nonce only', () => {
+    const storage = memoryStorage();
+    rememberStarting({ ...REQUEST, shown: seedsAt(4) }, storage);
+    keepLostStartCopy(null, storage);
+    expect(standIns(storage)).toEqual([[`?start:4:${H}`, H, 'player-seed', 4]]);
+    expect(copiesWithSameNonce(H, 4, 'some-round', storage)).toHaveLength(1);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+  });
+
+  it('a stand-in is skipped only for an exact copy: another client seed on the same hash and nonce keeps its own', () => {
+    const storage = memoryStorage();
+    rememberShown('round-a', seedsAt(4, 'tab-a-seed'), storage);
+    rememberStarting({ ...REQUEST, shown: seedsAt(4) }, storage);
+    rememberStarting({ ...REQUEST, shown: seedsAt(4, 'tab-a-seed') }, storage);
+    keepLostStartCopy(null, storage);
+    expect(standIns(storage)).toEqual([[`?start:4:${H}`, H, 'player-seed', 4]]);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+  });
+
+  it('a start the server refused with no round in its answer leaves no stand-in', async () => {
+    const storage = memoryStorage();
+    const { client, fairness } = await demo(new DemoClient(GAME_CONFIG, 0));
+    // A panel out of date: the client seed was changed elsewhere.
+    await client.setClientSeed('changed-elsewhere', key());
+    const refusal = await startRoundShown(client, REQUEST, fairness, storage).catch((e: unknown) => e);
+    expect(refusal instanceof ApiFailure && refusal.code).toBe('seeds_changed');
+    expect(startsOnTheirWay(storage)).toEqual([{ ...REQUEST, shown: copyOf(fairness), refused: true }]);
+    keepLostStartCopy(null, storage);
+    expect(parseShown(storage.getItem('pump.shownSeeds'))).toEqual([]);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+  });
+
+  it('a refused start keeps a stand-in when a round for its bets is in play, and only then', async () => {
+    const { client, fairness } = await demo(new DemoClient(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    const { round } = await startRoundShown(client, REQUEST, fairness, storage);
+    const otherBets: RoundView = {
+      ...round,
+      balloons: round.balloons.map((b) => ({ ...b, betCents: b.betCents + 1 })),
+    };
+    const refused = { ...REQUEST, shown: seedsAt(4) };
+
+    // A round for other bets: the refusal stands, and the start is dropped.
+    rememberStarting(refused, storage);
+    markRefused(refused, storage);
+    keepLostStartCopy(otherBets, storage);
+    expect(standIns(storage)).toEqual([]);
+
+    // A round for its bets, under an id that already has a copy (a server
+    // can reuse an older round's id): the refusal is in doubt, so it is kept.
+    rememberStarting(refused, storage);
+    markRefused(refused, storage);
+    keepLostStartCopy(round, storage);
+    expect(standIns(storage)).toEqual([[`?start:4:${H}`, H, 'player-seed', 4]]);
+    expect(shownFor(round.id, storage)).toEqual(copyOf(fairness));
+    expect(startsOnTheirWay(storage)).toEqual([]);
+  });
+
+  it('after a start goes through: a start with the same hash and nonce is dropped, any other keeps a stand-in', async () => {
+    const { client, fairness } = await demo(new DemoClient(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    const shown = shownBefore(fairness);
+    if (!shown) throw new Error('valid seeds expected');
+    // Left on their way by earlier starts whose answers never came.
+    rememberStarting({ ...REQUEST, shown: { ...shown, clientSeed: 'old-seed' } }, storage);
+    rememberStarting({ ...REQUEST, shown: { ...shown, nonce: shown.nonce + 5 } }, storage);
+    const { round } = await startRoundShown(client, REQUEST, fairness, storage);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+    expect(shownFor(round.id, storage)).toEqual(copyOf(fairness));
+    expect(standIns(storage).map(([, , clientSeed, nonce]) => [clientSeed, nonce])).toEqual([
+      ['player-seed', fairness.nextNonce + 5],
+    ]);
+  });
+
+  it('the same stand-in is saved once, however often its start is settled', () => {
+    const storage = memoryStorage();
+    for (let n = 0; n < 3; n += 1) {
+      rememberStarting({ ...REQUEST, shown: seedsAt(4) }, storage);
+      keepLostStartCopy(null, storage);
+    }
+    expect(standIns(storage)).toHaveLength(1);
   });
 });
 

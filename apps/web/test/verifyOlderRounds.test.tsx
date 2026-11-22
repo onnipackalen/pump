@@ -396,6 +396,7 @@ describe('the verify page’s list of rounds', () => {
         client={client}
         config={GAME_CONFIG}
         rounds={rounds}
+        seedChanging={false}
         revealedSeedHashes={[]}
         initialRoundId={null}
         canRotate

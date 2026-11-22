@@ -92,6 +92,7 @@ describe("openedState: a restored round counts in full in the session's net", ()
         winShownFor: null,
         endedElsewhere: null,
         starting: false,
+        seedChanging: false,
         notice: null,
         session: null,
       },

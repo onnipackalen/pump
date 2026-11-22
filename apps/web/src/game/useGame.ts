@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ApiFailure, type GameClient } from '../api/client';
+import { ApiFailure, NetworkFailure, type GameClient } from '../api/client';
 import type {
   ActionResult,
   BalloonView,
@@ -25,6 +25,8 @@ import {
   failureNotice,
   finishedRefusal,
   LOST_SESSION_TEXT,
+  SEED_CHANGE_BUSY_TEXT,
+  seedsInRefusal,
 } from './refusal';
 import { pressMs } from './risk';
 import { isOlder } from './roundOrder';
@@ -100,6 +102,8 @@ export interface GameState {
    */
   readonly endedElsewhere: string | null;
   readonly starting: boolean;
+  /** A client seed save or a rotate is on its way: Save and Rotate wait for it. */
+  readonly seedChanging: boolean;
   readonly notice: Notice | null;
   /**
    * When this visit's session started and the balance then, for the
@@ -146,6 +150,14 @@ export interface GameActions {
   readonly cashOut: (round: RoundView, balloonIndex: number) => Promise<ActionResult | null>;
 }
 
+/**
+ * How a client seed save went: 'saved' once the server has saved it;
+ * 'not-saved' when it was not sent (another seed change was on its way) or
+ * the server refused it; 'unsure' when no answer came, so the server may
+ * or may not have saved it.
+ */
+export type SeedSave = 'saved' | 'not-saved' | 'unsure';
+
 export interface Game {
   readonly state: GameState;
   /** Stable from render to render. */
@@ -166,7 +178,10 @@ export interface Game {
    * was busy is waiting to go (or on its way).
    */
   readonly waitingCashOuts: readonly boolean[];
+  /** Saves a client seed. True once the server has saved it. */
   readonly setClientSeed: (clientSeed: string) => Promise<boolean>;
+  /** The same, and says how it went (see SeedSave). */
+  readonly saveClientSeed: (clientSeed: string) => Promise<SeedSave>;
   readonly rotateSeed: () => void;
   readonly dismissNotice: () => void;
 }
@@ -314,6 +329,7 @@ const initialState: GameState = {
   winShownFor: null,
   endedElsewhere: null,
   starting: false,
+  seedChanging: false,
   notice: null,
   session: null,
 };
@@ -575,9 +591,18 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
       }
       const then = afterFailure(error);
       const finished = finishedRefusal(error);
+      // A start refused because the seeds changed carries the seeds now:
+      // the panel shows them at once, and the next start reads them (the
+      // resync below loads everything else).
+      const seeds = seedsInRefusal(error);
+      if (seeds) shownFairness.current = seeds;
       const nowMs = Date.now();
       setState((s) => {
-        let next: GameState = { ...s, notice: failureNotice(error, s.round, nowMs) };
+        let next: GameState = {
+          ...s,
+          notice: failureNotice(error, s.round, nowMs),
+          ...(seeds ? { fairness: seeds } : {}),
+        };
         if (balloonIndex !== null) {
           next = {
             ...next,
@@ -872,9 +897,31 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
 
   // Seed changes go through the gate: none while a round start is on its
   // way, one at a time, and a start waits for one on its way (see SeedGate).
-  const setClientSeed = useCallback(
-    async (clientSeed: string): Promise<boolean> => {
+  // While one is on its way the panel's Save and Rotate wait (seedChanging).
+  // One the gate refuses is not sent, and the screen says so, so a seed the
+  // player typed never looks saved when it was not.
+  const changeSeeds = useCallback(
+    (work: () => Promise<boolean>): Promise<boolean> => {
       const change = seedGate.changeSeeds(async () => {
+        setState((s) => ({ ...s, seedChanging: true }));
+        try {
+          return await work();
+        } finally {
+          setState((s) => ({ ...s, seedChanging: false }));
+        }
+      });
+      if (change !== null) return change;
+      setState((s) => ({ ...s, notice: { tone: 'info', text: SEED_CHANGE_BUSY_TEXT } }));
+      return Promise.resolve(false);
+    },
+    [seedGate],
+  );
+
+  const saveClientSeed = useCallback(
+    async (clientSeed: string): Promise<SeedSave> => {
+      // Not sent (another change is on its way) or refused, unless found otherwise.
+      let outcome: SeedSave = 'not-saved';
+      await changeSeeds(async () => {
         try {
           const fairness = await send((key) => client.setClientSeed(clientSeed, key));
           shownFairness.current = fairness;
@@ -883,19 +930,27 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
             fairness,
             notice: { tone: 'info', text: 'Client seed saved.' },
           }));
+          outcome = 'saved';
           return true;
         } catch (error) {
+          // No answer came: the server may have saved it all the same.
+          if (error instanceof NetworkFailure) outcome = 'unsure';
           handleFailure(error, null);
           return false;
         }
       });
-      return change ?? false;
+      return outcome;
     },
-    [client, handleFailure, seedGate],
+    [changeSeeds, client, handleFailure],
+  );
+
+  const setClientSeed = useCallback(
+    async (clientSeed: string): Promise<boolean> => (await saveClientSeed(clientSeed)) === 'saved',
+    [saveClientSeed],
   );
 
   const rotateSeed = useCallback(() => {
-    void seedGate.changeSeeds(async () => {
+    void changeSeeds(async () => {
       try {
         const result = await send((key) => client.rotateSeed(key));
         shownFairness.current = result.fairness;
@@ -913,7 +968,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         return false;
       }
     });
-  }, [client, handleFailure, refreshHistory, seedGate]);
+  }, [changeSeeds, client, handleFailure, refreshHistory]);
 
   const dismissNotice = useCallback(() => {
     setState((s) => ({ ...s, notice: null }));
@@ -937,6 +992,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     cashOut,
     waitingCashOuts,
     setClientSeed,
+    saveClientSeed,
     rotateSeed,
     dismissNotice,
   };

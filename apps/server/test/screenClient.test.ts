@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest';
 // The game screen's own client, the very file the browser runs.
 import { ApiFailure, NetworkFailure } from '../../web/src/api/client';
 import { HttpClient } from '../../web/src/api/httpClient';
+import { seedsInRefusal } from '../../web/src/game/refusal';
+import { startRoundShown } from '../../web/src/game/session';
+import { shownFor, type HashStorage } from '../../web/src/verify/shownHashes';
 import { count, testWorld } from './helpers';
 
 // The screen and the server were built apart, against a shared description of
@@ -142,6 +145,40 @@ describe('the game screen’s client against the real server', () => {
     expect(record.serverSeed).toBe(rotated.revealed.serverSeed);
     const check = verifyRound(record);
     expect(check.problems).toEqual([]);
+  });
+
+  it('a start from a tab left out of date is refused (seeds_changed), and the next one checks out', async () => {
+    const world = testWorld();
+    const client = new HttpClient(browserFor(world.app).fetch);
+    const items = new Map<string, string>();
+    const storage: HashStorage = {
+      getItem: (k) => items.get(k) ?? null,
+      setItem: (k, v) => {
+        items.set(k, v);
+      },
+    };
+    await client.getSession();
+    const shown = await client.setClientSeed('made-in-the-browser', newKey());
+    const bets = { difficultyId: 'easy', betsCents: [1000] };
+
+    // Two tabs show these seeds. One plays a round to its end.
+    const first = await startRoundShown(client, bets, shown, storage);
+    expect(first.round.nonce).toBe(shown.nextNonce);
+    expect((await playOut(client, first.round, 0)).status).toBe('finished');
+
+    // The other tab's start names the nonce that round used: refused, nothing charged.
+    const balance = (await client.getSession()).wallet.balanceCents;
+    const refused = await startRoundShown(client, bets, shown, storage).catch((error: unknown) => error);
+    expect(refused instanceof ApiFailure && refused.code).toBe('seeds_changed');
+    const now = seedsInRefusal(refused);
+    expect(now).toEqual((await client.getSession()).fairness);
+    expect(count(world.db, 'rounds')).toBe(1);
+    expect((await client.getSession()).wallet.balanceCents).toBe(balance);
+
+    // With the seeds the refusal carried, the next start goes through.
+    const next = await startRoundShown(client, bets, now, storage);
+    expect(next.round.nonce).toBe(shown.nextNonce + 1);
+    expect(shownFor(next.round.id, storage)?.nonce).toBe(next.round.nonce);
   });
 
   it('makes one player when the session is asked for twice at the same moment', async () => {

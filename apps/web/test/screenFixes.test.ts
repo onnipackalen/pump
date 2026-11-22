@@ -312,6 +312,7 @@ describe('E3: starting over like the first load', () => {
       winShownFor: 'old-round',
       endedElsewhere: 'old-round',
       starting: false,
+      seedChanging: false,
       notice: null,
       session: { startedAt: 1, startBalanceCents: 900 },
     };
