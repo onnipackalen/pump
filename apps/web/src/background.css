@@ -40,7 +40,7 @@ body {
  * changes, the horizon moves with it.
  */
 .stage {
-  --floor: calc(var(--label-h) + var(--action-h) + 8px);
+  --floor: calc(var(--label-h) + var(--chance-h) + var(--action-h) + 8px);
 }
 
 /* The sky above the horizon: hills in front of the glow. */

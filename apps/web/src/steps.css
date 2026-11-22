@@ -265,7 +265,8 @@
       --step-hole: calc(max(var(--main-chars), 5) * var(--main-max) * 0.62 + 18px);
       position: absolute;
       right: 0;
-      bottom: var(--action-h);
+      /* Over the label's two lines, not the quiet line under them. */
+      bottom: calc(var(--action-h) + var(--chance-h));
       left: 0;
       display: flex;
       align-items: flex-start;

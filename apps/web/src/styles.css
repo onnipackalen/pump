@@ -49,6 +49,7 @@
   --gap: 10px; /* space between controls */
   --bar: 52px; /* top bar height */
   --label-h: 60px; /* the two lines of numbers under a balloon */
+  --chance-h: 13px; /* the quiet line under them: pop chance and Patch price */
   /* The Pump button row under those numbers. The floor in background.css is
      measured from this too, so the pumps always stand on the horizon line. */
   --action-h: calc(var(--tap) + 10px);
@@ -347,7 +348,7 @@ body {
     flex: none;
     height: calc(100vh - var(--bar) - var(--round-room) - var(--gap));
     height: calc(100svh - var(--bar) - var(--round-room) - var(--gap));
-    min-height: calc(var(--label-h) + var(--action-h) + 120px);
+    min-height: calc(var(--label-h) + var(--chance-h) + var(--action-h) + 120px);
   }
   .stage:has(.slot:only-child) {
     --action-h: 0px;
@@ -632,14 +633,17 @@ body {
 }
 
 .slot-label {
+  position: relative;
   flex: none;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: var(--label-h);
+  /* The two lines, then room of their own for the quiet line under them
+     (.slot-chance), so they sit where they always did. */
+  height: calc(var(--label-h) + var(--chance-h));
   margin: 0;
-  padding-bottom: 6px;
+  padding-bottom: calc(6px + var(--chance-h));
   font-variant-numeric: tabular-nums;
   text-align: center;
   white-space: nowrap;
@@ -665,6 +669,57 @@ body {
 
 .slot[data-status='popped'] .slot-main {
   color: var(--pop);
+}
+
+/*
+ * The quiet line under a balloon in play: its next pump's pop chance and,
+ * from the second pump on, the Patch price. Small and grey, in the room the
+ * label keeps under its two lines, so it never lies over a balloon or the
+ * sky. It shrinks to fit like the line above it; a narrower slot (three
+ * balloons on an upright phone, about 110 px; three on a phone on its side,
+ * about 67 px) says the same in fewer words. The text shrinks to as small as
+ * 7px rather than cut an amount short: a cut amount would show a wrong price.
+ */
+.slot-chance {
+  --chance-chars: var(--chance-full-chars);
+  position: absolute;
+  right: 0;
+  bottom: 6px;
+  left: 0;
+  height: var(--chance-h);
+  overflow: hidden;
+  color: var(--muted);
+  font-size: max(7px, min(var(--chance-h) - 2px, 165cqw / max(var(--chance-chars, 18), 1)));
+  line-height: var(--chance-h);
+}
+
+.chance-short,
+.chance-tiny {
+  display: none;
+}
+
+@container (max-width: 140px) {
+  .slot-chance {
+    --chance-chars: var(--chance-short-chars);
+  }
+  .chance-full {
+    display: none;
+  }
+  .chance-short {
+    display: inline;
+  }
+}
+
+@container (max-width: 104px) {
+  .slot-chance {
+    --chance-chars: var(--chance-tiny-chars);
+  }
+  .chance-short {
+    display: none;
+  }
+  .chance-tiny {
+    display: inline;
+  }
 }
 
 .slot[data-status='preview'] .slot-main,
@@ -1713,6 +1768,7 @@ th {
     --gap: 8px;
     --bar: 48px;
     --label-h: 52px;
+    --chance-h: 12px;
     --main-max: 24px;
     --sub-max: 13px;
     --round-room: 182px;
@@ -1726,6 +1782,7 @@ th {
     --gap: 6px;
     --bar: 44px;
     --label-h: 44px;
+    --chance-h: 11px;
     --main-max: 19px;
     --sub-max: 12px;
     --round-room: 160px;

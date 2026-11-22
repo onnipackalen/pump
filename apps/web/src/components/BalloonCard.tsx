@@ -9,7 +9,7 @@ import { balloonSetUp, firstPump, useFirstLift, type SetUpFrom } from '../game/s
 import { HoldButton } from './HoldButton';
 import { StepRow } from './StepRow';
 import type { WinTier } from '../game/winTier';
-import { formatCents, formatMultiplier } from '../money';
+import { formatCents, formatChance, formatMultiplier } from '../money';
 import { topRungForBet } from '../game/rules';
 
 interface BalloonCardProps {
@@ -170,19 +170,56 @@ export function subText(
   }
 }
 
+/** The quiet line under a balloon in play, in three lengths for three slot widths. */
+export interface ChanceWords {
+  readonly full: string;
+  readonly short: string;
+  readonly tiny: string;
+}
+
+/**
+ * The brief asks every balloon to show the chance its next pump pops it and
+ * the Patch price, so each balloon in play says both here, during auto-play
+ * too: "7.34% pop · Patch $0.09". Before its first pump there is no Patch,
+ * so just "3.96% pop". The numbers are the server's own (balloon.next),
+ * written the same way as in the control panel (RoundControls), so the two
+ * always agree. A narrower slot says the same in fewer words. None once the
+ * balloon is over.
+ */
+export function chanceWords(balloon: BalloonView): ChanceWords | null {
+  if (balloon.status !== 'active' || !balloon.next) return null;
+  const pop = formatChance(balloon.next.popChance);
+  const price = balloon.next.patchPriceCents;
+  if (price === null) {
+    const words = `${pop} pop`;
+    return { full: words, short: words, tiny: words };
+  }
+  const patch = formatCents(price);
+  return {
+    full: `${pop} pop · Patch ${patch}`,
+    short: `${pop} · Patch ${patch}`,
+    tiny: `${pop} · ${patch}`,
+  };
+}
+
 /**
  * The two lines under a balloon. They shrink to fit their slot, so a long
  * amount on a narrow phone never spills into the next balloon: the CSS
- * divides the slot's width by the number of characters.
+ * divides the slot's width by the number of characters. Under them, while
+ * the balloon is in play, a third, quiet line: its next pump's pop chance
+ * and Patch price (chanceWords). All three lengths are written; the CSS
+ * shows the one that fits the slot.
  */
 function SlotLabel({
   main,
   sub,
+  chance = null,
   won = false,
   live = false,
 }: {
   readonly main: string;
   readonly sub: string;
+  readonly chance?: ChanceWords | null;
   readonly won?: boolean;
   readonly live?: boolean;
 }) {
@@ -191,6 +228,22 @@ function SlotLabel({
     <p className="slot-label" style={style} aria-live={live ? 'polite' : undefined}>
       <span className="slot-main">{main}</span>
       <span className={won ? 'slot-sub win' : 'slot-sub'}>{sub}</span>
+      {chance !== null && (
+        <span
+          className="slot-chance"
+          style={
+            {
+              '--chance-full-chars': chance.full.length,
+              '--chance-short-chars': chance.short.length,
+              '--chance-tiny-chars': chance.tiny.length,
+            } as CSSProperties
+          }
+        >
+          <span className="chance-full">{chance.full}</span>
+          <span className="chance-short">{chance.short}</span>
+          <span className="chance-tiny">{chance.tiny}</span>
+        </span>
+      )}
     </p>
   );
 }
@@ -366,7 +419,13 @@ export function BalloonCard({
           }
         />
       </div>
-      <SlotLabel main={main} sub={sub} won={win !== undefined} live={!quiet} />
+      <SlotLabel
+        main={main}
+        sub={sub}
+        chance={chanceWords(balloon)}
+        won={win !== undefined}
+        live={!quiet}
+      />
       <SlotAction
         slot={slot}
         show={canPump}
