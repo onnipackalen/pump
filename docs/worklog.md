@@ -3258,3 +3258,25 @@ Not done: pumps and balloons themed to each scene. The user wasn't sure it
 was a good idea (it might clutter the screen), and it is in the README's
 "What I cut".
 
+## 2026-11-21: tests get a minute each, not 5 seconds
+
+A hand-in check ran the whole test suite at RTP 9400, 9700 and 9900 at the
+same time. One test failed in all three: "cashOutCents ... for every bet
+swept" in `packages/engine/test/math.test.ts`. Run on its own it passes.
+It had simply run out of time.
+
+- Vitest stops a test after 5 seconds unless told otherwise. Many tests here
+  check every legal bet, or every rung at three RTPs, and take 3 to 5
+  seconds. Some already had their own 60-second limit; the rest didn't.
+  A single plain `npm test` on this computer, while other chats were busy,
+  failed 3 of them the same way.
+- Fix: `testTimeout: 60_000` in `vitest.config.ts`, the same limit the slow
+  tests already used. A test that really hangs still fails, after a minute.
+
+Checks: all three suites at once again (the load that failed before):
+1,923, 1,924 and 1,923 tests pass. Lint and typecheck pass.
+
+What turned out wrong, and how it was caught:
+- GitHub's check never showed it, because it runs one suite on a quiet
+  machine. A reviewer on a slower laptop could have seen red tests. Caught
+  by running the three RTPs side by side for the hand-in list.
