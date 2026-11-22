@@ -18,7 +18,7 @@ import {
   pressGuard,
   watchShown,
 } from '../src/game/controls';
-import { balloon } from './fixtures';
+import { balloon, BASE } from './fixtures';
 
 /*
  * "Bet and pump must be on top of each other": the big Pump button takes the
@@ -316,9 +316,9 @@ describe('the guard is on the buttons that share the Bet and Pump spot', () => {
   const auto = (running: boolean): string =>
     renderToStaticMarkup(
       createElement(AutoPlayPanel, {
-        ladder: GAME_CONFIG.difficulties[0]?.ladder ?? [],
-        topRung: GAME_CONFIG.difficulties[0]?.ladder.length ?? 0,
-        difficultyLabel: 'Easy',
+        ladder: BASE.ladder,
+        topRung: BASE.ladder.length,
+        difficultyLabel: BASE.label,
         limits: GAME_CONFIG.limits,
         betSizing: true,
         round: null,
@@ -503,9 +503,9 @@ describe('auto-play: Stop where Start was', () => {
     const noop = (): void => undefined;
     const html = renderToStaticMarkup(
       createElement(AutoPlayPanel, {
-        ladder: GAME_CONFIG.difficulties[0]?.ladder ?? [],
-        topRung: GAME_CONFIG.difficulties[0]?.ladder.length ?? 0,
-        difficultyLabel: 'Easy',
+        ladder: BASE.ladder,
+        topRung: BASE.ladder.length,
+        difficultyLabel: BASE.label,
         limits: GAME_CONFIG.limits,
         betSizing: true,
         round: null,

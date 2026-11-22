@@ -14,14 +14,18 @@ import { BetPanel, shownTopRung } from '../src/components/BetPanel';
 import { pumpReach, targetMultiplier } from '../src/game/autoPlay';
 import { checkBets, type BetSetup } from '../src/game/betSetup';
 import { centsToInput, formatChance, formatMultiplier } from '../src/money';
+import { cappedDifficulty, climbsAll, configWith, difficultyWithRungs, MADE_CAPPED } from './fixtures';
 
 const RTPS = [9400, 9700, 9900] as const;
 const { limits } = GAME_CONFIG;
 
-/** A difficulty whose ladder the largest bet can't climb to the top. */
-const capped = GAME_CONFIG.difficulties.find(
-  (d) => topRungForBet(d.ladder, limits.maxBetCents, limits.maxPayoutCents) < d.ladder.length,
-);
+/**
+ * A difficulty whose ladder the largest bet can't climb to the top: a
+ * configured one, or one made in fixtures.ts if the config has none. The
+ * panel finds it in `cappedConfig`.
+ */
+const capped = cappedDifficulty();
+const cappedConfig = configWith(capped);
 
 function panel(config: GameConfig, setup: BetSetup) {
   return {
@@ -44,20 +48,19 @@ function infoLine(html: string): string {
 
 describe('(a) shownTopRung: the top for the bets entered', () => {
   it('is the ladder top with no bet entered yet', () => {
-    const ladder = capped?.ladder ?? [];
+    const { ladder } = capped;
     expect(shownTopRung(ladder, [], limits.maxPayoutCents)).toBe(ladder.length);
     expect(shownTopRung(ladder, [null], limits.maxPayoutCents)).toBe(ladder.length);
   });
 
   it('is the capped top for one bet the cap holds lower', () => {
-    expect(capped).toBeDefined();
-    const ladder = capped?.ladder ?? [];
+    const { ladder } = capped;
     const top = topRungForBet(ladder, limits.maxBetCents, limits.maxPayoutCents);
     expect(shownTopRung(ladder, [limits.maxBetCents], limits.maxPayoutCents)).toBe(top);
   });
 
   it('is the highest any entered bet can reach', () => {
-    const ladder = capped?.ladder ?? [];
+    const { ladder } = capped;
     expect(
       shownTopRung(ladder, [limits.maxBetCents, limits.minBetCents], limits.maxPayoutCents),
     ).toBe(ladder.length);
@@ -65,11 +68,10 @@ describe('(a) shownTopRung: the top for the bets entered', () => {
 });
 
 describe.each(RTPS)('(a) the info line at RTP %i', (rtpBp) => {
-  const config: GameConfig = { ...GAME_CONFIG, rtpBp };
+  const config: GameConfig = { ...cappedConfig, rtpBp };
 
   it('shows the capped top, and its pump count, for a capped bet', () => {
     const difficulty = capped;
-    if (!difficulty) throw new Error('no capped difficulty');
     const top = topRungForBet(difficulty.ladder, limits.maxBetCents, limits.maxPayoutCents);
     const html = renderToStaticMarkup(
       createElement(
@@ -88,10 +90,16 @@ describe.each(RTPS)('(a) the info line at RTP %i', (rtpBp) => {
 
   it('shows the full top for a bet the cap does not reach', () => {
     for (const difficulty of config.difficulties) {
-      const html = renderToStaticMarkup(
-        createElement(BetPanel, panel(config, { difficultyId: difficulty.id, bets: ['1.00'] })),
-      );
+      // $1, or the smallest bet on a ladder the cap holds even $1 back on.
+      // The game refuses to start unless the smallest bet reaches the top.
       const n = difficulty.ladder.length;
+      const betCents = climbsAll(difficulty.ladder, 100) ? 100 : limits.minBetCents;
+      const html = renderToStaticMarkup(
+        createElement(
+          BetPanel,
+          panel(config, { difficultyId: difficulty.id, bets: [centsToInput(betCents)] }),
+        ),
+      );
       expect(infoLine(html)).toContain(
         `${n} pumps · top ${formatMultiplier(multiplierAt(difficulty.ladder, n))}`,
       );
@@ -159,7 +167,8 @@ describe('(c) pumpReach: what the count reaches at the bets entered', () => {
   });
 
   it('past the top the max payout holds a bet to: says the top, never a higher multiplier', () => {
-    for (const d of GAME_CONFIG.difficulties) {
+    // The made capped ladder too, so a count past the top is always tried.
+    for (const d of configWith(MADE_CAPPED).difficulties) {
       const top = topRungForBet(d.ladder, limits.maxBetCents, limits.maxPayoutCents);
       for (let n = 1; n <= d.ladder.length; n += 1) {
         const reach = pumpReach(d.ladder, n, top, d.label);
@@ -214,7 +223,11 @@ describe('(c) the auto-play panel says what the pump count reaches', () => {
   };
 
   it('in the Target box, for the 3 pumps the form starts with', () => {
-    for (const difficulty of GAME_CONFIG.difficulties) {
+    // Every configured ladder with 3 rungs or more (a made one if none has).
+    const longEnough = configWith(difficultyWithRungs(3)).difficulties.filter(
+      (d) => d.ladder.length >= 3,
+    );
+    for (const difficulty of longEnough) {
       const html = renderToStaticMarkup(
         createElement(AutoPlayPanel, props(difficulty, difficulty.ladder.length)),
       );
@@ -226,8 +239,8 @@ describe('(c) the auto-play panel says what the pump count reaches', () => {
   });
 
   it('shows the top, in the warning colour, when the bets top out below the count', () => {
-    const difficulty = GAME_CONFIG.difficulties[0];
-    if (!difficulty) throw new Error('no difficulty');
+    // A ladder that has the 3 pumps the form starts with; the bets top out at 2.
+    const difficulty = difficultyWithRungs(3);
     const html = renderToStaticMarkup(createElement(AutoPlayPanel, props(difficulty, 2)));
     expect(targetX(html)).toBe(formatMultiplier(multiplierAt(difficulty.ladder, 2)));
     expect(html).toContain('data-top="true"');
@@ -238,13 +251,11 @@ describe('a capped bet keeps its whole amount in view', () => {
   // In the box, "Top 100.00×" squeezed the input on a narrow card until a
   // $1,000 bet read as "$ 100". The cap now sits on its own line under it.
   it('draws the cap under the bet box, not inside it, and ties it to the input', () => {
-    expect(capped).toBeDefined();
-    const difficulty = capped ?? GAME_CONFIG.difficulties[0];
-    if (!difficulty) return;
+    const difficulty = capped;
     const html = renderToStaticMarkup(
       createElement(
         BetPanel,
-        panel(GAME_CONFIG, {
+        panel(cappedConfig, {
           difficultyId: difficulty.id,
           bets: [centsToInput(limits.maxBetCents), '1.00'],
         }),

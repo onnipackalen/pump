@@ -8,17 +8,20 @@ import { multiplierAt } from '../src/game/rules';
 import { stepAnchor, stepTarget } from '../src/game/stepRow';
 import { stepTargetPumps, targetPumpsOf } from '../src/game/targetSteps';
 import { formatMultiplier } from '../src/money';
+import { difficultyWithRungs } from './fixtures';
 
 /** − and + beside auto-play's Target: one step along the ladder each. */
 describe('stepTargetPumps', () => {
   it('moves one pump up or down, on every difficulty, from 1 to the top', () => {
-    for (const { ladder } of GAME_CONFIG.difficulties) {
-      const top = ladder.length;
+    // Every configured ladder length, and the shortest ones a config may hold.
+    const tops = [...new Set([...GAME_CONFIG.difficulties.map((d) => d.ladder.length), 1, 2, 3])];
+    for (const top of tops) {
       expect(stepTargetPumps('1', -1, top, top)).toBeNull();
-      expect(stepTargetPumps('1', 1, top, top)).toBe('2');
-      expect(stepTargetPumps('3', -1, top, top)).toBe('2');
+      expect(stepTargetPumps('1', 1, top, top)).toBe(top >= 2 ? '2' : null);
+      // From 3, one fewer is 2; on a shorter ladder 3 comes back to the top.
+      expect(stepTargetPumps('3', -1, top, top)).toBe(String(Math.min(2, top)));
       expect(stepTargetPumps(String(top), 1, top, top)).toBeNull();
-      expect(stepTargetPumps(String(top), -1, top, top)).toBe(String(top - 1));
+      expect(stepTargetPumps(String(top), -1, top, top)).toBe(top >= 2 ? String(top - 1) : null);
     }
   });
 
@@ -40,8 +43,8 @@ describe('stepTargetPumps', () => {
 
 describe('the Target row', () => {
   it('has − and + beside the box, − greyed out only at 1 pump', () => {
-    const difficulty = GAME_CONFIG.difficulties[0];
-    if (!difficulty) throw new Error('no difficulty');
+    // A ladder with room above the 3 pumps the form starts with.
+    const difficulty = difficultyWithRungs(4);
     const html = renderToStaticMarkup(
       createElement(AutoPlayPanel, {
         ladder: difficulty.ladder,
@@ -77,7 +80,9 @@ describe('the Target row', () => {
 });
 
 describe('the target on the stage', () => {
-  const ladder = GAME_CONFIG.difficulties[0]?.ladder ?? [];
+  // Long enough for every target below.
+  const difficulty = difficultyWithRungs(10);
+  const { ladder } = difficulty;
   const preview = (target: number | null, topRung = ladder.length) =>
     ({ ladder, rung: 0, topRung, status: 'preview', target }) as const;
 
@@ -110,7 +115,7 @@ describe('the target on the stage', () => {
     const html = renderToStaticMarkup(
       createElement(PreviewCard, {
         slot: 1,
-        difficultyId: GAME_CONFIG.difficulties[0]?.id ?? 'easy',
+        difficultyId: difficulty.id,
         betCents: 100,
         ladder,
         maxPayoutCents: GAME_CONFIG.limits.maxPayoutCents,

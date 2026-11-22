@@ -21,7 +21,7 @@ import {
 import { runAutoPlay, type AutoPlayHooks, type AutoPlayStatus } from '../src/game/useAutoPlay';
 import type { GameActions } from '../src/game/useGame';
 import { formatCents } from '../src/money';
-import { balloon, round } from './fixtures';
+import { balloon, BASE, configWith, difficultyWithRungs, round } from './fixtures';
 import { demoActions, scriptedGame, type SentRequest } from './scriptedGame';
 
 const RTPS = [9400, 9700, 9900] as const;
@@ -397,7 +397,10 @@ function seeded(seed: number): () => number {
 }
 
 describe.each(RTPS)('hand cash-outs against the demo game at RTP %i', (rtpBp) => {
-  const config: GameConfig = { ...GAME_CONFIG, rtpBp };
+  // A ladder with rungs to spare above the 6-pump target, so a press on
+  // Cash out below it is a real choice (Easy, as shipped).
+  const difficulty = difficultyWithRungs(7);
+  const config: GameConfig = configWith(difficulty, { ...GAME_CONFIG, rtpBp });
 
   it('never double-sends, never fails, and the net matches the wallet', async () => {
     // Cash-outs below the 6-pump target: the player's own.
@@ -427,7 +430,7 @@ describe.each(RTPS)('hand cash-outs against the demo game at RTP %i', (rtpBp) =>
       const end = await runAutoPlay(
         {
           settings: settings({ rounds: 20, targetPumps: 6, onLoss: { kind: 'increase', percent: 20 } }),
-          difficultyId: 'easy',
+          difficultyId: difficulty.id,
           betsCents: [100, 50, 250].slice(0, 1 + (run % 3)),
           balanceCents: balance,
           limits,
@@ -450,9 +453,9 @@ describe.each(RTPS)('hand cash-outs against the demo game at RTP %i', (rtpBp) =>
 
 describe('the auto-play panel while it runs: Cash out', () => {
   const base = {
-    ladder: GAME_CONFIG.difficulties[0]?.ladder ?? [],
-    topRung: GAME_CONFIG.difficulties[0]?.ladder.length ?? 0,
-    difficultyLabel: 'Easy',
+    ladder: BASE.ladder,
+    topRung: BASE.ladder.length,
+    difficultyLabel: BASE.label,
     roundBetCents: 300,
     betsValid: true,
     limits,
