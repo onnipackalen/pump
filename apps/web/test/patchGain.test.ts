@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { RoundView } from '../src/api/contract';
 import { DemoClient } from '../src/demo/DemoClient';
 import { nextPumpGainCents } from '../src/game/patchGain';
-import { balloon } from './fixtures';
+import { balloon, configWith, MADE_LONG } from './fixtures';
 
 let keys = 0;
 const key = (): string => `patch-gain-${String((keys += 1))}`;
@@ -37,11 +37,14 @@ describe('what the next pump adds, shown on Patch + Pump', () => {
   });
 
   it('matches what a pump that holds really adds in a played round', async () => {
-    const client = new DemoClient(GAME_CONFIG, 0);
+    const client = new DemoClient(configWith(MADE_LONG), 0);
     await client.setClientSeed('patch-gain-test', key());
     let checked = 0;
-    for (let n = 0; n < 40 && checked < 30; n += 1) {
-      const difficulty = GAME_CONFIG.difficulties[n % GAME_CONFIG.difficulties.length];
+    // 40 rounds on the configured difficulties in turn. If their ladders are
+    // too short to give enough held pumps, the long made ladder adds more.
+    for (let n = 0; n < 80 && checked < 30; n += 1) {
+      const difficulty =
+        n < 40 ? GAME_CONFIG.difficulties[n % GAME_CONFIG.difficulties.length] : MADE_LONG;
       if (!difficulty) continue;
       let { round }: { round: RoundView } = await client.startRound(
         { difficultyId: difficulty.id, betsCents: [137] },

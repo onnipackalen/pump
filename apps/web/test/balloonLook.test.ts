@@ -60,11 +60,26 @@ describe('balloonSize', () => {
     }
   });
 
+  /** How far the first pump takes the balloon to full size, from 0 to 1. */
+  const firstJump = (top: number): number =>
+    (balloonSize(1, top) - balloonSize(0, top)) / (1 - balloonSize(0, top));
+  /**
+   * The longest top whose first pump still goes a fifth of the way. Easy, the
+   * longest ladder shipped, has 32. Above this each pump has less room, so
+   * the first gets a little less (17.9% at 45). Other tests still hold it to
+   * the biggest step and at least a tenth bigger.
+   */
+  const FIFTH_UP_TO = 34;
+
+  it('goes a fifth of the way on the first pump up to a top of 34, and a little less above', () => {
+    expect(firstJump(FIFTH_UP_TO)).toBeGreaterThanOrEqual(0.2);
+    expect(firstJump(FIFTH_UP_TO + 1)).toBeLessThan(0.2);
+  });
+
   it.each(tops)('takes the balloon a fifth of the way to full size on its first pump (top %i)', (top) => {
     // The first pump lifts the flat balloon off the floor and blows it up:
     // a clear jump, then the rest of the ladder shares what is left.
-    const jump = (balloonSize(1, top) - balloonSize(0, top)) / (1 - balloonSize(0, top));
-    expect(jump).toBeGreaterThanOrEqual(0.2);
+    if (top <= FIFTH_UP_TO) expect(firstJump(top)).toBeGreaterThanOrEqual(0.2);
     // Full size only at the top rung: the biggest balloon is unchanged,
     // so three side by side at their biggest still do not touch.
     expect(balloonSize(top, top)).toBe(1);

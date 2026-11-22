@@ -6,7 +6,7 @@ import { balloonBeat, cardScale, subText } from '../src/components/BalloonCard';
 import { shownRound, shownWallet } from '../src/game/useGame';
 import { HOLD_GAP_MS, holdStep, type HoldTarget } from '../src/game/useHoldPump';
 import { balloonTension, PRESS_MS, pressMs, tensionFloor, type Tension } from '../src/game/risk';
-import { balloon, round } from './fixtures';
+import { balloon, difficultyWithRungs, MADE_LONG, round } from './fixtures';
 
 const css = readFileSync(new URL('../src/balloon/balloon.css', import.meta.url), 'utf8');
 
@@ -53,7 +53,9 @@ describe('press length and strain: one number, from the balloon\'s own range', (
   it('runs from the first pump\'s own floor up to most tense on the top pump, on every difficulty (Easy too)', () => {
     for (const rtpBp of RTPS) {
       for (const { ladder } of GAME_CONFIG.difficulties) {
-        for (const topRung of [ladder.length, Math.ceil(ladder.length / 2)]) {
+        // The whole ladder, half of it, and a top of 1 (a one-rung ladder, or
+        // a bet the payout cap holds to its first rung).
+        for (const topRung of new Set([ladder.length, Math.ceil(ladder.length / 2), 1])) {
           const r = round([], { rtpBp, ladder });
           const first = atRung(ladder, rtpBp, 0, topRung);
           const top = atRung(ladder, rtpBp, topRung - 1, topRung);
@@ -62,6 +64,8 @@ describe('press length and strain: one number, from the balloon\'s own range', (
           const floor = tensionFloor(popChance(rtpBp, ladder, 1));
           expect(balloonTension(r, first)).toBe(floor);
           expect(pressMs(r, first)).toBe(PRESS_MS[floor]);
+          // With a top of 1 the first pump is the top pump too: its floor rules.
+          if (topRung === 1) continue;
           expect(balloonTension(r, top)).toBe(3);
           expect(pressMs(r, top)).toBe(PRESS_MS[3]);
         }
@@ -210,9 +214,10 @@ function drawn(b: BalloonView | undefined, r: RoundView) {
 
 describe('a balloon in its press, when another balloon\'s answer arrives first', () => {
   // Two balloons on one ladder: the first far enough up that its next pump
-  // has a longer press than a first pump. Found from config, at each RTP.
+  // has a longer press than a first pump. Found from config (or the long
+  // made ladder), at each RTP.
   function mixedRound(rtpBp: number): { before: RoundView; longPress: number } {
-    for (const { id, ladder } of GAME_CONFIG.difficulties) {
+    for (const { id, ladder } of [...GAME_CONFIG.difficulties, MADE_LONG]) {
       const on = { rtpBp, ladder };
       for (let rung = 1; rung < ladder.length - 1; rung += 1) {
         const up = atRung(ladder, rtpBp, rung);
@@ -357,10 +362,14 @@ describe('a held pump', () => {
     return sentAt;
   }
 
-  /** A balloon on a configured ladder whose next pump is at this tension, at the configured RTP. */
+  /**
+   * A balloon whose next pump is at this tension, at the configured RTP: on
+   * a configured ladder, or on the long made one if no configured ladder
+   * has a pump at that tension.
+   */
   function atTension(tension: Tension): { b: BalloonView; on: Pick<RoundView, 'rtpBp' | 'ladder'> } {
     const rtpBp = GAME_CONFIG.rtpBp;
-    for (const { ladder } of GAME_CONFIG.difficulties) {
+    for (const { ladder } of [...GAME_CONFIG.difficulties, MADE_LONG]) {
       const on = { rtpBp, ladder };
       for (let rung = 0; rung < ladder.length; rung += 1) {
         const b = atRung(ladder, rtpBp, rung);
@@ -380,7 +389,8 @@ describe('a held pump', () => {
   });
 
   it('on Pump all, waits for the longest press, so mixed balloons stay in step', () => {
-    const ladder = GAME_CONFIG.difficulties[0]?.ladder ?? [];
+    // A ladder with a top pump that is not also its first pump.
+    const { ladder } = difficultyWithRungs(2);
     const rtpBp = GAME_CONFIG.rtpBp;
     const sentAt = playHold(
       [

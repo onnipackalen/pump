@@ -1,4 +1,4 @@
-import { DIFFICULTIES, GAME_CONFIG, surviveChance } from '@pump/engine';
+import { GAME_CONFIG, surviveChance } from '@pump/engine';
 import { drawRoll, verifyRound } from '@pump/engine/fair';
 import { describe, expect, it } from 'vitest';
 import type {
@@ -7,16 +7,22 @@ import type {
   VerifiableRound,
 } from '../src/api/contract';
 import { DemoClient } from '../src/demo/DemoClient';
+import { BASE, configWith } from './fixtures';
 
 const key = (): string => crypto.randomUUID();
 
 const RTPS = [...new Set([9400, 9700, 9900, GAME_CONFIG.rtpBp])];
 
+// Every configured difficulty, and the long made ladder too if no configured
+// one has 10 rungs or more, so Patch saves and reveals below the top turn
+// up whatever the config holds. As shipped this is just the config.
+const PLAYED = configWith(BASE).difficulties;
+
 /** Plays rounds in the demo every which way: Patches, pops, cash-outs, every difficulty. */
 async function playRounds(client: DemoClient, count: number): Promise<string[]> {
   const ids: string[] = [];
   for (let n = 0; n < count; n += 1) {
-    const difficultyId = DIFFICULTIES[n % DIFFICULTIES.length]?.id ?? 'easy';
+    const difficultyId = PLAYED[n % PLAYED.length]?.id ?? BASE.id;
     let { round } = await client.startRound({ difficultyId, betsCents: [100, 250, 1000] }, key());
     ids.push(round.id);
     for (let step = 0; step < 80 && round.status === 'active'; step += 1) {
@@ -45,7 +51,7 @@ async function demoWithRounds(
   count: number,
   rtpBp = GAME_CONFIG.rtpBp,
 ): Promise<{ client: DemoClient; ids: string[] }> {
-  const client = new DemoClient({ ...GAME_CONFIG, rtpBp }, 0);
+  const client = new DemoClient(configWith(BASE, { ...GAME_CONFIG, rtpBp }), 0);
   await client.setClientSeed('verify-test', key());
   const ids = await playRounds(client, count);
   return { client, ids };
