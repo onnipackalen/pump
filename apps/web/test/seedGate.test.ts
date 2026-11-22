@@ -157,5 +157,7 @@ describe('a round start and a seed change are never on their way at once', () =>
     // Save and Rotate also wait while a seed change is on its way.
     expect(app).toMatch(/changing=\{state\.seedChanging\}/);
     expect(app).toMatch(/canRotate=\{!roundActive && !autoRunning && !state\.starting && /);
+    // The verify page's Rotate waits too.
+    expect(app).toMatch(/seedChanging=\{state\.seedChanging\}/);
   });
 });

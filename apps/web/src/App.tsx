@@ -520,6 +520,7 @@ export function App() {
           rounds={state.history}
           initialRoundId={verifyRoundId}
           canRotate={!roundActive && !autoRunning && !state.starting && state.phase === 'ready'}
+          seedChanging={state.seedChanging}
           onRotate={game.rotateSeed}
           onBack={closeVerify}
         />
