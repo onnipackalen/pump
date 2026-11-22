@@ -6,7 +6,8 @@
  * - verifyRound finds nothing wrong with the inputs on the page;
  * - the server's record is the round asked for, and names the same hash,
  *   client seed and nonce as this browser saved when that round started
- *   (copyCheck);
+ *   (copyCheck); with no copy under its id, it names the same client seed
+ *   as any copy saved with its hash and nonce under another id;
  * - the record agrees with what this device's screen showed (a reveal line,
  *   a top rung; shownReveals);
  * - the inputs on the page are the round's own: this browser's copy where it

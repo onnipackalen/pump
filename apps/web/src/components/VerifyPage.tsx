@@ -31,7 +31,13 @@ import {
   recordProblems,
 } from '../verify/copyCheck';
 import { hashFieldLabel, hashSource, hashVerdict } from '../verify/hashCheck';
-import { shownFor, type HashStorage, type ShownSeeds } from '../verify/shownHashes';
+import {
+  copiesWithSameNonce,
+  shownFor,
+  type HashStorage,
+  type ShownEntry,
+  type ShownSeeds,
+} from '../verify/shownHashes';
 import { screenAgrees, shownReveals, topAgrees } from '../verify/shownReveals';
 import { roundVerdict } from '../verify/verdict';
 
@@ -71,7 +77,8 @@ function describeFailure(error: unknown): string {
  * the server's record of them, so the check can catch a server that lies
  * about any of them. The copy is found by the round id the player asked
  * for, never by the id the server put in its answer. Without a copy, the
- * page says so.
+ * page says so, and also looks for a copy saved with the record's hash and
+ * nonce under another id (see copyCheck).
  */
 export function VerifyPage({
   client,
@@ -183,6 +190,11 @@ export interface RoundToCheck {
   readonly record: VerifiableRound;
   /** What this browser saved before round `roundId`, or null if it has no copy. */
   readonly shown: ShownSeeds | null;
+  /**
+   * With no full copy for `roundId`: the copies saved under other ids with
+   * the record's hash and nonce. Empty otherwise.
+   */
+  readonly elsewhere: readonly ShownEntry[];
 }
 
 /**
@@ -190,13 +202,22 @@ export interface RoundToCheck {
  * for. The copy is looked up by `roundId`, never by `record.id`: otherwise a
  * server could send the record under another id (no copy is found, so
  * nothing is compared), or another round's record (whose copy agrees).
+ *
+ * With no copy of the client seed and nonce under `roundId`, it also finds
+ * any copy saved with the record's hash and nonce under another id: the copy
+ * of this same round if the server gave it another id while it was played.
  */
 export function roundToCheck(
   roundId: string,
   record: VerifiableRound,
   storage?: HashStorage | null,
 ): RoundToCheck {
-  return { roundId, record, shown: shownFor(roundId, storage) };
+  const shown = shownFor(roundId, storage);
+  const full = shown !== null && shown.clientSeed !== null && shown.nonce !== null;
+  const elsewhere = full
+    ? []
+    : copiesWithSameNonce(record.serverSeedHash, record.nonce, roundId, storage);
+  return { roundId, record, shown, elsewhere };
 }
 
 /**
@@ -229,7 +250,14 @@ function RoundLoader({ client, roundId }: { readonly client: GameClient; readonl
       </p>
     );
   }
-  return <Workbench roundId={loaded.roundId} record={loaded.record} shown={loaded.shown} />;
+  return (
+    <Workbench
+      roundId={loaded.roundId}
+      record={loaded.record}
+      shown={loaded.shown}
+      elsewhere={loaded.elsewhere}
+    />
+  );
 }
 
 /** The inputs as the player can edit them: all text. */
@@ -351,7 +379,7 @@ export function sameInputs(own: BuiltRound, built: BuiltRound): boolean {
 }
 
 /** The round's inputs, editable, and the check worked out from them. */
-export function Workbench({ roundId, record, shown }: RoundToCheck) {
+export function Workbench({ roundId, record, shown, elsewhere }: RoundToCheck) {
   const [form, setForm] = useState<RoundForm>(() => formFrom(record, shown));
   const edited = JSON.stringify(form) !== JSON.stringify(formFrom(record, shown));
   const built = useMemo(() => roundFrom(form, record), [form, record]);
@@ -441,6 +469,7 @@ export function Workbench({ roundId, record, shown }: RoundToCheck) {
             roundId={roundId}
             record={record}
             shown={shown}
+            elsewhere={elsewhere}
             inputsChanged={!sameInputs(own, built)}
           />
         )
@@ -455,6 +484,7 @@ function Results({
   roundId,
   record,
   shown,
+  elsewhere,
   inputsChanged,
 }: {
   readonly result: RoundCheck;
@@ -466,6 +496,8 @@ function Results({
   readonly record: VerifiableRound;
   /** What this browser saved before the round, or null if it has no copy. */
   readonly shown: ShownSeeds | null;
+  /** Copies saved under other ids with the record's hash and nonce (see roundToCheck). */
+  readonly elsewhere: readonly ShownEntry[];
   /** Some input on the page is not the round's own. */
   readonly inputsChanged: boolean;
 }) {
@@ -489,11 +521,12 @@ function Results({
     ];
   });
   // The server's record being another round's, or naming another hash,
-  // client seed or nonce than this browser saved, is a problem with the
+  // client seed or nonce than this browser saved (under this round's id, or
+  // with the same hash and nonce under another), is a problem with the
   // record itself, whatever the inputs say: the round never checks out then.
   const verdict = roundVerdict({
     result,
-    recordProblems: recordProblems(roundId, shown, record),
+    recordProblems: recordProblems(roundId, shown, record, elsewhere),
     screenProblems,
     inputsChanged,
     anyReveal,

@@ -18,10 +18,19 @@
  * problem too. Otherwise a server could send this round's record under
  * another id (no copy is found, so nothing is compared), or another round's
  * record whose copy agrees.
+ *
+ * A server could also give the round another id in its answers while it is
+ * played, so the copy is saved under that id and none is found under the
+ * round's real one. So when there is no copy under the round's id, the page
+ * also looks for a copy saved with the record's hash and nonce under another
+ * id (one server seed and nonce belong to one round only), and says so if
+ * it names another client seed. A server that also moved the round to a
+ * nonce this browser has no copy for is not caught this way; the no-copy
+ * note says that a missing copy can be a warning sign.
  */
 
 import { recordHashProblem } from './hashCheck';
-import { MAX_SHOWN, type ShownSeeds } from './shownHashes';
+import { MAX_SHOWN, type ShownEntry, type ShownSeeds } from './shownHashes';
 
 /** The values the server's record names for a round. */
 export interface RecordSeeds {
@@ -91,17 +100,41 @@ export function recordIdProblem(askedId: string, recordId: string): string | nul
 }
 
 /**
+ * A problem with the server's record itself: this browser has no copy under
+ * this round's id, but it saved this record's hash and nonce before it
+ * started another round (`copy`), with another client seed. Null when the
+ * client seeds agree.
+ */
+export function sameNonceProblem(copy: ShownEntry, record: RecordSeeds): string | null {
+  const [otherId, , clientSeed, nonce] = copy;
+  if (clientSeed === record.clientSeed) return null;
+  return (
+    `The server’s record says this round used the client seed “${record.clientSeed}” with ` +
+    `nonce ${String(nonce)}. This browser has no copy saved under this round’s id. But when it ` +
+    `started round ${otherId}, it saved the same server seed hash and nonce ${String(nonce)}, ` +
+    `with the client seed “${clientSeed}”. One server seed and nonce belong to one round only. ` +
+    `So this may be round ${otherId}, played on a client seed the server picked, under another ` +
+    `id. (Playing a round in another tab or on another device just before round ${otherId} ` +
+    'started, after changing the client seed there, would also cause this. Then that round ' +
+    'shows another nonce when you check it.)'
+  );
+}
+
+/**
  * Every place the server's answer differs from what it should be: a record
  * under another round id, or another hash, client seed or nonce than this
  * browser saved when the round started (`shown`, the copy for `askedId`).
- * Empty when they all agree, or when the ids agree and this browser has no
- * copy. Any of these means the round does not check out, whatever the draws
- * say.
+ * With no full copy for `askedId`, `elsewhere` holds the copies saved under
+ * other ids with the record's hash and nonce (see copiesWithSameNonce), and
+ * any of those naming another client seed is a problem too. Empty when they
+ * all agree, or when the ids agree and this browser has no copy at all. Any
+ * of these means the round does not check out, whatever the draws say.
  */
 export function recordProblems(
   askedId: string,
   shown: ShownSeeds | null,
   record: RecordSeeds,
+  elsewhere: readonly ShownEntry[] = [],
 ): string[] {
   const problems = [recordIdProblem(askedId, record.id)];
   if (shown !== null) {
@@ -111,6 +144,7 @@ export function recordProblems(
       recordNonceProblem(shown.nonce, record.nonce),
     );
   }
+  for (const copy of elsewhere) problems.push(sameNonceProblem(copy, record));
   return problems.filter((problem): problem is string => problem !== null);
 }
 
@@ -126,8 +160,10 @@ export function noRecordNote(shown: ShownSeeds | null): string | null {
       'round. That happens if the round was played on another device or in another browser, if ' +
       'this browser’s saved data was cleared or could not be saved, if the connection was lost ' +
       `as the round started, or if it is older than the last ${String(MAX_SHOWN)} rounds this ` +
-      'browser keeps. So all three checked here are the server’s own record, and this check ' +
-      'can’t catch a server that changed them.'
+      'browser keeps. It also happens if the server gave the round another id in its answers ' +
+      'while you played it. So all three checked here are the server’s own record, and this ' +
+      'check can’t catch a server that changed them. If you played this round in this browser ' +
+      'not long ago, and none of the other causes fits, take this note as a warning sign.'
     );
   }
   if (shown.clientSeed === null || shown.nonce === null) {

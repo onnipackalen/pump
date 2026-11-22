@@ -22,9 +22,11 @@ import {
   recordIdProblem,
   recordNonceProblem,
   recordProblems,
+  sameNonceProblem,
 } from '../src/verify/copyCheck';
 import { hashFieldLabel, hashSource, hashVerdict, recordHashProblem } from '../src/verify/hashCheck';
 import {
+  copiesWithSameNonce,
   rememberShown,
   shownFor,
   type HashStorage,
@@ -131,7 +133,7 @@ function verdictFor(r: VerifiableRound, shown: ShownSeeds | null, form: RoundFor
 
 /** The page as it first shows a round, asked for by its own id unless another is given. */
 const page = (r: VerifiableRound, shown: ShownSeeds | null, roundId = r.id): string =>
-  renderToStaticMarkup(<Workbench roundId={roundId} record={r} shown={shown} />);
+  renderToStaticMarkup(<Workbench roundId={roundId} record={r} shown={shown} elsewhere={[]} />);
 
 describe('the verify page fills the round in from this browser’s copy', () => {
   it('takes the hash, client seed and nonce from the copy, not the server’s record', () => {
@@ -240,6 +242,14 @@ describe('without a copy, the page says the values are the server’s own record
     expect(note).toMatch(/older than the last 500 rounds this browser keeps/);
     // A copy is this browser's; "record" is only ever the server's.
     expect(note).not.toMatch(/no record of/);
+  });
+
+  it('names a server that gave the round another id as a cause, and says when the note is a warning sign', () => {
+    const note = noRecordNote(null) ?? '';
+    expect(note).toMatch(/server gave the round another id in its answers while you played it/);
+    expect(note).toMatch(
+      /If you played this round in this browser not long ago, and none of the other causes fits, take this note as a warning sign/,
+    );
   });
 
   it('names the client seed and nonce for an older copy that has only the hash', () => {
@@ -467,5 +477,147 @@ describe('a round whose start answer was lost is still checked against what was 
     expect(html).not.toContain(SUCCESS);
     expect(html).toContain('value="player-seed"');
     expect(html).toContain('“server-picked”');
+  });
+});
+
+/**
+ * A server that plays the round on a client seed it picked, and answers the
+ * start under another id (`idFor`), saying the round uses the player's seed.
+ * Its history and its record name the round's real id.
+ */
+class AnswersUnderAnotherId extends DemoClient {
+  constructor(private readonly idFor: (realId: string) => string) {
+    super(GAME_CONFIG, 0);
+  }
+
+  override async startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
+    await super.setClientSeed('server-picked', key());
+    const answer = await super.startRound(request, k);
+    return { ...answer, round: { ...answer.round, id: this.idFor(answer.round.id), clientSeed: 'player-seed' } };
+  }
+}
+
+/** Plays one round through the game's own start (startRoundShown) on `client`, then reveals the seed. */
+async function playThroughStart(
+  client: DemoClient,
+  storage: HashStorage,
+): Promise<{ startId: string; record: VerifiableRound }> {
+  await client.setClientSeed('player-seed', key());
+  const { fairness } = await client.getSession();
+  const { round: started } = await startRoundShown(client, BETS, fairness, storage);
+  const { activeRound } = await client.getSession();
+  if (!activeRound) throw new Error('the start was applied');
+  const id = await finishRound(client, activeRound);
+  await client.rotateSeed(key());
+  const [listed] = await client.getHistory(10);
+  if (listed?.id !== id) throw new Error('the history lists the round by its real id');
+  return { startId: started.id, record: await client.getVerifiableRound(id) };
+}
+
+describe('a server that answers the start under another id', () => {
+  it('does not check out: the copy saved under the other id is found by its hash and nonce', async () => {
+    const storage = memoryStorage();
+    const { startId, record: r } = await playThroughStart(
+      new AnswersUnderAnotherId((id) => `alias-${id}`),
+      storage,
+    );
+    // The record adds up on its own, and this browser has no copy under its id.
+    expect(r.clientSeed).toBe('server-picked');
+    expect(verifyRound(r).ok).toBe(true);
+    expect(shownFor(r.id, storage)).toBeNull();
+    expect(copiesWithSameNonce(r.serverSeedHash, r.nonce, r.id, storage)).toEqual([
+      [startId, r.serverSeedHash, 'player-seed', r.nonce],
+    ]);
+
+    const html = renderToStaticMarkup(<Workbench {...roundToCheck(r.id, r, storage)} />);
+    expect(html).not.toContain(SUCCESS);
+    expect(html).toContain('data-verdict="mismatch"');
+    expect(html).toContain('“server-picked”');
+    expect(html).toContain('“player-seed”');
+    expect(html).toContain(`when it started round ${startId}`);
+    // The fields are still the record's, and say so; the no-copy note warns.
+    expect(html).toContain('Client seed (the server’s record)');
+    expect(html).toContain('take this note as a warning sign');
+  });
+
+  it('does not check out when the server answers every start under one id, so the copies share it', async () => {
+    const storage = memoryStorage();
+    const client = new AnswersUnderAnotherId(() => 'same-alias');
+    const { record: first } = await playThroughStart(client, storage);
+    // The next start on the new seed, answered under the same id.
+    const { record: second } = await playThroughStart(client, storage);
+    for (const r of [first, second]) {
+      expect(verifyRound(r).ok).toBe(true);
+      const html = renderToStaticMarkup(<Workbench {...roundToCheck(r.id, r, storage)} />);
+      expect(html).not.toContain(SUCCESS);
+      expect(html).toContain('when it started round same-alias');
+    }
+  });
+
+  it('does not check out when the start answer’s id is too long to keep', async () => {
+    const storage = memoryStorage();
+    const { startId, record: r } = await playThroughStart(
+      new AnswersUnderAnotherId((id) => `${id}${'z'.repeat(130)}`),
+      storage,
+    );
+    expect(startId.length).toBeGreaterThan(128);
+    expect(shownFor(startId, storage)).toBeNull();
+    const [copy] = copiesWithSameNonce(r.serverSeedHash, r.nonce, r.id, storage);
+    expect(copy?.[0]).toBe(`?${startId}`.slice(0, 128));
+    expect(copy?.[2]).toBe('player-seed');
+
+    const html = renderToStaticMarkup(<Workbench {...roundToCheck(r.id, r, storage)} />);
+    expect(html).not.toContain(SUCCESS);
+    expect(html).toContain('data-verdict="mismatch"');
+    expect(html).toContain('“player-seed”');
+  });
+
+  it('an honest round with no copy under its id, but a copy with its hash, nonce and client seed, still checks out', async () => {
+    const [r] = await playedRecords('player-seed', 1);
+    if (!r) throw new Error('a round expected');
+    const storage = memoryStorage();
+    rememberShown('another-round', copyOf(r), storage);
+    const toCheck = roundToCheck(r.id, r, storage);
+    expect(toCheck.elsewhere).toHaveLength(1);
+    expect(recordProblems(r.id, toCheck.shown, r, toCheck.elsewhere)).toEqual([]);
+    const html = renderToStaticMarkup(<Workbench {...toCheck} />);
+    expect(html).toContain(SUCCESS);
+    expect(html).toContain('no copy of the hash, client seed and nonce');
+  });
+
+  it('with a full copy under the round’s id, copies under other ids are not looked at', async () => {
+    // Two tabs showed nonce 0; the other one started its round first, so
+    // this tab's copy (another-round) says nonce 0 for a round that used 1.
+    const [r] = await playedRecords('player-seed', 1);
+    if (!r) throw new Error('a round expected');
+    const storage = memoryStorage();
+    rememberShown('another-round', copyOf(r, { clientSeed: 'old-seed' }), storage);
+    rememberShown(r.id, copyOf(r), storage);
+    const toCheck = roundToCheck(r.id, r, storage);
+    expect(toCheck.elsewhere).toEqual([]);
+    expect(renderToStaticMarkup(<Workbench {...toCheck} />)).toContain(SUCCESS);
+  });
+
+  it('an older copy with only the hash still gets the copies with the same hash and nonce looked at', async () => {
+    const [r] = await playedRecords('server-picked', 1);
+    if (!r) throw new Error('a round expected');
+    const storage = memoryStorage();
+    storage.setItem('pump.shownSeedHashes', JSON.stringify([[r.id, r.serverSeedHash]]));
+    rememberShown('alias-round', copyOf(r, { clientSeed: 'player-seed' }), storage);
+    const html = renderToStaticMarkup(<Workbench {...roundToCheck(r.id, r, storage)} />);
+    expect(html).not.toContain(SUCCESS);
+    expect(html).toContain('when it started round alias-round');
+  });
+
+  it('the problem line names both client seeds, the other round, and the innocent cause', () => {
+    const r = record(SHOWN);
+    const line = sameNonceProblem(['alias-1', SHOWN, 'player-seed', 7], r);
+    expect(line).toContain('“record-seed” with nonce 7');
+    expect(line).toContain('“player-seed”');
+    expect(line).toContain('when it started round alias-1');
+    expect(line).toMatch(/One server seed and nonce belong to one round only/);
+    expect(line).toMatch(/another tab or on another device just before round alias-1 started/);
+    expect(sameNonceProblem(['alias-1', SHOWN, 'record-seed', 7], r)).toBeNull();
+    expect(recordProblems('round-1', null, r, [['alias-1', SHOWN, 'player-seed', 7]])).toHaveLength(1);
   });
 });
