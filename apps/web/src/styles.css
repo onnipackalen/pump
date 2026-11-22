@@ -1753,10 +1753,19 @@ th {
   text-align: right;
 }
 
-/* In the narrow settings sheet the table keeps to money: no balloon count. */
+/* In the narrow settings sheet the table keeps to money and the Verify
+   button: no difficulty, no balloon count, and tighter cells, so the last
+   column fits on every screen without scrolling sideways. */
+.settings th:nth-child(2),
+.settings td:nth-child(2),
 .settings th:nth-child(3),
 .settings td:nth-child(3) {
   display: none;
+}
+
+.settings th,
+.settings td {
+  padding: 6px 4px;
 }
 
 /* ---------------------------------------------------------- Short screens */
