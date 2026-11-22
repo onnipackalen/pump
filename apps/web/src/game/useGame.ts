@@ -32,6 +32,7 @@ import {
   ensureClientSeed,
   fairnessAfterStart,
   HISTORY_SIZE,
+  keepLostStartCopy,
   openGame,
   send,
   startRoundShown,
@@ -485,6 +486,10 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
   const resync = useCallback(async () => {
     try {
       const session = await client.getSession();
+      // A start whose answer was lost may have started the round in play:
+      // it gets its copy now. Not while a start is on its way: its own
+      // answer is still to come.
+      if (!inFlight.current.has('start')) keepLostStartCopy(session.activeRound);
       // A player with no client seed could never start a round ("Set a
       // client seed"): make the first one here too, as the first load does.
       const fairness = await ensureClientSeed(client, session.fairness);

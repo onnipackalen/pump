@@ -1,20 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_SHOWN_HASHES,
-  parseShownHashes,
+  forgetStarting,
+  MAX_SHOWN,
+  MAX_STARTING,
+  parseOldShown,
+  parseShown,
   rememberShown,
+  rememberStarting,
   shownFor,
+  startsOnTheirWay,
+  validSeeds,
   withShown,
   type HashStorage,
-  type ShownSeeds,
+  type SeedsBeforeRound,
 } from '../src/verify/shownHashes';
 
 const SHOWN = 'a'.repeat(64);
 const OTHER = 'b'.repeat(64);
-const KEY = 'pump.shownSeedHashes';
+const KEY = 'pump.shownSeeds';
+const OLD_KEY = 'pump.shownSeedHashes';
+const STARTING_KEY = 'pump.startsOnTheirWay';
 
 /** What a screen showed before a round: a hash, a client seed and the next nonce. */
-const shown = (serverSeedHash: string, clientSeed: string | null = 'player-seed', nonce: number | null = 4): ShownSeeds => ({
+const shown = (serverSeedHash: string, clientSeed = 'player-seed', nonce = 4): SeedsBeforeRound => ({
   serverSeedHash,
   clientSeed,
   nonce,
@@ -41,6 +49,18 @@ const broken: HashStorage = {
   },
 };
 
+/**
+ * What the build before this one did on every round start (9cfa504
+ * shownHashes.ts): read the old key keeping only two-part entries, put the
+ * new pair first, and write the list back.
+ */
+function olderBuildStarts(storage: MemoryStorage, roundId: string, hash: string): void {
+  const text = storage.getItem(OLD_KEY);
+  const data: unknown = text === null ? [] : JSON.parse(text);
+  const kept = Array.isArray(data) ? (data as unknown[]).filter((e) => Array.isArray(e) && e.length === 2) : [];
+  storage.setItem(OLD_KEY, JSON.stringify([[roundId, hash], ...kept]));
+}
+
 describe('what this browser showed before each round, kept in this browser', () => {
   it('is found again by round id: the hash, the client seed and the nonce', () => {
     const storage = new MemoryStorage();
@@ -63,15 +83,15 @@ describe('what this browser showed before each round, kept in this browser', () 
     ]);
   });
 
-  it(`never holds more than ${MAX_SHOWN_HASHES} rounds in storage`, () => {
+  it(`never holds more than ${MAX_SHOWN} rounds in storage`, () => {
     const storage = new MemoryStorage();
     // The longest client seed and a large nonce, with the server's UUID round ids.
     const longest = shown(SHOWN, 'z'.repeat(64), 9_007_199_254_740_991);
     const id = (n: number): string => `${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
-    for (let n = 0; n < MAX_SHOWN_HASHES + 20; n += 1) rememberShown(id(n), longest, storage);
-    const saved = parseShownHashes(storage.getItem(KEY));
-    expect(saved).toHaveLength(MAX_SHOWN_HASHES);
-    expect(shownFor(id(MAX_SHOWN_HASHES + 19), storage)).toEqual(longest);
+    for (let n = 0; n < MAX_SHOWN + 20; n += 1) rememberShown(id(n), longest, storage);
+    const saved = parseShown(storage.getItem(KEY));
+    expect(saved).toHaveLength(MAX_SHOWN);
+    expect(shownFor(id(MAX_SHOWN + 19), storage)).toEqual(longest);
     expect(shownFor(id(0), storage)).toBeNull();
     // About 100 KB at most.
     expect(storage.getItem(KEY)?.length ?? 0).toBeLessThan(100_000);
@@ -81,33 +101,50 @@ describe('what this browser showed before each round, kept in this browser', () 
     expect(() => rememberShown('round-1', shown(SHOWN), broken)).not.toThrow();
     expect(shownFor('round-1', broken)).toBeNull();
     expect(shownFor('round-1', null)).toBeNull();
+    expect(() => rememberStarting({ difficultyId: 'easy', betsCents: [100], shown: shown(SHOWN) }, broken)).not.toThrow();
+    expect(startsOnTheirWay(broken)).toEqual([]);
+    expect(() => forgetStarting(broken)).not.toThrow();
   });
 
-  it('still reads the older entries, which kept only the hash', () => {
-    // Saved by the game before it kept client seeds and nonces.
+  it('reads what older builds saved, which kept only the hash, and never writes there', () => {
     const storage = new MemoryStorage();
-    storage.setItem(KEY, JSON.stringify([['old-round', SHOWN]]));
+    const before = JSON.stringify([['old-round', SHOWN]]);
+    storage.setItem(OLD_KEY, before);
     expect(shownFor('old-round', storage)).toEqual({
       serverSeedHash: SHOWN,
       clientSeed: null,
       nonce: null,
     });
-    // A new round is added in front, and the old entry stays as it was.
     rememberShown('new-round', shown(OTHER, 'mine', 3), storage);
-    expect(parseShownHashes(storage.getItem(KEY))).toEqual([
-      ['new-round', OTHER, 'mine', 3],
-      ['old-round', SHOWN],
-    ]);
+    expect(shownFor('new-round', storage)).toEqual(shown(OTHER, 'mine', 3));
+    expect(storage.getItem(OLD_KEY)).toBe(before);
     expect(shownFor('old-round', storage)?.clientSeed).toBeNull();
   });
 
-  it('ignores anything in storage that is not a round id and a hash', () => {
-    expect(parseShownHashes(null)).toEqual([]);
-    expect(parseShownHashes('not json')).toEqual([]);
-    expect(parseShownHashes('{"round-1":"x"}')).toEqual([]);
-    expect(parseShownHashes('"text"')).toEqual([]);
+  it('keeps every copy when an older build in another tab starts a round', () => {
+    const storage = new MemoryStorage();
+    rememberShown('new-round', shown(SHOWN, 'mine', 3), storage);
+    // The older build rewrites only its own key, so the new copy is untouched.
+    olderBuildStarts(storage, 'old-tab-round', OTHER);
+    expect(shownFor('new-round', storage)).toEqual(shown(SHOWN, 'mine', 3));
+    expect(shownFor('old-tab-round', storage)).toEqual({ serverSeedHash: OTHER, clientSeed: null, nonce: null });
+  });
+
+  it('a copy with all three wins over an older hash-only one for the same round', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(OLD_KEY, JSON.stringify([['round-1', OTHER]]));
+    rememberShown('round-1', shown(SHOWN, 'mine', 1), storage);
+    expect(shownFor('round-1', storage)).toEqual(shown(SHOWN, 'mine', 1));
+  });
+
+  it('ignores anything in storage that is not a whole entry', () => {
+    expect(parseShown(null)).toEqual([]);
+    expect(parseShown('not json')).toEqual([]);
+    expect(parseShown('{"round-1":"x"}')).toEqual([]);
+    expect(parseShown('"text"')).toEqual([]);
+    expect(parseOldShown('not json')).toEqual([]);
     expect(
-      parseShownHashes(
+      parseOldShown(
         JSON.stringify([
           ['round-1', SHOWN],
           ['round-2', 'XYZ'],
@@ -118,17 +155,21 @@ describe('what this browser showed before each round, kept in this browser', () 
           { id: 'round-5', hash: SHOWN },
           ['x'.repeat(129), SHOWN],
           ['', SHOWN],
+          ['round-6', SHOWN, 'mine', 1],
         ]),
       ),
     ).toEqual([['round-1', SHOWN]]);
   });
 
-  it('keeps a client seed and nonce only as a valid pair, and the hash either way', () => {
-    const entries = parseShownHashes(
+  it('skips a partial or junk entry under the new key, never reading it as hash-only', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      KEY,
       JSON.stringify([
         ['ok', SHOWN, 'mine', 0],
-        // Partial: a seed with no nonce.
+        // Partial: no nonce, or only the hash.
         ['partial', SHOWN, 'mine'],
+        ['hash-only', SHOWN],
         // Not a client seed: has ':', is too long, is empty, is not text.
         ['colon', SHOWN, 'a:b', 1],
         ['long', SHOWN, 'z'.repeat(65), 1],
@@ -139,40 +180,78 @@ describe('what this browser showed before each round, kept in this browser', () 
         ['fraction', SHOWN, 'mine', 1.5],
         ['huge', SHOWN, 'mine', 2 ** 53],
         ['text', SHOWN, 'mine', '3'],
+        // Not a hash: upper case.
+        ['upper', SHOWN.toUpperCase(), 'mine', 1],
         // Extra parts.
         ['extra', SHOWN, 'mine', 1, 'more'],
       ]),
     );
-    expect(entries[0]).toEqual(['ok', SHOWN, 'mine', 0]);
-    expect(entries.slice(1)).toEqual(
-      ['partial', 'colon', 'long', 'empty', 'number', 'negative', 'fraction', 'huge', 'text', 'extra'].map(
-        (id) => [id, SHOWN],
-      ),
-    );
+    expect(parseShown(storage.getItem(KEY))).toEqual([['ok', SHOWN, 'mine', 0]]);
+    for (const id of ['partial', 'hash-only', 'colon', 'long', 'empty', 'number', 'negative', 'fraction', 'huge', 'text', 'upper', 'extra']) {
+      expect(shownFor(id, storage)).toBeNull();
+    }
   });
 
   it('reads at most the newest rounds from storage, however many are there', () => {
-    const many = Array.from({ length: MAX_SHOWN_HASHES * 3 }, (_, n) => [`round-${n}`, SHOWN, 'mine', n]);
-    const entries = parseShownHashes(JSON.stringify(many));
-    expect(entries).toHaveLength(MAX_SHOWN_HASHES);
+    const many = Array.from({ length: MAX_SHOWN * 3 }, (_, n) => [`round-${n}`, SHOWN, 'mine', n]);
+    const entries = parseShown(JSON.stringify(many));
+    expect(entries).toHaveLength(MAX_SHOWN);
     expect(entries[0]).toEqual(['round-0', SHOWN, 'mine', 0]);
   });
 
-  it('saves only a real hash: 64 lowercase hex characters', () => {
+  it('saves nothing for values not in a valid form: a round is never started on those', () => {
     const storage = new MemoryStorage();
     rememberShown('round-1', shown('hash'), storage);
     rememberShown('round-2', shown(SHOWN.toUpperCase()), storage);
+    rememberShown('round-3', shown(SHOWN, 'player-seed​'), storage);
+    rememberShown('round-4', shown(SHOWN, 'mine', -1), storage);
     rememberShown('', shown(SHOWN), storage);
     expect(storage.items.size).toBe(0);
   });
 
-  it('saves the hash alone when the client seed or nonce on screen is not a real one', () => {
+  it('knows a valid set of seeds', () => {
+    expect(validSeeds(shown(SHOWN, 'mine', 0))).toBe(true);
+    expect(validSeeds({ serverSeedHash: SHOWN, clientSeed: null, nonce: 0 })).toBe(false);
+    expect(validSeeds({ serverSeedHash: SHOWN, clientSeed: 'mine', nonce: '0' })).toBe(false);
+    expect(validSeeds({ serverSeedHash: SHOWN, clientSeed: 'mine​', nonce: 0 })).toBe(false);
+    expect(validSeeds({ serverSeedHash: SHOWN.toUpperCase(), clientSeed: 'mine', nonce: 0 })).toBe(false);
+  });
+});
+
+describe('starts on their way', () => {
+  const start = (difficultyId: string, nonce: number) => ({
+    difficultyId,
+    betsCents: [100, 250],
+    shown: shown(SHOWN, 'mine', nonce),
+  });
+
+  it('are kept newest first, at most a few, until forgotten', () => {
     const storage = new MemoryStorage();
-    rememberShown('no-seed', shown(SHOWN, null, null), storage);
-    rememberShown('bad-seed', shown(SHOWN, 'a:b', 2), storage);
-    rememberShown('bad-nonce', shown(SHOWN, 'mine', -1), storage);
-    for (const id of ['no-seed', 'bad-seed', 'bad-nonce']) {
-      expect(shownFor(id, storage)).toEqual({ serverSeedHash: SHOWN, clientSeed: null, nonce: null });
-    }
+    for (let n = 0; n < MAX_STARTING + 2; n += 1) rememberStarting(start('easy', n), storage);
+    const kept = startsOnTheirWay(storage);
+    expect(kept).toHaveLength(MAX_STARTING);
+    expect(kept[0]).toEqual(start('easy', MAX_STARTING + 1));
+    forgetStarting(storage);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+  });
+
+  it('ignore junk in storage', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      STARTING_KEY,
+      JSON.stringify([
+        ['easy', [100], SHOWN, 'mine', 0],
+        ['easy', [], SHOWN, 'mine', 0],
+        ['easy', [-1], SHOWN, 'mine', 0],
+        ['', [100], SHOWN, 'mine', 0],
+        ['easy', [100], 'hash', 'mine', 0],
+        ['easy', [100], SHOWN, 'a:b', 0],
+        ['easy', [100], SHOWN, 'mine'],
+        'junk',
+      ]),
+    );
+    expect(startsOnTheirWay(storage)).toEqual([{ difficultyId: 'easy', betsCents: [100], shown: shown(SHOWN, 'mine', 0) }]);
+    storage.setItem(STARTING_KEY, 'not json');
+    expect(startsOnTheirWay(storage)).toEqual([]);
   });
 });

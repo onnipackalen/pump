@@ -9,46 +9,75 @@
  * name it in the record, and the round would still check out. A copy the
  * browser saved when the round started is the player's own evidence.
  *
- * Kept in localStorage, newest first, at most MAX_SHOWN_HASHES rounds (about
- * 100 KB at most with the server's round ids). Storage can be missing, full
- * or blocked (a private window, cleared site data); every read and write is
- * wrapped, and a failure only means the verify page says it has no copy for
- * that round.
+ * Kept in localStorage. Storage can be missing, full or blocked (a private
+ * window, cleared site data); every read and write is wrapped, and a failure
+ * only means the verify page says it has no copy for that round.
  *
- * The format. One list under one key; each entry is one of:
- *   [roundId, serverSeedHash]                       the older entries
- *   [roundId, serverSeedHash, clientSeed, nonce]    saved now
- * Why the old list grows a longer entry instead of a second key: the three
- * values are saved in one write, so they are kept or lost together, and one
- * list has one size limit. Two-part entries still read as before: their hash
- * check works, and for them this browser has no copy of the client seed or
- * nonce. (An older build reading the new list skips the four-part entries:
- * it loses those copies, but never reads a wrong one.)
+ * Three keys:
+ * - 'pump.shownSeeds': what this build saves, newest first, at most MAX_SHOWN
+ *   rounds (under 100 KB): [roundId, serverSeedHash, clientSeed, nonce].
+ * - 'pump.shownSeedHashes': [roundId, serverSeedHash] pairs saved by older
+ *   builds, which kept only the hash. Read here, never written. For those
+ *   rounds the hash check still works, and this browser has no copy of the
+ *   client seed or nonce.
+ * - 'pump.startsOnTheirWay': starts sent whose answer has not come yet, so a
+ *   round whose start answer was lost still gets its copy (see
+ *   rememberStarting, and keepLostStartCopy in game/session.ts).
+ *
+ * Why a new key, not longer entries under the old one: an older build still
+ * open in another tab rewrites the old key with only the two-part entries it
+ * knows, which would erase every longer entry, hash and all. It never
+ * touches the new key. And every entry under the new key was saved by this
+ * build with all three values, so a partial or junk entry there is skipped,
+ * never read as a hash-only copy.
  */
 
 import { CLIENT_SEED_PATTERN } from '../game/clientSeed';
 
-const STORAGE_KEY = 'pump.shownSeedHashes';
+const KEY = 'pump.shownSeeds';
+const OLD_KEY = 'pump.shownSeedHashes';
+const STARTING_KEY = 'pump.startsOnTheirWay';
 
 /** How many rounds are remembered. Older ones are forgotten first. */
-export const MAX_SHOWN_HASHES = 500;
+export const MAX_SHOWN = 500;
 
-/** What this browser showed before one round. */
+/** How many starts on their way are remembered (normally one at most). */
+export const MAX_STARTING = 5;
+
+/** The three values the screen showed before a round: what a new round saves. */
+export interface SeedsBeforeRound {
+  readonly serverSeedHash: string;
+  readonly clientSeed: string;
+  readonly nonce: number;
+}
+
+/**
+ * What this browser has of one round. The client seed and nonce are null
+ * for a round an older build saved, which kept only the hash.
+ */
 export interface ShownSeeds {
   readonly serverSeedHash: string;
-  /**
-   * The client seed and the nonce on screen as the bet went out. Both null
-   * when this browser has no copy of them: an entry saved before they were
-   * kept, or a round started with no client seed on screen.
-   */
   readonly clientSeed: string | null;
   readonly nonce: number | null;
 }
 
-/** One remembered round as stored: its id and what was shown before it. */
-export type ShownEntry =
-  | readonly [roundId: string, serverSeedHash: string]
-  | readonly [roundId: string, serverSeedHash: string, clientSeed: string, nonce: number];
+/** One remembered round as stored under the new key. */
+export type ShownEntry = readonly [
+  roundId: string,
+  serverSeedHash: string,
+  clientSeed: string,
+  nonce: number,
+];
+
+/** One round an older build remembered: only its hash. */
+export type OldShownEntry = readonly [roundId: string, serverSeedHash: string];
+
+/** A start sent whose answer has not come yet: what it asked for, and the seeds on screen as it went. */
+export interface StartOnItsWay {
+  readonly difficultyId: string;
+  readonly betsCents: readonly number[];
+  readonly shown: SeedsBeforeRound;
+}
 
 /** The part of localStorage used here, so tests can hand in their own. */
 export interface HashStorage {
@@ -71,27 +100,27 @@ function isClientSeed(value: unknown): value is string {
   return typeof value === 'string' && CLIENT_SEED_PATTERN.test(value);
 }
 
-function isNonce(value: unknown): value is number {
+function isWhole(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 /**
- * One stored entry, cleaned up: null if its round id or hash is not usable.
- * A client seed and nonce are kept only as a valid pair; anything else
- * (missing, partial, junk or extra parts) leaves just the hash.
+ * Whether all three are in the form a real server sends: a hash of 64
+ * lowercase hex characters, a client seed of 1 to 64 allowed characters, and
+ * a whole nonce of 0 or more. A round is only started on seeds like these
+ * (see shownBefore in game/session.ts), so what is saved is exactly what was
+ * on screen, and is compared with the record as it is.
  */
-function entryFrom(value: unknown): ShownEntry | null {
-  if (!Array.isArray(value)) return null;
-  const [roundId, hash, clientSeed, nonce] = value as unknown[];
-  if (!isRoundId(roundId) || !isHash(hash)) return null;
-  if (value.length === 4 && isClientSeed(clientSeed) && isNonce(nonce)) {
-    return [roundId, hash, clientSeed, nonce];
-  }
-  return [roundId, hash];
+export function validSeeds(seeds: {
+  readonly serverSeedHash: unknown;
+  readonly clientSeed: unknown;
+  readonly nonce: unknown;
+}): seeds is SeedsBeforeRound {
+  return isHash(seeds.serverSeedHash) && isClientSeed(seeds.clientSeed) && isWhole(seeds.nonce);
 }
 
-/** The saved list, or an empty one if nothing usable is saved. Never throws. */
-export function parseShownHashes(text: string | null): readonly ShownEntry[] {
+/** A JSON list from storage, each item read by `read` (null: skipped), at most `max`. Never throws. */
+function listFrom<T>(text: string | null, read: (value: unknown) => T | null, max: number): T[] {
   if (text === null) return [];
   let data: unknown;
   try {
@@ -100,39 +129,51 @@ export function parseShownHashes(text: string | null): readonly ShownEntry[] {
     return [];
   }
   if (!Array.isArray(data)) return [];
-  const entries: ShownEntry[] = [];
+  const items: T[] = [];
   for (const value of data as unknown[]) {
-    const entry = entryFrom(value);
-    if (entry !== null) entries.push(entry);
-    if (entries.length === MAX_SHOWN_HASHES) break;
+    if (items.length === max) break;
+    const item = read(value);
+    if (item !== null) items.push(item);
   }
-  return entries;
+  return items;
 }
 
-/** The stored entry for what was shown: four parts with a client seed and nonce, two without. */
-function entryOf(roundId: string, shown: ShownSeeds): ShownEntry {
-  const { serverSeedHash, clientSeed, nonce } = shown;
-  return isClientSeed(clientSeed) && isNonce(nonce)
+/** One entry under the new key: all four parts valid, or null. */
+function entryFrom(value: unknown): ShownEntry | null {
+  if (!Array.isArray(value) || value.length !== 4) return null;
+  const [roundId, serverSeedHash, clientSeed, nonce] = value as unknown[];
+  return isRoundId(roundId) && isHash(serverSeedHash) && isClientSeed(clientSeed) && isWhole(nonce)
     ? [roundId, serverSeedHash, clientSeed, nonce]
-    : [roundId, serverSeedHash];
+    : null;
 }
 
-/** What a stored entry says was shown. */
-function shownOf(entry: ShownEntry): ShownSeeds {
-  return entry.length === 4
-    ? { serverSeedHash: entry[1], clientSeed: entry[2], nonce: entry[3] }
-    : { serverSeedHash: entry[1], clientSeed: null, nonce: null };
+/** One entry an older build saved: exactly a round id and a hash, or null. */
+function oldEntryFrom(value: unknown): OldShownEntry | null {
+  if (!Array.isArray(value) || value.length !== 2) return null;
+  const [roundId, serverSeedHash] = value as unknown[];
+  return isRoundId(roundId) && isHash(serverSeedHash) ? [roundId, serverSeedHash] : null;
+}
+
+/** The saved list, or an empty one if nothing usable is saved. Never throws. */
+export function parseShown(text: string | null): readonly ShownEntry[] {
+  return listFrom(text, entryFrom, MAX_SHOWN);
+}
+
+/** The list older builds saved (hash only), or an empty one. Never throws. */
+export function parseOldShown(text: string | null): readonly OldShownEntry[] {
+  return listFrom(text, oldEntryFrom, MAX_SHOWN);
 }
 
 /** The list with this round put first (replacing an older entry for it), cut to `max`. */
 export function withShown(
   list: readonly ShownEntry[],
   roundId: string,
-  shown: ShownSeeds,
-  max = MAX_SHOWN_HASHES,
+  shown: SeedsBeforeRound,
+  max = MAX_SHOWN,
 ): readonly ShownEntry[] {
   const others = list.filter(([id]) => id !== roundId);
-  return [entryOf(roundId, shown), ...others].slice(0, Math.max(0, max));
+  const entry: ShownEntry = [roundId, shown.serverSeedHash, shown.clientSeed, shown.nonce];
+  return [entry, ...others].slice(0, Math.max(0, max));
 }
 
 /** This browser's localStorage, or null where there is none or it is blocked. */
@@ -145,35 +186,102 @@ function browserStorage(): HashStorage | null {
 }
 
 /**
- * Saves what was shown before a round. Does nothing for a value that is not
- * a round id and a 64-character lowercase hex hash, or if storage fails. A
- * client seed or nonce that is not valid is left out, and the hash is still
- * saved.
+ * Saves what was shown before a round, all three values in one write. Does
+ * nothing for a round id or values not in a valid form (a round is never
+ * started on those), or if storage fails.
  */
 export function rememberShown(
   roundId: string,
-  shown: ShownSeeds,
+  shown: SeedsBeforeRound,
   storage: HashStorage | null = browserStorage(),
 ): void {
-  if (!storage || !isRoundId(roundId) || !isHash(shown.serverSeedHash)) return;
+  if (!storage || !isRoundId(roundId) || !validSeeds(shown)) return;
   try {
-    const list = parseShownHashes(storage.getItem(STORAGE_KEY));
-    storage.setItem(STORAGE_KEY, JSON.stringify(withShown(list, roundId, shown)));
+    const list = parseShown(storage.getItem(KEY));
+    storage.setItem(KEY, JSON.stringify(withShown(list, roundId, shown)));
   } catch {
     // Full or blocked: the verify page will say it has no copy of this round.
   }
 }
 
-/** What this browser showed before the round, or null if it has no copy of it. */
+/**
+ * What this browser showed before the round, or null if it has no copy of
+ * it. A round an older build saved has only the hash.
+ */
 export function shownFor(
   roundId: string,
   storage: HashStorage | null = browserStorage(),
 ): ShownSeeds | null {
   if (!storage) return null;
   try {
-    const found = parseShownHashes(storage.getItem(STORAGE_KEY)).find(([id]) => id === roundId);
-    return found ? shownOf(found) : null;
+    const found = parseShown(storage.getItem(KEY)).find(([id]) => id === roundId);
+    if (found) return { serverSeedHash: found[1], clientSeed: found[2], nonce: found[3] };
+    const old = parseOldShown(storage.getItem(OLD_KEY)).find(([id]) => id === roundId);
+    return old ? { serverSeedHash: old[1], clientSeed: null, nonce: null } : null;
   } catch {
     return null;
+  }
+}
+
+/** One stored start on its way: [difficultyId, betsCents, hash, clientSeed, nonce]. */
+function startFrom(value: unknown): StartOnItsWay | null {
+  if (!Array.isArray(value) || value.length !== 5) return null;
+  const [difficultyId, betsCents, serverSeedHash, clientSeed, nonce] = value as unknown[];
+  if (typeof difficultyId !== 'string' || difficultyId.length === 0 || difficultyId.length > 64) {
+    return null;
+  }
+  if (!Array.isArray(betsCents) || betsCents.length === 0 || betsCents.length > 10) return null;
+  const bets = betsCents as unknown[];
+  if (!bets.every(isWhole)) return null;
+  const shown = { serverSeedHash, clientSeed, nonce };
+  return validSeeds(shown) ? { difficultyId, betsCents: bets, shown } : null;
+}
+
+/**
+ * Remembers a start before it is sent, newest first. If both tries lose the
+ * answer, or the page is closed before it comes, the round the server
+ * started can still get the seeds this start was bet against.
+ */
+export function rememberStarting(
+  start: StartOnItsWay,
+  storage: HashStorage | null = browserStorage(),
+): void {
+  if (!storage || !validSeeds(start.shown)) return;
+  try {
+    const list = listFrom(storage.getItem(STARTING_KEY), startFrom, MAX_STARTING);
+    const { difficultyId, betsCents, shown } = start;
+    const entry = [difficultyId, betsCents, shown.serverSeedHash, shown.clientSeed, shown.nonce];
+    const stored = list.map((s) => [
+      s.difficultyId,
+      s.betsCents,
+      s.shown.serverSeedHash,
+      s.shown.clientSeed,
+      s.shown.nonce,
+    ]);
+    storage.setItem(STARTING_KEY, JSON.stringify([entry, ...stored].slice(0, MAX_STARTING)));
+  } catch {
+    // Full or blocked: only a start whose answer is lost goes without a copy.
+  }
+}
+
+/** The starts on their way, newest first. Never throws. */
+export function startsOnTheirWay(
+  storage: HashStorage | null = browserStorage(),
+): readonly StartOnItsWay[] {
+  if (!storage) return [];
+  try {
+    return listFrom(storage.getItem(STARTING_KEY), startFrom, MAX_STARTING);
+  } catch {
+    return [];
+  }
+}
+
+/** Forgets every start on its way: each has its answer, or none started a round still in play. */
+export function forgetStarting(storage: HashStorage | null = browserStorage()): void {
+  if (!storage) return;
+  try {
+    storage.setItem(STARTING_KEY, '[]');
+  } catch {
+    // Blocked: nothing was saved there either.
   }
 }

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GAME_CONFIG } from '@pump/engine';
 import { describe, expect, it } from 'vitest';
-import { NetworkFailure } from '../src/api/client';
+import { ApiFailure, NetworkFailure } from '../src/api/client';
 import type {
   ActionResult,
   FairnessView,
@@ -11,14 +11,23 @@ import type {
   StartRoundRequest,
 } from '../src/api/contract';
 import { DemoClient } from '../src/demo/DemoClient';
+import { afterFailure, describeFailure } from '../src/game/refusal';
 import { runAutoPlay, type AutoPlayHooks } from '../src/game/useAutoPlay';
 import type { GameActions } from '../src/game/useGame';
-import { fairnessAfterStart, shownBefore, startRoundShown } from '../src/game/session';
+import {
+  fairnessAfterStart,
+  keepLostStartCopy,
+  openGame,
+  SeedsNotShown,
+  shownBefore,
+  startRoundShown,
+} from '../src/game/session';
 import {
   rememberShown,
+  rememberStarting,
   shownFor,
+  startsOnTheirWay,
   type HashStorage,
-  type ShownSeeds,
 } from '../src/verify/shownHashes';
 
 const key = (): string => crypto.randomUUID();
@@ -42,6 +51,13 @@ async function demo<C extends DemoClient>(client: C): Promise<{ client: C; fairn
   return { client, fairness };
 }
 
+/** What the screen showed, as saved: hash, client seed and next nonce. */
+const copyOf = (fairness: FairnessView) => ({
+  serverSeedHash: fairness.serverSeedHash,
+  clientSeed: fairness.clientSeed,
+  nonce: fairness.nextNonce,
+});
+
 /** A demo whose answer to the first start is lost on the way, after the round was started. */
 class LosesFirstAnswer extends DemoClient {
   starts = 0;
@@ -63,69 +79,189 @@ class LyingAnswer extends DemoClient {
   }
 }
 
+/**
+ * A server that starts the round, then loses every answer to it (a crash
+ * page, a proxy error, or on purpose): both tries fail.
+ */
+class LosesEveryStartAnswer extends DemoClient {
+  starts = 0;
+  override async startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
+    this.starts += 1;
+    await super.startRound(request, k);
+    throw new NetworkFailure('The game server did not answer properly (502).');
+  }
+}
+
+/** A server that starts the round, then says another round is in the way. */
+class StartsThenSaysRoundActive extends DemoClient {
+  override async startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
+    await super.startRound(request, k);
+    throw new ApiFailure({ code: 'round_active', message: 'Finish the current round first.' });
+  }
+}
+
+/** Counts the starts sent, and the server never gets one it should not. */
+class CountsStarts extends DemoClient {
+  starts = 0;
+  override startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
+    this.starts += 1;
+    return super.startRound(request, k);
+  }
+}
+
 describe('a round start saves what this browser showed before it', () => {
   it('saves the hash, client seed and next nonce from the screen, by round id', async () => {
     const { client, fairness } = await demo(new DemoClient(GAME_CONFIG, 0));
     const storage = memoryStorage();
-    const remember = (id: string, shown: ShownSeeds): void => rememberShown(id, shown, storage);
-    const first = await startRoundShown(client, REQUEST, fairness, remember);
-    expect(shownFor(first.round.id, storage)).toEqual({
-      serverSeedHash: fairness.serverSeedHash,
-      clientSeed: 'player-seed',
-      nonce: fairness.nextNonce,
-    });
+    const first = await startRoundShown(client, REQUEST, fairness, storage);
+    expect(shownFor(first.round.id, storage)).toEqual(copyOf(fairness));
     // An honest server used exactly what the screen showed.
     expect(first.round).toMatchObject({
       serverSeedHash: fairness.serverSeedHash,
       clientSeed: 'player-seed',
       nonce: fairness.nextNonce,
     });
+    // Its answer came, so nothing is left on its way.
+    expect(startsOnTheirWay(storage)).toEqual([]);
   });
 
   it('saves what the screen showed, never what the server answers', async () => {
     const { client, fairness } = await demo(new LyingAnswer(GAME_CONFIG, 0));
     const storage = memoryStorage();
-    const { round } = await startRoundShown(client, REQUEST, fairness, (id, shown) =>
-      rememberShown(id, shown, storage),
-    );
+    const { round } = await startRoundShown(client, REQUEST, fairness, storage);
     expect(round.clientSeed).toBe('server-picked');
-    expect(shownFor(round.id, storage)).toEqual({
-      serverSeedHash: fairness.serverSeedHash,
-      clientSeed: 'player-seed',
-      nonce: fairness.nextNonce,
-    });
+    expect(shownFor(round.id, storage)).toEqual(copyOf(fairness));
   });
 
   it('saves the same copy when the answer is lost and the retry gets the stored answer', async () => {
     const { client, fairness } = await demo(new LosesFirstAnswer(GAME_CONFIG, 0));
-    const saved: [string, ShownSeeds][] = [];
-    const result = await startRoundShown(client, REQUEST, fairness, (id, shown) =>
-      saved.push([id, shown]),
-    );
+    const storage = memoryStorage();
+    const result = await startRoundShown(client, REQUEST, fairness, storage);
     // Sent twice under one key, applied once.
     expect(client.starts).toBe(2);
     expect((await client.getSession()).fairness.nextNonce).toBe(fairness.nextNonce + 1);
-    expect(saved).toEqual([[result.round.id, shownBefore(fairness)]]);
+    expect(shownFor(result.round.id, storage)).toEqual(copyOf(fairness));
   });
 
-  it('saves nothing for a start the server refuses', async () => {
+  it('saves no round copy for a start the server refuses', async () => {
     const { client, fairness } = await demo(new DemoClient(GAME_CONFIG, 0));
-    const saved: string[] = [];
+    const storage = memoryStorage();
     await expect(
-      startRoundShown(client, { difficultyId: 'no-such', betsCents: [100] }, fairness, (id) =>
-        saved.push(id),
-      ),
-    ).rejects.toBeDefined();
-    expect(saved).toEqual([]);
+      startRoundShown(client, { difficultyId: 'no-such', betsCents: [100] }, fairness, storage),
+    ).rejects.toBeInstanceOf(ApiFailure);
+    // Still on its way as far as this browser knows; the next load of the
+    // state finds no round in play and forgets it.
+    expect(startsOnTheirWay(storage)).toHaveLength(1);
+    keepLostStartCopy((await client.getSession()).activeRound, storage);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+  });
+});
+
+describe('a round is only started on seeds that can be checked later', () => {
+  const HASH = 'e'.repeat(64);
+  const cases: readonly [string, FairnessView | null][] = [
+    ['no seeds on screen yet', null],
+    ['no client seed', { serverSeedHash: HASH, clientSeed: null, nextNonce: 0 }],
+    // Looks the same as 'player-seed' on screen.
+    ['a client seed with an invisible character', { serverSeedHash: HASH, clientSeed: 'player-seed​', nextNonce: 0 }],
+    ['a client seed with a colon', { serverSeedHash: HASH, clientSeed: 'a:b', nextNonce: 0 }],
+    // Shown the same as the number 0.
+    ['a nonce sent as text', { serverSeedHash: HASH, clientSeed: 'mine', nextNonce: '0' as unknown as number }],
+    ['a nonce below 0', { serverSeedHash: HASH, clientSeed: 'mine', nextNonce: -1 }],
+    ['an upper-case hash', { serverSeedHash: HASH.toUpperCase(), clientSeed: 'mine', nextNonce: 0 }],
+    ['a short hash', { serverSeedHash: 'hash', clientSeed: 'mine', nextNonce: 0 }],
+  ];
+
+  for (const [name, fairness] of cases) {
+    it(`refuses, sending nothing, with ${name}`, async () => {
+      const client = new CountsStarts(GAME_CONFIG, 0);
+      await client.setClientSeed('player-seed', key());
+      const storage = memoryStorage();
+      expect(shownBefore(fairness)).toBeNull();
+      const failure = await startRoundShown(client, REQUEST, fairness, storage).catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(SeedsNotShown);
+      expect(client.starts).toBe(0);
+      expect(startsOnTheirWay(storage)).toEqual([]);
+      // The screen says why in plain words, and loads the seeds again.
+      expect(describeFailure(failure)).toMatch(/not started/);
+      expect(afterFailure(failure)).toBe('resync');
+    });
+  }
+
+  it('starts on valid seeds, and saves them exactly as shown', () => {
+    const fairness: FairnessView = { serverSeedHash: HASH, clientSeed: 'mine', nextNonce: 41 };
+    expect(shownBefore(fairness)).toEqual({ serverSeedHash: HASH, clientSeed: 'mine', nonce: 41 });
+  });
+});
+
+describe('a start whose answer never came still gets its copy', () => {
+  it('after both tries lose the answer, the next load gives the round in play this copy', async () => {
+    const { client, fairness } = await demo(new LosesEveryStartAnswer(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    await expect(startRoundShown(client, REQUEST, fairness, storage)).rejects.toBeInstanceOf(NetworkFailure);
+    expect(client.starts).toBe(2);
+    const { activeRound } = await client.getSession();
+    if (!activeRound) throw new Error('the start was applied');
+    expect(shownFor(activeRound.id, storage)).toBeNull();
+
+    // A reload (or a fresh start of the screen) loads the session again.
+    const opened = await openGame(client, () => 'unused', storage);
+    expect(opened.session.activeRound?.id).toBe(activeRound.id);
+    expect(shownFor(activeRound.id, storage)).toEqual(copyOf(fairness));
+    expect(startsOnTheirWay(storage)).toEqual([]);
   });
 
-  it('saves nothing with no seeds on screen, and only the hash with no client seed', () => {
-    expect(shownBefore(null)).toBeNull();
-    expect(shownBefore({ serverSeedHash: 'a'.repeat(64), clientSeed: null, nextNonce: 3 })).toEqual({
-      serverSeedHash: 'a'.repeat(64),
-      clientSeed: null,
-      nonce: null,
-    });
+  it('the same after a resync (keepLostStartCopy with the session’s round)', async () => {
+    const { client, fairness } = await demo(new LosesEveryStartAnswer(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    await startRoundShown(client, REQUEST, fairness, storage).catch(() => null);
+    const { activeRound } = await client.getSession();
+    keepLostStartCopy(activeRound, storage);
+    expect(activeRound && shownFor(activeRound.id, storage)).toEqual(copyOf(fairness));
+  });
+
+  it('after a refusal that says another round is in the way, for a round this start made', async () => {
+    const { client, fairness } = await demo(new StartsThenSaysRoundActive(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    const failure = await startRoundShown(client, REQUEST, fairness, storage).catch((e: unknown) => e);
+    expect(afterFailure(failure)).toBe('resync');
+    const { activeRound } = await client.getSession();
+    keepLostStartCopy(activeRound, storage);
+    expect(activeRound && shownFor(activeRound.id, storage)).toEqual(copyOf(fairness));
+  });
+
+  it('saves what the screen showed, even when the server played on seeds of its own', async () => {
+    const { client, fairness } = await demo(new LosesEveryStartAnswer(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    await startRoundShown(client, REQUEST, fairness, storage).catch(() => null);
+    const { activeRound } = await client.getSession();
+    if (!activeRound) throw new Error('the start was applied');
+    // The round says another client seed: the copy still says the player's.
+    keepLostStartCopy({ ...activeRound, clientSeed: 'server-picked' }, storage);
+    expect(shownFor(activeRound.id, storage)?.clientSeed).toBe('player-seed');
+  });
+
+  it('never for a round with other bets, and never over a copy already saved', async () => {
+    const { client, fairness } = await demo(new LosesEveryStartAnswer(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    await startRoundShown(client, REQUEST, fairness, storage).catch(() => null);
+    const { activeRound } = await client.getSession();
+    if (!activeRound) throw new Error('the start was applied');
+
+    const otherBets: RoundView = {
+      ...activeRound,
+      balloons: activeRound.balloons.map((b) => ({ ...b, betCents: b.betCents + 1 })),
+    };
+    keepLostStartCopy(otherBets, storage);
+    expect(shownFor(activeRound.id, storage)).toBeNull();
+
+    const shown = shownBefore(fairness);
+    if (!shown) throw new Error('valid seeds expected');
+    rememberStarting({ ...REQUEST, shown }, storage);
+    const saved = { serverSeedHash: 'f'.repeat(64), clientSeed: 'saved-here', nonce: 7 };
+    rememberShown(activeRound.id, saved, storage);
+    keepLostStartCopy(activeRound, storage);
+    expect(shownFor(activeRound.id, storage)).toEqual(saved);
   });
 });
 
@@ -141,10 +277,7 @@ describe('auto-play saves a copy for every round it starts', () => {
     const drawIndex = (r: RoundView, i: number): number => r.balloons[i]?.drawIndex ?? -1;
     const actions: GameActions = {
       startRound: async (difficultyId, betsCents) => {
-        const before = onScreen;
-        const result = await startRoundShown(client, { difficultyId, betsCents }, before, (id, shown) =>
-          rememberShown(id, shown, storage),
-        );
+        const result = await startRoundShown(client, { difficultyId, betsCents }, onScreen, storage);
         onScreen = fairnessAfterStart(result.round);
         return result;
       },
@@ -212,5 +345,14 @@ describe('every way a round starts goes through the saving start', () => {
     expect(game).toMatch(/startRound: startRoundAction/);
     const autoPlay = readFileSync(join(SRC, 'game/useAutoPlay.ts'), 'utf8');
     expect(autoPlay).toMatch(/actions\.startRound\(/);
+  });
+
+  it('a lost start answer is looked for on every full load of the state', () => {
+    const game = readFileSync(join(SRC, 'game/useGame.ts'), 'utf8');
+    // The resync after a lost answer or a refusal (the first load and a fresh
+    // start go through openGame, tested above).
+    expect(game).toMatch(/if \(!inFlight\.current\.has\('start'\)\) keepLostStartCopy\(session\.activeRound\);/);
+    const session = readFileSync(join(SRC, 'game/session.ts'), 'utf8');
+    expect(session).toMatch(/const session = await client\.getSession\(\);\s+(\/\/.*\s+)*keepLostStartCopy\(session\.activeRound, storage\);/);
   });
 });
