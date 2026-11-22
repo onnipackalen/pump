@@ -2,8 +2,9 @@
  * PumpEngine: the pure game rules for Pump.
  *
  * Nothing in this file does I/O: no database, HTTP, clock or crypto. It keeps
- * no state of its own. Every function takes a round and returns a new round,
- * and the same input always gives the same output. Randomness is passed in.
+ * no state of its own. A function that changes a round returns a new round
+ * and never changes the one it was given, and the same input always gives the
+ * same output. Randomness is passed in.
  *
  * The game. A round is one or more balloons (the config says how many), each
  * with its own bet. Each balloon climbs a ladder of multipliers, one rung per
@@ -31,7 +32,7 @@
  *
  * Multiply the pump chances and they leave R / m_k. So the whole house edge
  * sits in pump 1, every later pump is a fair bet, and changing the RTP only
- * changes pump 1. Payouts round down to the cent and Patch prices round up, so
+ * changes pump 1's chance (and the Patch prices, which divide by R). Payouts round down to the cent and Patch prices round up, so
  * the game can pay back a little under R and never over. A bet's top rung is
  * the highest one whose payout fits under the payout cap.
  *
