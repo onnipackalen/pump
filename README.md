@@ -297,6 +297,41 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
   copy in Python, written from that page alone. The engine tests must match
   its vectors.
 
+### What the verify page trusts
+
+- When a round starts, the browser saves the server-seed hash, client seed
+  and nonce its Provably fair panel showed before the bet went out
+  (`apps/web/src/verify/shownHashes.ts`). It only starts a round on seeds
+  in a valid form, so a copy always has all three.
+- The verify page fills those three in from that copy, not from the
+  server's record, and each field says where its value came from.
+- The round doesn't check out, even when the record's own seeds add up, if
+  the record names another hash, client seed or nonce, is another round's
+  record, or sends one of those values in a form this game never sends. The
+  page says which in a plain line.
+- A start whose answer was lost gets its copy the next time the game loads
+  its state. A seed change and a round start are never on their way at
+  once, so pressing Bet just after saving a seed can't make an honest round
+  look wrong.
+- What the copy can't prove: it is what the server's own answers put on
+  the screen. So check that the panel shows your client seed before you
+  bet.
+- With no copy (another device, cleared browser data, or more than 500
+  rounds ago), the page uses the server's record and says plainly that it
+  can't catch a server that changed those values.
+- A server could also give a round another id while it is played, so no
+  copy is saved under its real id. The page then looks for a copy with the
+  record's hash and nonce under another id (one server seed and nonce
+  belong to one round only), and the round doesn't check out if that copy
+  names another client seed. This is not caught if the server also moved
+  the round to a server seed or nonce this browser has no copy for; see
+  [Known issues](#known-issues).
+- Rounds started by an older version of the game have a copy of the hash
+  only, and the page says so.
+- The bets, steps, RTP, ladder and payout cap come from the server's
+  record, and the page checks that every pump and payment follows from
+  them.
+
 ### After the round: where it would have popped
 
 - Once a round is over, each balloon cashed out below its top rung is
@@ -547,12 +582,13 @@ Conventions:
 
 Found in the final check before submitting, and not fixed on `main` yet:
 
-- **The verify page trusts the server's client seed and nonce.** The
-  browser keeps its own copy only of the server seed's hash. A dishonest
-  server could send back a different client seed whose rolls happen to give
-  the same results the player saw, and the page would say the round checks
-  out. Being fixed: the browser will keep its own copy of the client seed
-  and nonce shown before each round, and check against that.
+- **A server that renames a round can still get past the verify page's
+  copy check**, if it also moves the round to a server seed or nonce this
+  browser has no copy for. The page then says it has no copy of that
+  round, and calls that a warning sign for a round played in this browser
+  not long ago. Closing this fully needs the server's record to carry
+  something the browser picked at the start, such as the start's
+  idempotency key.
 - **`GET /api/session` has no limit.** Every visit without a cookie makes a
   new player, so a script could fill the database.
 - **The hammer never tries to overspend over HTTP.** That case is tested

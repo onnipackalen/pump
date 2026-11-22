@@ -11,7 +11,6 @@ import type {
   RoundView,
   WalletView,
 } from '../api/contract';
-import { rememberShownHash } from '../verify/shownHashes';
 import {
   canQueueCashOut,
   cashOutsToSend,
@@ -29,12 +28,15 @@ import {
 } from './refusal';
 import { pressMs } from './risk';
 import { isOlder } from './roundOrder';
+import { SeedGate } from './seedGate';
 import {
   ensureClientSeed,
   fairnessAfterStart,
   HISTORY_SIZE,
+  keepLostStartCopy,
   openGame,
   send,
+  startRoundShown,
   type OpenedGame,
 } from './session';
 import { roundWinTier } from './winTier';
@@ -379,13 +381,21 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
   // balloon is no longer in play (see waitingCashOuts below).
   const [waitingShown, setWaitingShown] = useState<readonly QueuedCashOut[]>([]);
 
-  // The server-seed hash on screen now: the one a new round is bet against.
-  // It is saved for each round, so the verify page can later check the
-  // revealed seed against what this browser showed (verify/shownHashes).
-  const shownHash = useRef<string | null>(null);
+  // The seeds on screen now: the server-seed hash, client seed and next
+  // nonce a new round is bet against. They are saved for each round, so the
+  // verify page can later check the round against what this browser showed
+  // (verify/shownHashes), not against the server's record of it. An answer
+  // that changes the seeds also sets it at once, since a start waiting for
+  // that change reads it next; the effect keeps it in step with the rest.
+  const shownFairness = useRef<FairnessView | null>(null);
   useEffect(() => {
-    shownHash.current = state.fairness?.serverSeedHash ?? null;
+    shownFairness.current = state.fairness;
   }, [state.fairness]);
+
+  // Keeps a round start and a seed change from being on their way at once,
+  // so a round is never bet against seeds the server has already changed
+  // (see SeedGate).
+  const [seedGate] = useState(() => new SeedGate());
 
   const listenerRef = useRef(listener);
   useEffect(() => {
@@ -484,6 +494,10 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
   const resync = useCallback(async () => {
     try {
       const session = await client.getSession();
+      // A start whose answer was lost may have started the round in play:
+      // it gets its copy now. Not while a start is on its way: its own
+      // answer is still to come.
+      if (!inFlight.current.has('start')) keepLostStartCopy(session.activeRound);
       // A player with no client seed could never start a round ("Set a
       // client seed"): make the first one here too, as the first load does.
       const fairness = await ensureClientSeed(client, session.fairness);
@@ -593,12 +607,24 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     async (difficultyId: string, betsCents: readonly number[]): Promise<ActionResult | null> => {
       if (inFlight.current.has('start')) return null;
       inFlight.current.add('start');
-      // The hash on screen as the bet goes out: the one this round is bet against.
-      const hashBefore = shownHash.current;
       setState((s) => ({ ...s, starting: true, notice: null }));
       try {
-        const result = await send((key) => client.startRound({ difficultyId, betsCents }, key));
-        if (hashBefore !== null) rememberShownHash(result.round.id, hashBefore);
+        // A client seed save or a rotate still on its way goes first (see
+        // SeedGate). Then the seeds on screen as the bet goes out, the ones
+        // this round is bet against, are read and saved with the round.
+        const result = await seedGate.start(() =>
+          startRoundShown(client, { difficultyId, betsCents }, shownFairness.current),
+        );
+        if (result === null) {
+          // That seed change failed, and its notice says why.
+          setState((s) => ({ ...s, starting: false }));
+          return null;
+        }
+        // The round used the next nonce of these seeds: the panel moves on.
+        // The ref moves on too, at once, so a round started before the
+        // screen has drawn this one (auto-play) saves the new nonce.
+        const after = fairnessAfterStart(result.round);
+        shownFairness.current = after;
         queued.current = [];
         setWaitingShown([]);
         setState((s) => ({
@@ -606,8 +632,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           starting: false,
           round: result.round,
           wallet: result.wallet,
-          // The round used the next nonce of these seeds: the panel moves on.
-          fairness: fairnessAfterStart(result.round),
+          fairness: after,
           beats: result.round.balloons.map(() => 'idle'),
           pending: result.round.balloons.map(() => false),
           patched: result.round.balloons.map(() => false),
@@ -625,7 +650,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         inFlight.current.delete('start');
       }
     },
-    [client, emit, handleFailure],
+    [client, emit, handleFailure, seedGate],
   );
 
   const pumpAction = useCallback(
@@ -839,28 +864,35 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     [round, waitingShown],
   );
 
+  // Seed changes go through the gate: none while a round start is on its
+  // way, one at a time, and a start waits for one on its way (see SeedGate).
   const setClientSeed = useCallback(
     async (clientSeed: string): Promise<boolean> => {
-      try {
-        const fairness = await send((key) => client.setClientSeed(clientSeed, key));
-        setState((s) => ({
-          ...s,
-          fairness,
-          notice: { tone: 'info', text: 'Client seed saved.' },
-        }));
-        return true;
-      } catch (error) {
-        handleFailure(error, null);
-        return false;
-      }
+      const change = seedGate.changeSeeds(async () => {
+        try {
+          const fairness = await send((key) => client.setClientSeed(clientSeed, key));
+          shownFairness.current = fairness;
+          setState((s) => ({
+            ...s,
+            fairness,
+            notice: { tone: 'info', text: 'Client seed saved.' },
+          }));
+          return true;
+        } catch (error) {
+          handleFailure(error, null);
+          return false;
+        }
+      });
+      return change ?? false;
     },
-    [client, handleFailure],
+    [client, handleFailure, seedGate],
   );
 
   const rotateSeed = useCallback(() => {
-    void (async () => {
+    void seedGate.changeSeeds(async () => {
       try {
         const result = await send((key) => client.rotateSeed(key));
+        shownFairness.current = result.fairness;
         setState((s) => ({
           ...s,
           fairness: result.fairness,
@@ -869,11 +901,13 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
         }));
         // Rounds on the old seed can be verified now.
         void refreshHistory();
+        return true;
       } catch (error) {
         handleFailure(error, null);
+        return false;
       }
-    })();
-  }, [client, handleFailure, refreshHistory]);
+    });
+  }, [client, handleFailure, refreshHistory, seedGate]);
 
   const dismissNotice = useCallback(() => {
     setState((s) => ({ ...s, notice: null }));

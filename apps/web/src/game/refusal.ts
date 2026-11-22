@@ -1,5 +1,6 @@
 import { ApiFailure, NetworkFailure } from '../api/client';
 import type { RoundView } from '../api/contract';
+import { SeedsNotShown } from './session';
 
 /**
  * What the screen does when an action fails. Plain functions, no React, so
@@ -8,7 +9,9 @@ import type { RoundView } from '../api/contract';
 
 /** The words for a failure: the server's own, or a plain fallback. */
 export function describeFailure(error: unknown): string {
-  if (error instanceof ApiFailure || error instanceof NetworkFailure) return error.message;
+  if (error instanceof ApiFailure || error instanceof NetworkFailure || error instanceof SeedsNotShown) {
+    return error.message;
+  }
   return 'Something went wrong. Please try again.';
 }
 
@@ -19,12 +22,13 @@ export function describeFailure(error: unknown): string {
  *   first visit does.
  * - 'resync': the screen may be behind the server. The answer may have been
  *   lost on the way, a round the screen doesn't show is in the way, or the
- *   round the screen shows no longer exists. Ask for the whole state again.
+ *   round the screen shows no longer exists, or the seeds on screen could
+ *   not be bet on (SeedsNotShown). Ask for the whole state again.
  * - 'none': the refusal says all there is (a 409 with the round as it is now
  *   carries that round; too little money carries the balance).
  */
 export function afterFailure(error: unknown): 'start-over' | 'resync' | 'none' {
-  if (error instanceof NetworkFailure) return 'resync';
+  if (error instanceof NetworkFailure || error instanceof SeedsNotShown) return 'resync';
   if (!(error instanceof ApiFailure)) return 'none';
   switch (error.code) {
     case 'no_session':

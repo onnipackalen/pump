@@ -1,5 +1,23 @@
 import { NetworkFailure, type GameClient } from '../api/client';
-import type { FairnessView, RoundSummary, RoundView, SessionView } from '../api/contract';
+import type {
+  ActionResult,
+  FairnessView,
+  RoundSummary,
+  RoundView,
+  SessionView,
+  StartRoundRequest,
+} from '../api/contract';
+import {
+  forgetStarting,
+  rememberShown,
+  rememberStarting,
+  shownFor,
+  startsOnTheirWay,
+  validSeeds,
+  type HashStorage,
+  type SeedsBeforeRound,
+  type StartOnItsWay,
+} from '../verify/shownHashes';
 import { makeClientSeed } from './clientSeed';
 
 /** How many finished rounds the history list holds. */
@@ -80,8 +98,12 @@ export interface OpenedGame {
 export async function openGame(
   client: GameClient,
   makeSeed: () => string = makeClientSeed,
+  storage?: HashStorage | null,
 ): Promise<OpenedGame> {
   const session = await client.getSession();
+  // A start whose answer never came (the page was closed, say) may have
+  // started the round in play: it gets its copy now.
+  keepLostStartCopy(session.activeRound, storage);
   const fairness = await ensureClientSeed(client, session.fairness, makeSeed);
   const history = await client.getHistory(HISTORY_SIZE);
   return { session, fairness, history };
@@ -98,4 +120,104 @@ export function fairnessAfterStart(round: RoundView): FairnessView {
     clientSeed: round.clientSeed,
     nextNonce: round.nonce + 1,
   };
+}
+
+/**
+ * A round start this browser refused, before sending anything: the seeds on
+ * screen are missing or not in a form a real server sends, so the round
+ * could not be checked later against what was shown.
+ */
+export class SeedsNotShown extends Error {
+  constructor() {
+    super(
+      'The round was not started: the seeds under Provably fair are missing or not valid, ' +
+        'so the round could not be checked later.',
+    );
+    this.name = 'SeedsNotShown';
+  }
+}
+
+/**
+ * What a round started now is bet against, as this browser shows it: the
+ * server-seed hash, the client seed and the next nonce from the fairness
+ * panel. Null when the screen shows no seeds yet, or seeds not in a valid
+ * form (see validSeeds): no round is started on those. So every round this
+ * browser starts saves exactly what was on screen, all three values, never
+ * a part of them.
+ */
+export function shownBefore(fairness: FairnessView | null): SeedsBeforeRound | null {
+  if (fairness === null) return null;
+  const shown = {
+    serverSeedHash: fairness.serverSeedHash,
+    clientSeed: fairness.clientSeed,
+    nonce: fairness.nextNonce,
+  };
+  return validSeeds(shown) ? shown : null;
+}
+
+/**
+ * Starts a round, then saves what this browser showed before it, for the
+ * verify page (verify/shownHashes). Every round start goes through here:
+ * the Bet button and auto-play both call the game's startRound action,
+ * which calls this, with the real server or the in-browser demo.
+ *
+ * `before` is the fairness on screen, read by the caller before anything is
+ * sent, and copied here before the request goes out. So the saved copy is
+ * what the player saw, never the server's answer. A retry under the same key
+ * (see send), which the server answers with its stored first answer, saves
+ * that same copy. If both tries lose the answer, the start is still
+ * remembered as on its way, and the next full load of the state gives the
+ * round it started this copy (keepLostStartCopy).
+ *
+ * Throws SeedsNotShown, sending nothing, if the screen shows no valid seeds.
+ */
+export async function startRoundShown(
+  client: GameClient,
+  request: StartRoundRequest,
+  before: FairnessView | null,
+  storage?: HashStorage | null,
+): Promise<ActionResult> {
+  const shown = shownBefore(before);
+  if (shown === null) throw new SeedsNotShown();
+  rememberStarting({ difficultyId: request.difficultyId, betsCents: request.betsCents, shown }, storage);
+  const result = await send((key) => client.startRound(request, key));
+  rememberShown(result.round.id, shown, storage);
+  // A start went through, so no earlier start left a round in play.
+  forgetStarting(storage);
+  return result;
+}
+
+/** Whether this start asked for this round: the same difficulty, and the same bet on each balloon. */
+function askedFor(start: StartOnItsWay, round: RoundView): boolean {
+  return (
+    start.difficultyId === round.difficultyId &&
+    start.betsCents.length === round.balloons.length &&
+    round.balloons.every((b) => start.betsCents[b.index] === b.betCents)
+  );
+}
+
+/**
+ * Called with the round in play whenever the whole state is loaded again:
+ * the first load, a reload, or a resync after a lost answer or a refusal
+ * (round_active, say). Not while a start is on its way: its own answer is
+ * still to come.
+ *
+ * A start whose answer never came (both tries lost, or the page closed) may
+ * have started this round. If this browser has no copy of it, and the
+ * newest start on its way asked for this difficulty and these bets, the
+ * round gets the seeds that start was bet against: what the screen showed,
+ * not what the round says. So a server that played a round on seeds of its
+ * own and then lost the answer on purpose is still checked.
+ *
+ * Then no start is on its way any more: with a round in play, any other
+ * start was refused; with none, none of them started a round still in play.
+ */
+export function keepLostStartCopy(activeRound: RoundView | null, storage?: HashStorage | null): void {
+  const starting = startsOnTheirWay(storage);
+  if (starting.length === 0) return;
+  if (activeRound !== null && shownFor(activeRound.id, storage) === null) {
+    const start = starting.find((s) => askedFor(s, activeRound));
+    if (start) rememberShown(activeRound.id, start.shown, storage);
+  }
+  forgetStarting(storage);
 }

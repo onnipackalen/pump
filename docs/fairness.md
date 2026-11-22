@@ -106,7 +106,25 @@ move the balloon up one rung.
    matches what the game showed.
 
 The verify page in the game does all of this in your browser, the reveal
-included, using the same code the server uses.
+included, using the same code the server uses. It takes the hash, client
+seed and nonce from the copy your browser saved when each round started, not
+from the server's record. It tells you if the record names other ones, sends
+them in a form the game never sends, or is the record of another round.
+That copy is what the game's Provably fair
+panel showed you before the round, so check that the panel shows your own
+client seed. On another device, or after you clear your browser's data, it
+has no copy. It then uses the server's record and says so, and it can't
+catch a server that changed those three. It also has no copy if the server
+gave the round another id in its answers while you played it. Then the page
+looks for a copy saved with the same server seed hash and nonce under
+another id (one server seed and nonce belong to one round only), and tells
+you if that copy names another client seed. It can't catch a server that
+also moved the round to another nonce. So if you played a round in this
+browser not long ago and the page says it has no copy, take that as a
+warning sign. A round started by an older
+version of the game has a copy of the hash only: its client seed and nonce
+come from the server's record, and the page says so. Check them against what
+you saw while playing.
 
 ## Worked example: a round with a Patch save
 
