@@ -27,10 +27,17 @@
  * it names another client seed. A server that also moved the round to a
  * nonce this browser has no copy for is not caught this way; the no-copy
  * note says that a missing copy can be a warning sign.
+ *
+ * All of these compare the record's values exactly as sent. The form, by
+ * contrast, trims text and reads numbers from text, so a record whose hash,
+ * client seed or nonce is not in the exact form a real server sends (a
+ * nonce sent as the text "0", a hash with a space after it) could slip past
+ * a lookup and still add up once the form has tidied it. So such a record is
+ * a problem of its own (recordFormProblem), and never checks out.
  */
 
 import { recordHashProblem } from './hashCheck';
-import { MAX_SHOWN, type ShownEntry, type ShownSeeds } from './shownHashes';
+import { MAX_SHOWN, validSeeds, type ShownEntry, type ShownSeeds } from './shownHashes';
 
 /** The values the server's record names for a round. */
 export interface RecordSeeds {
@@ -87,6 +94,24 @@ export function recordNonceProblem(shownNonce: number | null, recordNonce: numbe
 }
 
 /**
+ * A problem with the server's record itself: its server seed hash, client
+ * seed or nonce is not in the exact form a real server sends (a hash of 64
+ * lowercase hex characters, a client seed of 1 to 64 allowed characters, a
+ * whole number of 0 or more, sent as a number). This server never sends
+ * them any other way, so this gives no false alarms. Null when all three
+ * are in that form.
+ */
+export function recordFormProblem(record: RecordSeeds): string | null {
+  if (validSeeds(record)) return null;
+  return (
+    'The server’s record gives the server seed hash, client seed or nonce in a form this game ' +
+    'never sends (for example a nonce sent as text, or a hash with a space in it). So the ' +
+    'record can’t be compared exactly with what this browser saved, and this round can’t be ' +
+    'called checked.'
+  );
+}
+
+/**
  * A problem with the server's answer itself: the page asked for one round,
  * and the record is another's (or carries another id). Null when the ids
  * are the same.
@@ -122,7 +147,8 @@ export function sameNonceProblem(copy: ShownEntry, record: RecordSeeds): string 
 
 /**
  * Every place the server's answer differs from what it should be: a record
- * under another round id, or another hash, client seed or nonce than this
+ * under another round id, seeds not in the exact form a real server sends
+ * (recordFormProblem), or another hash, client seed or nonce than this
  * browser saved when the round started (`shown`, the copy for `askedId`).
  * With no full copy for `askedId`, `elsewhere` holds the copies saved under
  * other ids with the record's hash and nonce (see copiesWithSameNonce), and
@@ -136,7 +162,7 @@ export function recordProblems(
   record: RecordSeeds,
   elsewhere: readonly ShownEntry[] = [],
 ): string[] {
-  const problems = [recordIdProblem(askedId, record.id)];
+  const problems = [recordIdProblem(askedId, record.id), recordFormProblem(record)];
   if (shown !== null) {
     problems.push(
       recordHashProblem(shown.serverSeedHash, record.serverSeedHash),

@@ -19,6 +19,7 @@ import {
   noRecordNote,
   nonceFieldLabel,
   recordClientSeedProblem,
+  recordFormProblem,
   recordIdProblem,
   recordNonceProblem,
   recordProblems,
@@ -619,5 +620,48 @@ describe('a server that answers the start under another id', () => {
     expect(line).toMatch(/another tab or on another device just before round alias-1 started/);
     expect(sameNonceProblem(['alias-1', SHOWN, 'record-seed', 7], r)).toBeNull();
     expect(recordProblems('round-1', null, r, [['alias-1', SHOWN, 'player-seed', 7]])).toHaveLength(1);
+  });
+
+  // The record as it arrives over the wire, with one field rewritten. The
+  // form tidies these (it trims the hash and reads the nonce from text), so
+  // the draws still add up; only the exact-form check stops them.
+  const rewritten = (r: VerifiableRound, field: string, value: unknown): VerifiableRound =>
+    JSON.parse(JSON.stringify({ ...r, [field]: value })) as VerifiableRound;
+
+  // The last part says whether the lookup by hash and nonce misses the
+  // record: it does for the hash and nonce, not for the client seed.
+  it.each([
+    ['the nonce sent as text', (r: VerifiableRound) => rewritten(r, 'nonce', String(r.nonce)), true],
+    ['a space after the hash', (r: VerifiableRound) => rewritten(r, 'serverSeedHash', `${r.serverSeedHash} `), true],
+    ['a space before the hash', (r: VerifiableRound) => rewritten(r, 'serverSeedHash', ` ${r.serverSeedHash}`), true],
+    ['the hash in capitals', (r: VerifiableRound) => rewritten(r, 'serverSeedHash', r.serverSeedHash.toUpperCase()), true],
+    ['a space after the client seed', (r: VerifiableRound) => rewritten(r, 'clientSeed', `${r.clientSeed} `), false],
+  ])('does not check out when the record sends %s', async (_, reshape, lookupMisses) => {
+    const storage = memoryStorage();
+    const { record: played } = await playThroughStart(
+      new AnswersUnderAnotherId((id) => `alias-${id}`),
+      storage,
+    );
+    const r = reshape(played);
+    // The lookup compares exact values, so it misses a reshaped hash or nonce.
+    expect(roundToCheck(r.id, r, storage).elsewhere.length === 0).toBe(lookupMisses);
+    const problems = recordProblems(r.id, null, r);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('in a form this game never sends');
+
+    const html = renderToStaticMarkup(<Workbench {...roundToCheck(r.id, r, storage)} />);
+    expect(html).not.toContain(SUCCESS);
+    expect(html).toContain('data-verdict="mismatch"');
+    expect(html).toContain('in a form this game never sends');
+  });
+
+  it('a record in the exact form a real server sends has no form problem (no false alarms)', async () => {
+    const records = await playedRecords('player-seed', 3);
+    for (const r of records) {
+      expect(recordFormProblem(r)).toBeNull();
+      // Through JSON, as it arrives.
+      expect(recordFormProblem(JSON.parse(JSON.stringify(r)) as VerifiableRound)).toBeNull();
+      expect(renderToStaticMarkup(<Workbench {...roundToCheck(r.id, r, memoryStorage())} />)).toContain(SUCCESS);
+    }
   });
 });
