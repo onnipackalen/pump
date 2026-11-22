@@ -336,7 +336,11 @@ changes the RTP. A balloon cashed out this way gets a reveal like any other.
 The rule is applied before the player's next request and by a sweep every ten
 minutes. We chose this over forfeiting the bets (unfair to a player whose
 connection dropped) and over leaving rounds open for ever (the player could
-never start another).
+never start another). Each round is settled in its own transaction: if one
+cannot be settled, none of it is saved, it stays as it was, and the error is
+logged with its round and player. The sweep still settles every other round
+and tries that one again next time. Until it settles, that player's own
+requests answer with an error.
 
 **The hammer.** `npm run hammer` starts its own server as a separate process
 on a fresh database, has 20 players play at once, and makes every step a burst
