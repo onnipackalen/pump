@@ -22,6 +22,11 @@
  *     Cash Out, or two Pumps: exactly one may succeed, the other gets a 409;
  *   - several "start a round" requests at once: one round, one set of bets.
  *
+ * First comes the storm: one moment with well over 1,000 requests in flight
+ * at once. Every player starts a three-balloon round, and then every request
+ * for every balloon of every player goes out together, in two waves (see
+ * stormWave). Then the players play their rounds, step by step.
+ *
  * Every round in every answer is also checked: no balloon shows a reveal
  * ("where it would have popped") while its round is still in progress.
  *
@@ -67,7 +72,10 @@ const roundShape = z.object({
 type RoundView = z.infer<typeof roundShape>;
 const successShape = z.object({ round: roundShape });
 const refusalShape = z.object({ error: z.object({ round: roundShape.nullish() }) });
-const sessionShape = z.object({ wallet: z.object({ balanceCents: z.int() }) });
+const sessionShape = z.object({
+  wallet: z.object({ balanceCents: z.int() }),
+  activeRound: roundShape.nullable(),
+});
 
 function option(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -124,11 +132,27 @@ checkOptions();
 const PLAYERS = wholeOption('players', 20);
 const ROUNDS = wholeOption('rounds', 8);
 
+/** Balloons in each player's storm round: the most a round may have. */
+const STORM_BALLOONS = GAME_CONFIG.limits.maxBalloons;
+/**
+ * Different requests each balloon gets in a storm wave, each sent twice: as
+ * many as it takes for the first wave to have at least 1,000 in flight at
+ * once, whatever --players says.
+ */
+const STORM_PER_BALLOON = Math.max(3, Math.ceil(1000 / (PLAYERS * STORM_BALLOONS * 2)));
+/** The storm is played on the ladder whose first pump pops least, so most balloons reach wave two. */
+const STORM_DIFFICULTY = [...GAME_CONFIG.difficulties].sort(
+  (a, b) => (a.ladder[0] ?? 0) - (b.ladder[0] ?? 0),
+)[0];
+/** Each storm bet, in cents: $1, or the smallest bet allowed if that is more. */
+const STORM_BET_CENTS = Math.max(100, GAME_CONFIG.limits.minBetCents);
+
 // --- counting -------------------------------------------------------------
 
 let fired = 0;
 let inFlight = 0;
-let peakInFlight = 0;
+/** The most requests a storm wave put in flight at the same moment. */
+let stormPeak = 0;
 const statusCounts = new Map<number, number>();
 const failures: string[] = [];
 const checks = { pairs: 0, repeats: 0, starts: 0, refusedSeedChanges: 0, rounds: 0 };
@@ -163,7 +187,6 @@ async function send(
 ): Promise<Answer & { setCookie: string | null }> {
   fired += 1;
   inFlight += 1;
-  peakInFlight = Math.max(peakInFlight, inFlight);
   try {
     const response = await fetch(baseUrl + path, {
       method,
@@ -386,6 +409,80 @@ class Player {
     const answer = await send(this.cookie, 'GET', '/api/session');
     return answer.status === 200 ? sessionShape.parse(answer.json).wallet.balanceCents : null;
   }
+
+  /** This player's round in progress, as the server has it now, or null. */
+  async currentRound(): Promise<RoundView | null> {
+    const answer = await send(this.cookie, 'GET', '/api/session');
+    if (answer.status !== 200) {
+      fail(`player ${String(this.number)}: GET /api/session answered ${String(answer.status)}`);
+      return null;
+    }
+    const round = sessionShape.parse(answer.json).activeRound;
+    return round === null ? null : roundIn({ ...answer, json: { round } });
+  }
+
+  /** Starts this player's storm round: STORM_BALLOONS balloons of STORM_BET_CENTS. */
+  async startStormRound(): Promise<void> {
+    const body = {
+      difficultyId: STORM_DIFFICULTY?.id ?? 'easy',
+      betsCents: Array.from({ length: STORM_BALLOONS }, () => STORM_BET_CENTS),
+    };
+    const answer = await send(this.cookie, 'POST', '/api/rounds', body, newKey());
+    if (answer.status !== 200) {
+      fail(`player ${String(this.number)}: the storm round did not start (${String(answer.status)})`);
+    }
+  }
+
+  /**
+   * One storm wave for this player: for every balloon still in play,
+   * STORM_PER_BALLOON different requests made from the same screen, each
+   * sent twice with its own key, all at once (burst). On a balloon not
+   * pumped yet they are all pumps, since nothing can be cashed out before
+   * the first pump. On a pumped balloon they mix Cash Out, Pump and
+   * Patch + Pump. Each balloon's group must have exactly one winner.
+   *
+   * Every request is sent before this returns its promise: `send` counts a
+   * request as in flight before its first await. So when the waves of all
+   * players are started in one go, all of their requests are in flight
+   * together.
+   */
+  stormWave(round: RoundView | null, wave: number): Promise<unknown> {
+    if (round === null) return Promise.resolve();
+    const live = round.balloons.filter((balloon) => balloon.status === 'active');
+    return Promise.all(
+      live.map(({ index, drawIndex, rung }) => {
+        const label = `storm wave ${String(wave)}: player ${String(this.number)} round ${round.id} balloon ${String(index)}`;
+        const requests = Array.from({ length: STORM_PER_BALLOON }, (_, i) => {
+          const kind = rung === 0 ? 1 : i % 3;
+          if (kind === 0) return (key: string) => this.cashOut(round, index, drawIndex, key);
+          return (key: string) => this.pump(round, index, drawIndex, kind === 2, key);
+        });
+        return this.burst(label, requests);
+      }),
+    );
+  }
+
+  /**
+   * Ends this player's round in progress, one balloon at a time: a balloon
+   * never pumped is pumped once, a pumped one is cashed out.
+   */
+  async finishRound(): Promise<void> {
+    for (let step = 0; step < 4 * STORM_BALLOONS; step += 1) {
+      const round = await this.currentRound();
+      const balloon = round?.balloons.find((b) => b.status === 'active');
+      if (!round || !balloon) return;
+      const answer =
+        balloon.rung === 0
+          ? await this.pump(round, balloon.index, balloon.drawIndex, false, newKey())
+          : await this.cashOut(round, balloon.index, balloon.drawIndex, newKey());
+      if (answer.status !== 200) {
+        fail(`player ${String(this.number)}: finishing the storm round got ${String(answer.status)}`);
+        return;
+      }
+      roundIn(answer);
+    }
+    fail(`player ${String(this.number)}: the storm round did not finish`);
+  }
 }
 
 // --- the server under test --------------------------------------------------
@@ -458,6 +555,20 @@ async function run(): Promise<number> {
 
   const players = Array.from({ length: PLAYERS }, (_, i) => new Player(i + 1));
   await Promise.all(players.map((player) => player.join()));
+
+  // The storm. Each wave starts every player's requests in one go, so they
+  // are all in flight at the same moment (see stormWave).
+  await Promise.all(players.map((player) => player.startStormRound()));
+  for (let wave = 1; wave <= 2; wave += 1) {
+    const rounds = await Promise.all(players.map((player) => player.currentRound()));
+    const inFlightBefore = inFlight;
+    const waveDone = Promise.all(players.map((player, i) => player.stormWave(rounds[i] ?? null, wave)));
+    stormPeak = Math.max(stormPeak, inFlight - inFlightBefore);
+    await waveDone;
+  }
+  await Promise.all(players.map((player) => player.finishRound()));
+  const stormFired = fired;
+
   // Everyone plays at once; within each player, every step is a burst.
   await Promise.all(
     players.map(async (player) => {
@@ -467,8 +578,9 @@ async function run(): Promise<number> {
   const balances = await Promise.all(players.map((player) => player.balance()));
 
   console.log(
-    `Fired ${fired.toLocaleString('en-US')} requests from ${String(PLAYERS)} players, ` +
-      `up to ${String(peakInFlight)} in flight at once.`,
+    `Fired ${fired.toLocaleString('en-US')} requests from ${String(PLAYERS)} players: ` +
+      `${stormFired.toLocaleString('en-US')} in the storm, with up to ${stormPeak.toLocaleString('en-US')} ` +
+      `in flight at once, then the rest round by round.`,
   );
   console.log(
     `Answers: ${[...statusCounts.entries()]
@@ -489,7 +601,11 @@ async function run(): Promise<number> {
   const before = failures.length;
 
   console.log('');
-  line('At least 1,000 overlapping requests were fired', fired >= 1000, `${fired.toLocaleString('en-US')} fired`);
+  line(
+    'At least 1,000 requests were in flight at the same moment',
+    stormPeak >= 1000,
+    `${stormPeak.toLocaleString('en-US')} at once, ${fired.toLocaleString('en-US')} fired in all`,
+  );
   line('The server never answered with a 5xx', ![...statusCounts.keys()].some((s) => s >= 500), '');
   line(
     'A repeated key always got the same answer',
@@ -532,7 +648,7 @@ async function run(): Promise<number> {
   const problems = [
     ...failures,
     ...report.problems,
-    ...(fired >= 1000 ? [] : ['fewer than 1,000 requests were fired']),
+    ...(stormPeak >= 1000 ? [] : ['fewer than 1,000 requests were in flight at the same moment']),
     ...(server.child && seenTotal !== storedTotal
       ? [`players see ${String(seenTotal)} cents in total but the database holds ${String(storedTotal)}`]
       : []),

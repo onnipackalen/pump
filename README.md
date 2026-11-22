@@ -436,8 +436,15 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
 
 - `npm run hammer` starts its own server as a separate process on a fresh
   database and has 20 players play at once.
-- Every step is a burst sent at the same moment: the same key twice, Pump
-  with Cash Out, two Pumps, two Cash Outs, four round starts.
+- First a storm: each player starts a three-balloon round, then every
+  balloon of every player gets 9 different requests (Pump, Patch + Pump,
+  Cash Out), each sent twice with its own key, all in the same moment. The
+  first wave puts 1,080 requests in flight at once; a second does the same
+  for the balloons still in play. Each balloon must have exactly one
+  winner, and each pair of sends the very same answer.
+- Then they play rounds, and every step is a burst sent at the same
+  moment: the same key twice, Pump with Cash Out, two Pumps, two Cash Outs,
+  four round starts. About 6,500 requests in all.
 - Then it opens the database and reconciles it.
 - To aim it at a server you already run:
   `npm run hammer -- --url=http://localhost:3000 --db=data/pump.db`.
@@ -539,7 +546,7 @@ All of these run from the repo root.
 | `npm run typecheck` | Strict TypeScript over every package                      |
 | `npm run rtp`       | Exact RTP check: every rung, every Patch, every legal bet |
 | `npm run sim`       | Simulator, 10M rounds per difficulty through the engine   |
-| `npm run hammer`    | 4,000 overlapping requests at a server, then reconciles   |
+| `npm run hammer`    | 1,080 requests at once, 6,500 in all, then reconciles     |
 
 Conventions:
 
