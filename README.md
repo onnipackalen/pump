@@ -690,7 +690,7 @@ because the brief sets it at $0.10.
 
 ## Hours I spent
 
-About 18½ hours of my own time. I counted it from when I was sending
+About 20½ hours of my own time. I counted it from when I was sending
 messages to the AI chats, not from the commits.
 
 - **Friday 20 November:** about 9½ hours, from 1:30 pm to 6 pm and from
@@ -699,6 +699,8 @@ messages to the AI chats, not from the commits.
   engineering competition for the middle of the day. Then about 7 hours in
   the evening, from about 5 pm to midnight, on the write-ups, final checks
   and last fixes.
+- **Sunday 22 November:** about 2 hours in the morning, on the final review
+  and handing it in.
 
 The AI chats kept working while I was away (overnight and during the
 competition), so the project ran for longer than my hours.
