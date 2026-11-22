@@ -39,7 +39,7 @@ import {
   startRoundShown,
   type OpenedGame,
 } from './session';
-import { roundWinTier } from './winTier';
+import { roundNetCents, roundWinTier } from './winTier';
 
 /**
  * What a balloon's picture is doing right now. The balloon art reads it:
@@ -324,16 +324,22 @@ const initialState: GameState = {
  * from before goes: the round (a restored round in progress comes back from
  * the session), the history list, the revealed seeds, and the session net
  * and time, which start again from this balance.
+ *
+ * A restored round counts in full in the new session, the way the live
+ * stats count it: the session starts from the balance before its bets and
+ * Patches, less anything it has already paid. Starting from the balance
+ * alone would count its payout as profit but never its bets.
  */
 export function openedState(s: GameState, opened: OpenedGame, nowMs: number): GameState {
   const { session, fairness, history } = opened;
   const round = session.activeRound;
   const each = <T>(value: T): T[] => (round ? round.balloons.map(() => value) : []);
+  const startBalanceCents = session.wallet.balanceCents - (round ? roundNetCents(round) : 0);
   return {
     ...s,
     phase: 'ready',
     wallet: session.wallet,
-    session: { startedAt: nowMs, startBalanceCents: session.wallet.balanceCents },
+    session: { startedAt: nowMs, startBalanceCents },
     fairness,
     round,
     history,

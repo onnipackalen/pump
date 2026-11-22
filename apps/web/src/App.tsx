@@ -14,7 +14,7 @@ import { SettingsMenu } from './components/SettingsMenu';
 import { SoundToggle } from './components/SoundToggle';
 import { VerifyPage } from './components/VerifyPage';
 import type { AutoPlaySettings } from './game/autoPlay';
-import { checkBets, type BetSetup } from './game/betSetup';
+import { checkBets, setupForRound, type BetSetup } from './game/betSetup';
 import { controlTarget, panelActivity, showOwnPump, SWITCH_PAUSE_MS } from './game/controls';
 import { stageRound } from './game/stage';
 import { useAutoPlay } from './game/useAutoPlay';
@@ -141,6 +141,16 @@ export function App() {
   const sessionMs = useSessionClock(state.session?.startedAt ?? null);
 
   const round = state.round;
+  // A round in play that the bet panel did not set up (one restored after a
+  // page load) takes its difficulty and bets into the panel, once per round,
+  // so its result still shows when it ends (game/betSetup.ts). React's way
+  // to keep state in step with a value: set it during the render.
+  const [setupFromRoundId, setSetupFromRoundId] = useState<string | null>(null);
+  if (round?.status === 'active' && round.id !== setupFromRoundId) {
+    setSetupFromRoundId(round.id);
+    const fromRound = setupForRound(round, setup, config.difficulties);
+    if (fromRound) setSetup(fromRound);
+  }
   const setupDifficulty =
     config.difficulties.find((d) => d.id === setup.difficultyId) ?? config.difficulties[0];
   // The round the stage shows, or null for the next round's set-up: a
