@@ -58,7 +58,7 @@ export function StatsPage({ client, config, latestRoundId, onVerify, onBack }: S
         <div className="stats-head">
           <h1 id="stats-title">Stats</h1>
           <button type="button" className="btn btn-small" onClick={onBack}>
-            Back
+            Back to game
           </button>
         </div>
         {loaded.kind === 'loading' && <p className="hint">Loading…</p>}

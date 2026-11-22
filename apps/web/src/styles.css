@@ -224,7 +224,7 @@ body {
     position: sticky;
     z-index: 5;
     top: 0;
-    background: var(--sky-glow) fixed, var(--stage);
+    background: var(--sky-glow) fixed, var(--scene-top, var(--stage));
   }
 }
 
@@ -256,7 +256,9 @@ body {
  *   top bar, so the page's scroll moves only the panel, over it. The page
  *   comes to rest in one of two places, sheet down or sheet up. (Under
  *   the sheet are the public wins; their table's end is a third place, one
- *   more swipe up. The two sheet places stay where they were.)
+ *   more swipe up. The two sheet places stay where they were. With the
+ *   live stats open, the sheet's last part, there is one more place just
+ *   above them: stats/live-stats.css.)
  * - The top bar stays at the top the whole time, so the balance and the
  *   settings button are always there.
  * - The page never scrolls sideways: the app is clipped at its sides.
@@ -278,8 +280,27 @@ body {
     height: auto;
     overflow-x: hidden;
     overflow-y: auto;
-    /* Sheet down (the top of the page) or sheet up (its end), nothing between. */
+    /* Sheet down (the top of the page) or sheet up (its end); see above for
+       the wins' end and the place above open live stats. */
     scroll-snap-type: y mandatory;
+  }
+  /*
+   * No snapping during a round or while auto-play runs. The page is then
+   * exactly one screen, so there is nothing to snap to anyway.
+   *
+   * Why: on an iPhone, once the sheet had been swiped up (to change the
+   * bet or the balloons), the end of every round after that jumped the
+   * sheet up over the balloons: so fast the pop couldn't be seen, and Bet
+   * was no longer where Pump had been. Safari seems to remember the last
+   * resting place a finger left the page in, and go back to it when the
+   * page changes height. Seen only on a real iPhone; neither Chrome nor
+   * the Mac's Safari engine did it in a test page. With snapping off for
+   * the round, there is no resting place to remember, and when the round
+   * ends the page stays where it is: sheet down, Bet in Pump's place. The
+   * player swipes up for the rest.
+   */
+  html:has(.controls > .round, .auto-progress[data-running='true']) {
+    scroll-snap-type: none;
   }
   body,
   #root {
@@ -306,7 +327,8 @@ body {
     position: sticky;
     z-index: 5;
     top: 0;
-    background: var(--stage);
+    /* The top of the chosen night sky (scenes.css); dusk's is --stage. */
+    background: var(--scene-top, var(--stage));
   }
   .layout {
     flex: 1 0 auto;
@@ -1132,12 +1154,28 @@ input {
  * multiplier turns the warning colour when the bets top out below the
  * count (the box's title says why).
  */
+.field-target {
+  container: target-box / inline-size;
+}
+
 .field-target .target-x {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/*
+ * The multiplier must always show whole: cut short, "1,000.00×" would read
+ * "1,00". Where the box is too narrow for the longest one (5,000.00×, about
+ * 80 px) beside the word "pumps", the word goes; the box's title, the
+ * input's label and the − and + buttons still say what the number is.
+ */
+@container target-box (max-width: 234px) {
+  .field-target .muted {
+    display: none;
+  }
 }
 
 .field-target .target-x[data-top='true'] {
@@ -1428,6 +1466,67 @@ input {
   background: var(--stage);
 }
 
+/* Settings > Background: the name on top, then the scenes in two columns. */
+.bg-picker {
+  min-width: 0;
+  margin: 0;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--line);
+}
+
+.bg-picker legend {
+  float: left;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 4px 0 0;
+  font-weight: 600;
+}
+
+.bg-choices {
+  clear: both;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.bg-choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.bg-choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.bg-swatch {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.bg-choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--panel-raised);
+  color: var(--text);
+}
+
+.bg-choice:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* "Keep my wins private": a settings row with room for a failure under it,
    which starts where the row's label does. */
 .private-wins .private-wins-failure {
@@ -1709,8 +1808,15 @@ th {
 /*
  * The game screen never scrolls, but the verify page is for reading: it
  * scrolls inside its own box, under the top bar.
+ *
+ * "position: relative" keeps text placed with position: absolute (the
+ * screen-reader labels in the list of rounds) inside this box. Without it
+ * that text is placed against the window instead, makes the window taller
+ * than the screen, and lets the window scroll: the player can't scroll it
+ * back, because the page clips it.
  */
 .verify {
+  position: relative;
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
@@ -1773,6 +1879,27 @@ th {
 
 .verify-rounds li[data-current='true'] {
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+.verify-round {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* As much of the id as fits. The whole id is there: one click selects it to copy. */
+.verify-rounds .verify-round-id {
+  overflow: hidden;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
+.verify-older {
+  margin-top: 8px;
 }
 
 .verify-rotate {

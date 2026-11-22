@@ -28,6 +28,17 @@ export interface FinishedRound {
   readonly finishedAt: string;
 }
 
+/**
+ * Where a finished round sits in the history order: newest finish first,
+ * then newest start, then the highest id. A page of older rounds starts
+ * right after it.
+ */
+export interface HistoryPlace {
+  readonly id: string;
+  readonly finishedAt: string;
+  readonly startedAt: string;
+}
+
 /** One finished round's money, for the stats page. Refunded (void) bets are left out. */
 export interface PlayedRound {
   readonly id: string;
@@ -270,23 +281,48 @@ export function roundsRepository(db: Db) {
   const countActive = db.prepare(
     "SELECT COUNT(*) AS n FROM rounds WHERE player_id = :playerId AND status = 'active'",
   );
-  const selectFinished = db.prepare(`
-    SELECT r.id, r.difficulty_id, r.nonce, r.finished_at, s.seed_hash, s.revealed_at,
-           COUNT(b.balloon_index)            AS balloon_count,
-           -- A refunded bet is void: it was never played, so it is not a stake.
-           COALESCE(SUM(CASE WHEN b.status = 'refunded' THEN 0 ELSE b.bet_cents END), 0)
-                                             AS bet_cents,
-           COALESCE(SUM(CASE WHEN b.status = 'refunded' THEN b.bet_cents ELSE 0 END), 0)
-                                             AS refunded_cents,
-           COALESCE(SUM(b.patches_cents), 0) AS patches_cents,
-           COALESCE(SUM(b.payout_cents), 0)  AS payout_cents
-    FROM rounds r
-    JOIN server_seeds s ON s.id = r.server_seed_id
-    LEFT JOIN balloons b ON b.round_id = r.id
-    WHERE r.player_id = :playerId AND r.status = 'finished'
-    GROUP BY r.id
-    ORDER BY r.finished_at DESC, r.started_at DESC, r.id DESC
-    LIMIT :limit
+  // The history list: a player's finished rounds, newest first, one page at
+  // a time. The order is finish time, then start time, then id, so it is
+  // the same on every read, even for rounds that finished in the same
+  // millisecond. The page's rounds are picked first, from the rounds table
+  // alone (the rounds_history index on player and finish time finds them
+  // without reading the rest), and only their balloons are then added up.
+  const finishedPage = (olderThan: string) =>
+    db.prepare(`
+      WITH page AS (
+        SELECT r.id, r.difficulty_id, r.nonce, r.started_at, r.finished_at, r.server_seed_id
+        FROM rounds r
+        WHERE r.player_id = :playerId AND r.status = 'finished' ${olderThan}
+        ORDER BY r.finished_at DESC, r.started_at DESC, r.id DESC
+        LIMIT :limit
+      )
+      SELECT p.id, p.difficulty_id, p.nonce, p.finished_at, s.seed_hash, s.revealed_at,
+             COUNT(b.balloon_index)            AS balloon_count,
+             -- A refunded bet is void: it was never played, so it is not a stake.
+             COALESCE(SUM(CASE WHEN b.status = 'refunded' THEN 0 ELSE b.bet_cents END), 0)
+                                               AS bet_cents,
+             COALESCE(SUM(CASE WHEN b.status = 'refunded' THEN b.bet_cents ELSE 0 END), 0)
+                                               AS refunded_cents,
+             COALESCE(SUM(b.patches_cents), 0) AS patches_cents,
+             COALESCE(SUM(b.payout_cents), 0)  AS payout_cents
+      FROM page p
+      JOIN server_seeds s ON s.id = p.server_seed_id
+      LEFT JOIN balloons b ON b.round_id = p.id
+      GROUP BY p.id
+      ORDER BY p.finished_at DESC, p.started_at DESC, p.id DESC
+    `);
+  const selectFinished = finishedPage('');
+  // A later page: only the rounds that come after one round in that order.
+  // The three values are compared as one row, (a, b, c) < (x, y, z), which
+  // is exactly the order's own rule. So a page starts right after that
+  // round, and rounds tied on finish time are never skipped or listed twice.
+  const selectFinishedAfter = finishedPage(
+    'AND (r.finished_at, r.started_at, r.id) < (:finishedAt, :startedAt, :id)',
+  );
+  // Only a finished round of this same player can mark a place in their list.
+  const selectPlace = db.prepare(`
+    SELECT id, finished_at, started_at FROM rounds
+    WHERE id = :id AND player_id = :playerId AND status = 'finished'
   `);
   // Every finished round of a player, oldest first, in the same order as the
   // history list read backwards. Refunded balloons are void, so they add
@@ -448,9 +484,37 @@ export function roundsRepository(db: Db) {
       return row ? toStoredRound(row) : null;
     },
 
-    /** The player's latest finished rounds, newest first. */
-    latestFinished(playerId: string, limit: number): FinishedRound[] {
-      return selectFinished.all({ playerId, limit }).map(toFinishedRound);
+    /**
+     * The player's latest finished rounds, newest first, at most `limit`.
+     * With `after`, only the rounds that come after that place in the order.
+     */
+    latestFinished(
+      playerId: string,
+      limit: number,
+      after: HistoryPlace | null = null,
+    ): FinishedRound[] {
+      const rows =
+        after === null
+          ? selectFinished.all({ playerId, limit })
+          : selectFinishedAfter.all({
+              playerId,
+              limit,
+              id: after.id,
+              finishedAt: after.finishedAt,
+              startedAt: after.startedAt,
+            });
+      return rows.map(toFinishedRound);
+    },
+
+    /** Where one of the player's finished rounds sits in their history, or null if it is not one. */
+    placeOfFinished(playerId: string, roundId: string): HistoryPlace | null {
+      const row = selectPlace.get({ playerId, id: roundId });
+      if (!row) return null;
+      return {
+        id: text(row, 'id'),
+        finishedAt: text(row, 'finished_at'),
+        startedAt: text(row, 'started_at'),
+      };
     },
 
     /** Every finished round of the player with its money, oldest first. */

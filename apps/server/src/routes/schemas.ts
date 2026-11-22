@@ -8,9 +8,15 @@ import { HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT } from '../settings';
  * well-formed values.
  */
 
-/** GET /api/history?limit=10 */
+/** A round id: 1 to 64 characters from A-Z, a-z, 0-9, _ and -. */
+const roundId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, { message: 'That is not a round id.' });
+
+/** GET /api/history?limit=10&before=<round id> */
 export const historyQuery = z.object({
   limit: z.coerce.number().int().min(1).max(HISTORY_MAX_LIMIT).default(HISTORY_DEFAULT_LIMIT),
+  // The page after this round. Whether it is one of the player's finished
+  // rounds is checked by the service; here only that it looks like an id.
+  before: roundId.optional(),
 });
 
 /** PUT /api/settings */
@@ -32,9 +38,7 @@ export const clientSeedBody = z.strictObject({
  */
 
 /** The :roundId in an address. */
-export const roundParams = z.object({
-  roundId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, { message: 'That is not a round id.' }),
-});
+export const roundParams = z.object({ roundId });
 
 /** POST /api/rounds */
 export const startRoundBody = z.strictObject({

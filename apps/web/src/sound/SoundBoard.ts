@@ -1,13 +1,13 @@
 /**
- * Game sounds, made in the browser with the Web Audio API. No sound files:
- * every cue is a few oscillators or a burst of noise, a fraction of a
- * second long.
+ * The game's speaker: one Web Audio context, the on/off switch, and a
+ * safety limiter. What each cue sounds like is in voices.ts.
  *
  * Browsers only allow audio after the player has clicked or pressed a key,
  * so the app calls unlock() from its first click or key press.
  */
 
 import type { Cue } from './cues';
+import { drawCue, makeNoise } from './voices';
 
 const MUTED_KEY = 'pump.sound.muted';
 const MASTER_VOLUME = 0.5;
@@ -71,38 +71,7 @@ export class SoundBoard {
       return;
     }
     const now = context.currentTime + 0.005 + Math.max(0, delay);
-    const out = this.master;
-    // Pitch climbs one and a half octaves from the bottom of the ladder to the top.
-    const climb = 2 ** (1.5 * Math.min(1, Math.max(0, height)));
-
-    switch (cue) {
-      case 'start':
-        this.tone(out, now, 660, 660, 0.04, 0.05, 'sine');
-        break;
-      case 'press':
-        this.puff(out, now, 450 * climb, 0.09, 0.09);
-        break;
-      case 'survive':
-        this.tone(out, now, 420 * climb, 560 * climb, 0.09, 0.07, 'triangle');
-        break;
-      case 'saved':
-        this.tone(out, now, 220, 220, 0.07, 0.08, 'triangle');
-        this.tone(out, now + 0.08, 330, 330, 0.09, 0.07, 'triangle');
-        break;
-      case 'pop':
-        // Quiet on purpose: a loss gets a short, soft pop and nothing more.
-        this.puff(out, now, 700, 0.06, 0.07, 'lowpass');
-        break;
-      case 'return':
-        this.tone(out, now, 520, 520, 0.05, 0.04, 'sine');
-        break;
-      case 'win':
-        this.chime(out, now, [880, 1318.5]);
-        break;
-      case 'big-win':
-        this.chime(out, now, [880, 1108.7, 1318.5, 1760]);
-        break;
-    }
+    drawCue(this.master, now, cue, height, this.noiseFor(context));
   }
 
   /** Resumes a context that isn't running. A refusal is expected outside a gesture. */
@@ -120,7 +89,16 @@ export class SoundBoard {
       const context = new AudioContext();
       const master = context.createGain();
       master.gain.value = this.mutedNow ? 0 : MASTER_VOLUME;
-      master.connect(context.destination);
+      // A safety limit. One cue on its own never reaches it; when three
+      // balloons and auto-play stack cues on top of each other, the peaks
+      // are squeezed instead of crackling.
+      const limiter = context.createDynamicsCompressor();
+      limiter.threshold.value = -10;
+      limiter.knee.value = 6;
+      limiter.ratio.value = 8;
+      limiter.attack.value = 0.002;
+      limiter.release.value = 0.12;
+      master.connect(limiter).connect(context.destination);
       this.context = context;
       this.master = master;
       return context;
@@ -129,72 +107,10 @@ export class SoundBoard {
     }
   }
 
-  /** One oscillator gliding from `from` to `to` Hz, with a quick fade out. */
-  private tone(
-    out: AudioNode,
-    at: number,
-    from: number,
-    to: number,
-    seconds: number,
-    volume: number,
-    type: OscillatorType,
-  ): void {
-    const context = out.context;
-    const osc = context.createOscillator();
-    const gain = context.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(from, at);
-    if (to !== from) osc.frequency.exponentialRampToValueAtTime(to, at + seconds);
-    gain.gain.setValueAtTime(0.0001, at);
-    gain.gain.exponentialRampToValueAtTime(volume, at + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, at + seconds);
-    osc.connect(gain).connect(out);
-    osc.start(at);
-    osc.stop(at + seconds + 0.02);
-  }
-
-  /** A short burst of filtered noise: air through the pump, or a soft pop. */
-  private puff(
-    out: AudioNode,
-    at: number,
-    frequency: number,
-    seconds: number,
-    volume: number,
-    filterType: BiquadFilterType = 'bandpass',
-  ): void {
-    const context = out.context;
-    const source = context.createBufferSource();
-    source.buffer = this.noiseBuffer(context);
-    const filter = context.createBiquadFilter();
-    filter.type = filterType;
-    filter.frequency.setValueAtTime(frequency, at);
-    filter.Q.value = filterType === 'bandpass' ? 1.2 : 0.7;
-    const gain = context.createGain();
-    gain.gain.setValueAtTime(0.0001, at);
-    gain.gain.exponentialRampToValueAtTime(volume, at + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, at + seconds);
-    source.connect(filter).connect(gain).connect(out);
-    source.start(at);
-    source.stop(at + seconds + 0.02);
-  }
-
-  /** Bright notes one after another: the win sound. */
-  private chime(out: AudioNode, at: number, notes: readonly number[]): void {
-    notes.forEach((frequency, i) => {
-      const start = at + i * 0.07;
-      this.tone(out, start, frequency, frequency, 0.32, 0.11, 'triangle');
-      this.tone(out, start, frequency * 2, frequency * 2, 0.18, 0.03, 'sine');
-    });
-  }
-
-  /** Half a second of white noise, made once and reused. */
-  private noiseBuffer(context: BaseAudioContext): AudioBuffer {
-    if (this.noise) return this.noise;
-    const buffer = context.createBuffer(1, Math.floor(context.sampleRate * 0.5), context.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
-    this.noise = buffer;
-    return buffer;
+  /** The shared white noise, made once for this context. */
+  private noiseFor(context: AudioContext): AudioBuffer {
+    this.noise ??= makeNoise(context);
+    return this.noise;
   }
 }
 

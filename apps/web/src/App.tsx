@@ -14,7 +14,7 @@ import { SettingsMenu } from './components/SettingsMenu';
 import { SoundToggle } from './components/SoundToggle';
 import { VerifyPage } from './components/VerifyPage';
 import type { AutoPlaySettings } from './game/autoPlay';
-import { checkBets, type BetSetup } from './game/betSetup';
+import { checkBets, setupForRound, type BetSetup } from './game/betSetup';
 import { controlTarget, panelActivity, showOwnPump, SWITCH_PAUSE_MS } from './game/controls';
 import { stageRound } from './game/stage';
 import { useAutoPlay } from './game/useAutoPlay';
@@ -32,6 +32,8 @@ import {
 import { market } from './market';
 import { formatCents, formatElapsed, formatSignedCents, parseDollarsToCents } from './money';
 import { useMotionSetting } from './motion';
+import { useBackgroundSetting } from './background';
+import { BackgroundPicker } from './components/BackgroundPicker';
 import { flowsOnChange, useStageFlow } from './stageFlow';
 import './flow.css';
 import { shownReveals } from './verify/shownReveals';
@@ -131,6 +133,7 @@ export function App() {
   const [view, setView] = useState<View>(viewFromHash);
   const [verifyRoundId, setVerifyRoundId] = useState<string | null>(null);
   const motion = useMotionSetting();
+  const scene = useBackgroundSetting();
   // A new number of balloons or difficulty glides into place (stageFlow.ts).
   const slotsRef = useRef<HTMLDivElement>(null);
   const goneRef = useRef<HTMLDivElement>(null);
@@ -138,6 +141,16 @@ export function App() {
   const sessionMs = useSessionClock(state.session?.startedAt ?? null);
 
   const round = state.round;
+  // A round in play that the bet panel did not set up (one restored after a
+  // page load) takes its difficulty and bets into the panel, once per round,
+  // so its result still shows when it ends (game/betSetup.ts). React's way
+  // to keep state in step with a value: set it during the render.
+  const [setupFromRoundId, setSetupFromRoundId] = useState<string | null>(null);
+  if (round?.status === 'active' && round.id !== setupFromRoundId) {
+    setSetupFromRoundId(round.id);
+    const fromRound = setupForRound(round, setup, config.difficulties);
+    if (fromRound) setSetup(fromRound);
+  }
   const setupDifficulty =
     config.difficulties.find((d) => d.id === setup.difficultyId) ?? config.difficulties[0];
   // The round the stage shows, or null for the next round's set-up: a
@@ -471,6 +484,7 @@ export function App() {
                 {motion.animationsOn ? 'On' : 'Off'}
               </button>
             </div>
+            <BackgroundPicker value={scene.background} onChange={scene.choose} />
             <PrivateWinsRow client={gameClient} open={settingsOpen} />
             {state.fairness && (
               <FairnessPanel
@@ -517,6 +531,7 @@ export function App() {
           client={gameClient}
           config={config}
           rounds={state.history}
+          revealedSeedHashes={state.revealed.map((seed) => seed.serverSeedHash)}
           initialRoundId={verifyRoundId}
           canRotate={!roundActive && !autoRunning && !state.starting && state.phase === 'ready'}
           onRotate={game.rotateSeed}
@@ -602,10 +617,11 @@ export function App() {
           <div className="slots-gone" ref={goneRef} aria-hidden="true" />
         </section>
 
-        {/* Live stats: between the stage and the controls, so on an upright
-            phone it is the top of the sheet. Where it sits at each size is
-            in stats/live-stats.css. */}
-        {liveStats.shown && <LiveStats live={liveStats} />}
+        {/* Live stats beside the game: under the controls on a computer.
+            On an upright screen it is the last part of the bet sheet
+            instead (at the end of the controls, below). Where it sits at
+            each size is in stats/live-stats.css. */}
+        {liveStats.shown && !liveStats.upright && <LiveStats live={liveStats} />}
 
         {state.phase !== 'loading' && (
           <aside className="controls" aria-label="Controls">
@@ -707,6 +723,11 @@ export function App() {
                 )}
               </>
             )}
+
+            {/* Upright screen: the live stats are the sheet's last part, under
+                every bet control, so Bet never moves out of Pump's place. The
+                chart button slides the sheet up to them. */}
+            {liveStats.shown && liveStats.upright && <LiveStats live={liveStats} />}
           </aside>
         )}
       </main>

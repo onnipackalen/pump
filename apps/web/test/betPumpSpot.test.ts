@@ -488,6 +488,14 @@ describe('the CSS that keeps the boxes the same', () => {
     expect(upright).not.toMatch(/::before \{\s*display: none/);
   });
 
+  // Only a real iPhone showed the bug this rule fixes (the sheet jumped up
+  // when a round ended), so nothing but this test would notice it gone.
+  it('turns page snapping off on phones during a round and auto-play, so the sheet stays down when the round ends', () => {
+    expect(upright).toMatch(
+      /html:has\(\.controls > \.round, \.auto-progress\[data-running='true'\]\) \{\s*scroll-snap-type: none;/,
+    );
+  });
+
   it('never lets the big button grow past the Bet button\'s height', () => {
     expect(css).not.toMatch(/round-actions \{[^}]*grid-template-rows/);
     expect(css).toMatch(/\.round-actions > \.btn-primary \{\s*grid-column: 1 \/ -1;/);

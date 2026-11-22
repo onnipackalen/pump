@@ -11,7 +11,7 @@ import {
   type CheckedReveal,
   type RoundCheck,
 } from '@pump/engine/fair';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ApiFailure, NetworkFailure, type GameClient } from '../api/client';
 import type {
   BalloonStatus,
@@ -22,8 +22,10 @@ import type {
   VerifiableRound,
 } from '../api/contract';
 import { afterRoundText } from '../game/afterRound';
+import { HISTORY_SIZE } from '../game/session';
 import { centsToInput, formatCents, formatMultiplier, formatSignedCents, parseDollarsToCents } from '../money';
 import { actionsToText, textToActions } from '../verify/actionsText';
+import { CheckScroll, scrollBoxTo } from '../verify/checkScroll';
 import {
   clientSeedFieldLabel,
   noRecordNote,
@@ -38,14 +40,26 @@ import {
   type ShownEntry,
   type ShownSeeds,
 } from '../verify/shownHashes';
+import {
+  askForOlder,
+  listedRounds,
+  loadOlderPage,
+  mayHaveOlder,
+  olderUnknownAfter,
+  roundListStep,
+  startRoundList,
+  withSeedsKnown,
+} from '../verify/roundList';
 import { screenAgrees, shownReveals, topAgrees } from '../verify/shownReveals';
 import { roundVerdict } from '../verify/verdict';
 
 interface VerifyPageProps {
   readonly client: GameClient;
   readonly config: GameConfig;
-  /** Recent finished rounds, newest first. */
+  /** The game's list of the newest finished rounds, newest first. */
   readonly rounds: readonly RoundSummary[];
+  /** The hashes of the server seeds this browser has rotated out and seen revealed. */
+  readonly revealedSeedHashes: readonly string[];
   /** A round to open straight away, or null. */
   readonly initialRoundId: string | null;
   /** The seed can be rotated now: no round or auto-play in progress. */
@@ -59,6 +73,20 @@ const timeOfDay = new Intl.DateTimeFormat(undefined, {
   minute: '2-digit',
   second: '2-digit',
 });
+
+const dayAndTime = new Intl.DateTimeFormat(undefined, {
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+});
+
+/** When a round finished: the time of day, and the date too if that was not `today`. */
+function finishedWhen(iso: string, today: string): string {
+  const at = new Date(iso);
+  return at.toDateString() === today ? timeOfDay.format(at) : dayAndTime.format(at);
+}
 
 function describeFailure(error: unknown): string {
   if (error instanceof ApiFailure || error instanceof NetworkFailure) return error.message;
@@ -84,6 +112,7 @@ export function VerifyPage({
   client,
   config,
   rounds,
+  revealedSeedHashes,
   initialRoundId,
   canRotate,
   onRotate,
@@ -91,11 +120,28 @@ export function VerifyPage({
 }: VerifyPageProps) {
   const [roundId, setRoundId] = useState<string | null>(initialRoundId);
   const [idText, setIdText] = useState('');
-  const label = (id: string): string => config.difficulties.find((d) => d.id === id)?.label ?? id;
-  const anyUnrevealed = rounds.some((r) => !r.seedRevealed);
+  const list = useRoundList(client, rounds);
+  const listed = withSeedsKnown(listedRounds(list.state), revealedSeedHashes);
+  const anyUnrevealed = listed.some((r) => !r.seedRevealed);
+  // Read once, so the dates in the list don't change while it is open.
+  const [today] = useState(() => new Date().toDateString());
+  const box = useRef<HTMLElement>(null);
+  const pick = useRef<HTMLElement>(null);
+  // The check comes up just under this list, which can be long once older
+  // rounds are loaded. Check brings it into view once it is drawn, by
+  // scrolling this page's own box only (see verify/checkScroll).
+  const [scroll] = useState(() => new CheckScroll());
+  const toCheck = useCallback((): void => {
+    const target = pick.current?.nextElementSibling;
+    if (box.current && target) scrollBoxTo(box.current, target);
+  }, []);
+  const check = (id: string): void => {
+    if (scroll.pressed(id)) toCheck();
+    setRoundId(id);
+  };
 
   return (
-    <main className="verify" aria-labelledby="verify-title">
+    <main ref={box} className="verify" aria-labelledby="verify-title">
       <div className="verify-inner">
         <div className="verify-head">
           <h1 id="verify-title">Verify a round</h1>
@@ -109,38 +155,21 @@ export function VerifyPage({
           checks it against what was recorded and paid.
         </p>
 
-        <section className="card panel" aria-labelledby="verify-pick">
+        <section ref={pick} className="card panel" aria-labelledby="verify-pick">
           <h2 id="verify-pick">Pick a round</h2>
-          {rounds.length === 0 ? (
-            <p className="hint">No finished rounds yet.</p>
-          ) : (
-            <ul className="verify-rounds">
-              {rounds.map((r) => {
-                const net = r.payoutCents - r.betCents - r.patchesCents;
-                return (
-                  <li key={r.id} data-current={roundId === r.id}>
-                    <span>
-                      {timeOfDay.format(new Date(r.finishedAt))} · {label(r.difficultyId)} ·{' '}
-                      {r.balloonCount} balloon{r.balloonCount === 1 ? '' : 's'} ·{' '}
-                      <span className={net > 0 ? 'win' : 'muted'}>{formatSignedCents(net)}</span>
-                    </span>
-                    {r.seedRevealed ? (
-                      <button
-                        type="button"
-                        className="btn btn-small"
-                        aria-pressed={roundId === r.id}
-                        onClick={() => setRoundId(r.id)}
-                      >
-                        Check
-                      </button>
-                    ) : (
-                      <span className="muted">Seed in use</span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <RoundPicker
+            config={config}
+            rounds={listed}
+            current={roundId}
+            today={today}
+            older={{
+              shown: mayHaveOlder(list.state, HISTORY_SIZE),
+              loading: list.state.loadingAfter !== null,
+              failure: list.state.failure,
+            }}
+            onCheck={check}
+            onOlder={list.loadOlder}
+          />
           {anyUnrevealed && (
             <div className="verify-rotate">
               <p className="hint">
@@ -176,9 +205,129 @@ export function VerifyPage({
           </form>
         </section>
 
-        {roundId !== null && <RoundLoader key={roundId} client={client} roundId={roundId} />}
+        {roundId !== null && (
+          <RoundLoader
+            key={roundId}
+            client={client}
+            roundId={roundId}
+            scroll={scroll}
+            onScroll={toCheck}
+          />
+        )}
       </div>
     </main>
+  );
+}
+
+/**
+ * The list of rounds to pick from: the game's newest rounds, then older
+ * pages loaded with the button. The game loads its own list again whenever
+ * a round ends or the seed is rotated; the rules for keeping the pages
+ * below it right are in verify/roundList.
+ */
+function useRoundList(client: GameClient, newest: readonly RoundSummary[]) {
+  const [state, dispatch] = useReducer(roundListStep, newest, startRoundList);
+
+  useEffect(() => {
+    dispatch({ type: 'newest', rounds: newest });
+  }, [newest]);
+
+  // A full list may be every round there is: ask once, so the button shows
+  // only if older rounds remain.
+  const askAfter = olderUnknownAfter(state, HISTORY_SIZE);
+  useEffect(() => {
+    if (askAfter !== null) void askForOlder(client, askAfter, dispatch);
+  }, [client, askAfter]);
+
+  const loadOlder = (): void => {
+    void loadOlderPage(client, state, dispatch);
+  };
+
+  return { state, loadOlder };
+}
+
+/** What the "Older rounds" button shows. */
+export interface OlderRounds {
+  /** Older rounds remain, or may: the button shows. */
+  readonly shown: boolean;
+  /** A page is on its way. */
+  readonly loading: boolean;
+  readonly failure: string | null;
+}
+
+interface RoundPickerProps {
+  readonly config: GameConfig;
+  /** Every round listed, newest first. */
+  readonly rounds: readonly RoundSummary[];
+  /** The round being checked, or null. */
+  readonly current: string | null;
+  /** Today, as Date.toDateString() gives it: older rounds show their date too. */
+  readonly today: string;
+  readonly older: OlderRounds;
+  readonly onCheck: (roundId: string) => void;
+  readonly onOlder: () => void;
+}
+
+/**
+ * The rounds to pick from, as drawn. Each shows its id, cut to fit: the
+ * whole id is there to read on hover and to copy (one click selects it).
+ */
+export function RoundPicker({ config, rounds, current, today, older, onCheck, onOlder }: RoundPickerProps) {
+  const label = (id: string): string => config.difficulties.find((d) => d.id === id)?.label ?? id;
+  if (rounds.length === 0) return <p className="hint">No finished rounds yet.</p>;
+  return (
+    <>
+      <ul className="verify-rounds">
+        {rounds.map((r) => {
+          const net = r.payoutCents - r.betCents - r.patchesCents;
+          return (
+            <li key={r.id} data-current={current === r.id}>
+              <span className="verify-round">
+                <span>
+                  {finishedWhen(r.finishedAt, today)} · {label(r.difficultyId)} · {r.balloonCount}{' '}
+                  balloon{r.balloonCount === 1 ? '' : 's'} ·{' '}
+                  <span className={net > 0 ? 'win' : 'muted'}>{formatSignedCents(net)}</span>
+                </span>
+                <span className="visually-hidden">Round id </span>
+                <code className="verify-round-id" title={r.id}>
+                  {r.id}
+                </code>
+              </span>
+              {r.seedRevealed ? (
+                <button
+                  type="button"
+                  className="btn btn-small"
+                  aria-pressed={current === r.id}
+                  onClick={() => onCheck(r.id)}
+                >
+                  Check
+                </button>
+              ) : (
+                <span className="muted">Seed in use</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {older.shown && (
+        <div className="verify-older">
+          <button
+            type="button"
+            className="btn btn-small"
+            disabled={older.loading}
+            aria-busy={older.loading}
+            onClick={onOlder}
+          >
+            {older.loading ? 'Loading…' : 'Older rounds'}
+          </button>
+        </div>
+      )}
+      {older.failure !== null && (
+        <p className="bet-note error" role="alert">
+          {older.failure}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -220,12 +369,30 @@ export function roundToCheck(
   return { roundId, record, shown, elsewhere };
 }
 
+interface RoundLoaderProps {
+  readonly client: GameClient;
+  readonly roundId: string;
+  /** Told when the check is drawn and when it goes, so Check can scroll to it. */
+  readonly scroll: CheckScroll;
+  /** Scrolls the page to the check. */
+  readonly onScroll: () => void;
+}
+
 /**
  * Fetches one round's record, then hands it to the workbench with what this
  * browser saved before that round (hash, client seed, nonce), if anything.
  */
-function RoundLoader({ client, roundId }: { readonly client: GameClient; readonly roundId: string }) {
+function RoundLoader({ client, roundId, scroll, onScroll }: RoundLoaderProps) {
   const [loaded, setLoaded] = useState<RoundToCheck | { readonly error: string } | null>(null);
+  const drawn = loaded !== null;
+
+  // Once the check, or the note that it failed, is drawn, Check can bring it
+  // into view. Before the screen is painted, so it never shows in the wrong place.
+  useLayoutEffect(() => {
+    if (!drawn) return undefined;
+    if (scroll.shown(roundId)) onScroll();
+    return () => scroll.gone(roundId);
+  }, [drawn, roundId, scroll, onScroll]);
 
   useEffect(() => {
     let cancelled = false;

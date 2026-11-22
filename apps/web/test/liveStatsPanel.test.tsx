@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { LiveStats, LiveStatsOpener } from '../src/stats/LiveStats';
 import { addRound, NO_LIVE_STATS, type LiveStats as Figures } from '../src/stats/liveTally';
 import { ProfitChart } from '../src/stats/ProfitChart';
-import { heldBy, type InPlay, type LiveStatsControl } from '../src/stats/useLiveStats';
+import { sheetUpTop, SLIDE_MAX_MS, slideOver } from '../src/stats/slideSheet';
+import { heldBy, tapOpener, type InPlay, type LiveStatsControl } from '../src/stats/useLiveStats';
 import { balloon, round } from './fixtures';
 
 function control(stats: Figures, open = true, held: InPlay = null): LiveStatsControl {
@@ -13,6 +15,9 @@ function control(stats: Figures, open = true, held: InPlay = null): LiveStatsCon
     open,
     heldBy: held,
     shown: open && held === null,
+    upright: false,
+    reveal: false,
+    revealed: nothing,
     panelId: 'live-panel',
     openerId: 'live-opener',
     toggle: nothing,
@@ -118,7 +123,7 @@ describe('LiveStatsOpener', () => {
   });
 
   it('says it is waiting, and never claims to be open, while play holds the panel back', () => {
-    // Open before the round: on an upright screen the strip waits for it to end.
+    // Open before the round: on an upright screen the panel waits for it to end.
     const round = renderToStaticMarkup(
       <LiveStatsOpener live={control(NO_LIVE_STATS, true, 'round')} />,
     );
@@ -135,6 +140,25 @@ describe('LiveStatsOpener', () => {
   });
 });
 
+describe('LiveStatsOpener on an upright screen', () => {
+  it('says it shows the panel once it is open, as a tap there shows rather than closes', () => {
+    const open = renderToStaticMarkup(
+      <LiveStatsOpener live={{ ...control(NO_LIVE_STATS, true), upright: true }} />,
+    );
+    expect(open).toContain('title="Show live stats"');
+    // Still true: the panel is open and on the page, at the bottom of the sheet.
+    expect(open).toContain('aria-expanded="true"');
+    const closed = renderToStaticMarkup(
+      <LiveStatsOpener live={{ ...control(NO_LIVE_STATS, false), upright: true }} />,
+    );
+    expect(closed).toContain('title="Live stats"');
+    const held = renderToStaticMarkup(
+      <LiveStatsOpener live={{ ...control(NO_LIVE_STATS, true, 'round'), upright: true }} />,
+    );
+    expect(held).toContain('title="Live stats after this round"');
+  });
+});
+
 describe('heldBy', () => {
   it('holds the panel back during play on an upright screen only', () => {
     expect(heldBy('round', true)).toBe('round');
@@ -143,6 +167,74 @@ describe('heldBy', () => {
     // Beside the game it has its own room.
     expect(heldBy('round', false)).toBeNull();
     expect(heldBy('auto-play', false)).toBeNull();
+  });
+});
+
+describe('tapOpener', () => {
+  it('opens and closes the card beside the game', () => {
+    expect(tapOpener(false, false)).toEqual({ open: true, reveal: false });
+    expect(tapOpener(true, false)).toEqual({ open: false, reveal: false });
+  });
+
+  it('on an upright screen always shows the panel and slides the sheet up to it', () => {
+    // The panel sits at the bottom of the sheet, out of sight while the sheet
+    // is down: a tap that closed it would seem to do nothing.
+    expect(tapOpener(false, true)).toEqual({ open: true, reveal: true });
+    expect(tapOpener(true, true)).toEqual({ open: true, reveal: true });
+  });
+});
+
+describe('where the live stats sit on an upright screen', () => {
+  const css = readFileSync(new URL('../src/stats/live-stats.css', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const upright = css.slice(css.indexOf('@media (orientation: portrait) {'));
+
+  it('puts them at the end of the controls, after Manual | Auto, so Bet never moves', () => {
+    const controls = app.slice(app.indexOf('<aside className="controls"'), app.indexOf('</aside>'));
+    const inSheet = controls.indexOf('liveStats.shown && liveStats.upright && <LiveStats');
+    expect(inSheet).toBeGreaterThan(controls.indexOf('Manual'));
+    expect(inSheet).toBeGreaterThan(controls.indexOf('<BetPanel'));
+    // Beside the game only when the screen is not upright, so never twice.
+    expect(app).toContain('liveStats.shown && !liveStats.upright && <LiveStats');
+  });
+
+  it('styles them as part of the sheet, not as a strip above Bet', () => {
+    expect(upright).toMatch(/\.controls > \.live-stats \{[^}]*height: 190px/);
+    expect(upright).not.toContain('.layout > .live-stats');
+    expect(upright).not.toMatch(/margin-top: auto/);
+  });
+
+  it('keeps a resting place just above them, so no band of a tall sheet is out of reach', () => {
+    expect(upright).toMatch(/\.controls > :has\(\+ \.live-stats\) \{\s*scroll-snap-align: end;/);
+  });
+
+  it('turns snapping off while the chart button slides the sheet up', () => {
+    expect(upright).toMatch(/html\[data-sheet-slide\] \{\s*scroll-snap-type: none;/);
+  });
+
+  it('lets the panel take focus on an upright screen only', () => {
+    const phone = renderToStaticMarkup(<LiveStats live={{ ...control(NO_LIVE_STATS), upright: true }} />);
+    expect(phone).toMatch(/<section[^>]*tabindex="-1"/);
+    const computer = renderToStaticMarkup(<LiveStats live={control(NO_LIVE_STATS)} />);
+    expect(computer).not.toMatch(/<section[^>]*tabindex/);
+  });
+});
+
+describe('slideSheet', () => {
+  it('aims at the sheet\'s own end, never above the top of the page', () => {
+    // The sheet ends 300px below a 844px screen, the page at its top.
+    expect(sheetUpTop(1144, 0, 844)).toBe(300);
+    // Already partly up: the same place in page terms.
+    expect(sheetUpTop(944, 200, 844)).toBe(300);
+    expect(sheetUpTop(500, 0, 844)).toBe(0);
+  });
+
+  it('ends when it arrives, stops moving, or runs out of time', () => {
+    expect(slideOver(300, 300, 0, 10)).toBe(true);
+    expect(slideOver(299.5, 300, 0, 10)).toBe(true);
+    expect(slideOver(150, 300, 0, 10)).toBe(false);
+    expect(slideOver(150, 300, 6, 10)).toBe(true);
+    expect(slideOver(150, 300, 0, SLIDE_MAX_MS)).toBe(true);
   });
 });
 

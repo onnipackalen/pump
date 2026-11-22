@@ -3080,3 +3080,298 @@ What turned out wrong, and how it was caught:
   searching the commits.
 - PLAYTEST listed the strain marks among the graphics taken out, but the
   strain sheen came back later. Caught by reading it against this log.
+
+## 2026-11-21: iPhone: the sheet stays down when a round ends
+
+The user, playing on an iPhone with a screenshot: "after game ends the
+options pop up and the game screen disappears make it so you scroll down
+to see that stuff ... pump and bet have to be in same spot", then "it pops
+out instantly like cant even see pop".
+
+What happened: once the sheet had been swiped up (to set three balloons),
+the end of every later round jumped the sheet up over the balloons. The
+pop was hidden, and Bet was at the top of the sheet instead of in Pump's
+place.
+
+Fix (branch `sheet-stays-down`, styles.css only): on upright screens the
+page does not snap during a round or while auto-play runs
+(`html:has(.controls > .round, .auto-progress[data-running='true'])`
+sets `scroll-snap-type: none`). The page is exactly one screen then, so
+nothing is lost. When the round ends the page stays at sheet down, with
+Bet where Pump was.
+
+Why it happened, as far as I can tell: Safari on an iPhone remembers the
+last resting place a finger left the page in (sheet up) and goes back to
+it whenever the page changes height, and the end of a round makes the
+sheet taller. With snapping off during the round there is nothing to
+remember.
+
+What turned out wrong, and how it was caught:
+- The first fix only took the sheet's own resting place away during a
+  round, on the idea that "sheet up" and "sheet down" are the same place
+  when the round panel exactly fills its room. A test page run in the
+  Mac's own WebKit (a small Swift program around WKWebView, since this Mac
+  has no iPhone simulator) never jumped, with or without that fix, even
+  after a swipe up. So the cause had to be something only the iPhone
+  does, and the fix was changed to switch snapping off for the round.
+
+Checked: web tests (678), typecheck, lint, build. In the Mac's WebKit
+test page, with the fix: the page stays at the top after a round, Bet from
+sheet up ends at the top, and snapping works again after the round (a
+nudge to 300 px rests at sheet up, 400 px).
+
+Not checked: a real iPhone. The jump itself was never reproduced off the
+phone, so the fix is only proven on the phone once it is live. No preview
+server was free (five other chats' servers), so the real game was not run
+at phone size here; the change is one CSS rule that applies only during a
+round.
+## 2026-11-21: better sounds
+
+The user asked to improve the audio and picked "better sounds" from four
+options (the others were a stretch sound that rises with risk, a volume
+slider, and background music). Same 8 cues, same rules, still no sound files.
+
+- `apps/web/src/sound/voices.ts` (new) says what each cue is made of;
+  `SoundBoard.ts` keeps the speaker, the on/off switch and the unlock.
+  `cues.ts` (which cue plays when) is unchanged, so its tests still hold.
+- Bet: a soft rubber flop as the flat balloon lands. Pump: a rising whoosh
+  of air for the whole stroke (about 0.2 s, it was 0.09 s) and a soft thud
+  at the bottom. Survived: a rubber squeak that climbs with the balloon.
+  Patch save: a tape slap, then two calm notes. Pop: a crisp but soft burst.
+  Money back: a wooden tick. Win and big win: struck bells instead of plain
+  tones; the big win adds four tiny high bells.
+- A limiter on the output, so three balloons and auto-play stacking cues
+  can't crackle.
+
+Checks: typecheck, lint, 678 web tests. Each cue rendered offline in the
+browser and measured (peak, loudness, length): no NaN, and the worst pile-up
+(three pumps, three squeaks and a big win at once) peaks at -15 dB. A round
+played against a local server made the expected sound nodes for bet, pump,
+win and pop, with no chime after the pop and no console errors. Nobody in
+this chat can hear: how it sounds is for the user to judge.
+
+What turned out wrong, and how it was caught:
+- The first new pop was 18 dB louder than the old one, and the pump whoosh
+  14 dB louder, while the "survived" squeak came out quieter. A loss would
+  have stood out more than before. Caught by measuring old and new cues side
+  by side in the browser. Fixed: the pop is again the quietest cue (about
+  -55 dB, below the neutral tick at -51.5 dB, the loudest of 20 pops
+  included), and the squeak went up. The pump sound still carries about
+  13 dB more sound energy than the old puff, mostly because it lasts five
+  times longer; it now sits just under the squeak.
+
+## 2026-11-21: 8bb3204 deployed to the live site
+
+On the user's "Merge and deploy" and "ok deploy it". `sheet-stays-down`
+was merged with main (the sound remake, 7ddc187 and ad47240, came along)
+and main was fast-forwarded to 8bb3204.
+
+- Before the push: 1,923 tests, typecheck, lint and build, all passing.
+  Since the last deploy (754293f) nothing changed in apps/server or
+  packages/, so there was no database step and the deploy is not one-way.
+- GitHub's check on the push: green. Render: Manual Deploy > Deploy
+  latest commit, live after 1 m 23 s.
+- Log: `opened the existing file, 8 players`, `public wins: ON`. The live
+  page serves `index-BFwVvIT3.css`, the same file as the local build, and it
+  holds the new `scroll-snap-type: none` rule.
+- No test round was played on the live site: with public wins on, a test
+  player's cash-out would show in the public list, and this deploy changes
+  no server code.
+
+Not checked yet: the fix itself on the user's iPhone (swipe the sheet up,
+press Bet, play to the end of the round, and the sheet should stay down).
+An independent review of what this deploy ships was still running when it
+went live.
+
+Checked afterwards by the user on their iPhone, in Safari: with the sheet
+swiped up and a round played to its end, "It stays down".
+
+The independent review of what 8bb3204 shipped (two reviewers, each finding
+checked by a skeptic) found nothing that should have held the deploy. Four
+minor notes, all confirmed:
+- No test locked the new snap-off rule. Added one next to the handle test
+  in apps/web/test/betPumpSpot.test.ts; it fails with the rule taken out.
+- Older code, not changed here: during a round the public wins are allowed
+  back (the "whole sheet fits" clause in wins/sheetFirst.ts is true while
+  the round panel fills the screen), so when the round ends they join the
+  page at once and leave 120 ms later, or later still if a finger is down.
+  Nothing moves with the page at its top, but in that window a quick flick
+  could fly past sheet up to the wins. Possible fix: keep the wins waiting
+  while a round or auto-play is on. Not done.
+- Sounds (7ddc187, the audio chat's): the DynamicsCompressor in
+  SoundBoard.ts never reaches its threshold, but its built-in makeup gain
+  still lifts every cue by about 4 dB, so cues play louder than the levels
+  the "better sounds" entry measured. Their order is kept (the pop is still
+  the quietest). Not changed.
+- Sounds: one big-win sparkle partial is set to 23,949 Hz, above what a
+  44.1 kHz device can play; browsers clamp it, Chrome warns in the console.
+  Harmless. Not changed.
+
+## 2026-11-21: night backgrounds, picked in Settings
+
+The user asked for "dessert night" and other background themes, all at
+night with stars, Dusk kept as the default, and nothing changed until they
+had seen a demo. Drawn first as a mock-up in chat, then shown in a demo copy
+of the game (branch `night-themes`). The user's verdict: "mostly good
+enough", touch them up, check them, then push.
+
+- Settings > Background: Dusk (the default, unchanged), Desert, Dessert,
+  Arctic, Mountain, Fairground, City and Orbit. Radio buttons with a small
+  sky swatch each; saved in this browser like Animations
+  (`apps/web/src/background.ts`, `components/BackgroundPicker.tsx`).
+- Each scene is a few small SVGs and one block in
+  `apps/web/src/scenes/scenes.css`, read through `data-bg` on `<html>`. It
+  repaints the same three parts as `background.css` (page, sky, floor).
+  Nothing moves, nothing depends on the round, no mint, no grey.
+- Desert and dessert are both there because "dessert night" could mean
+  either. The arctic northern lights are violet and blue, never green.
+- The top bar and the browser's own bar colour (`theme-color`, used by
+  Chrome on Android) follow the scene's sky.
+
+Checks: lint, typecheck, 683 web tests (5 new: the default and junk values,
+a sky and floor rule for every scene, text contrast on every floor, no
+mint or grey). Every scene looked at mid-round with three balloons at
+390x844 and at 1280x760/1366x768, the choice tried through the real
+Settings row and after a reload.
+
+What turned out wrong, and how it was caught:
+- In the first demo, phones never showed some scenes' main object: the
+  cactus, the cherry, the big wheel and the icebergs sat too far out on the
+  1200-wide outline. Caught on the phone screenshots; moved toward the
+  middle. The fairground still only showed a sliver of its wheel; an
+  independent review (three reviewers, each finding checked by a skeptic)
+  caught that, and the wheel was made smaller and moved in, with the tents.
+- On a computer the fairground bulbs, the northern lights and the moons sat
+  on the row of multiplier steps along the top. Caught on the 1280x760
+  screenshots; moved down.
+- The same review confirmed four more, all fixed: a strip of the darker sky
+  showed under the ground (the floor stopped at the stage, the page below
+  it was the sky's colour); the browser's bar stayed Dusk navy above a
+  differently coloured top bar on Android; the first arctic floor was too
+  light for the grey "Popped"; and on laptops the desert moon sat where a
+  pearl balloon grows, the same colour as the balloon. The moons are now
+  dimmed and, on wide screens, sit beside the stage under the control panel.
+- Refuted by the review: that a saved scene flashes Dusk on load. What paints
+  before the app runs is an empty page of nearly the same colour.
+
+Not done: pumps and balloons themed to each scene. The user wasn't sure it
+was a good idea (it might clutter the screen), and it is in the README's
+"What I cut".
+
+## 2026-11-21: tests get a minute each, not 5 seconds
+
+A hand-in check ran the whole test suite at RTP 9400, 9700 and 9900 at the
+same time. One test failed in all three: "cashOutCents ... for every bet
+swept" in `packages/engine/test/math.test.ts`. Run on its own it passes.
+It had simply run out of time.
+
+- Vitest stops a test after 5 seconds unless told otherwise. Many tests here
+  check every legal bet, or every rung at three RTPs, and take 3 to 5
+  seconds. Some already had their own 60-second limit; the rest didn't.
+  A single plain `npm test` on this computer, while other chats were busy,
+  failed 3 of them the same way.
+- Fix: `testTimeout: 60_000` in `vitest.config.ts`, the same limit the slow
+  tests already used. A test that really hangs still fails, after a minute.
+
+Checks: all three suites at once again (the load that failed before):
+1,923, 1,924 and 1,923 tests pass. Lint and typecheck pass.
+
+What turned out wrong, and how it was caught:
+- GitHub's check never showed it, because it runs one suite on a quiet
+  machine. A reviewer on a slower laptop could have seen red tests. Caught
+  by running the three RTPs side by side for the hand-in list.
+## 2026-11-22: phones: live stats at the bottom of the bet sheet (branch stats-under-bet)
+
+The user, on an iPhone: "When I click the stock button, like the top right
+button, which I think is stats, it really doesn't do anything on iPhone.
+Should we keep it there?" Checked: during a round the button is off on
+phones (no room), and its only hint is a hover title an iPhone can't show.
+Between rounds it opened a strip at the top of the sheet that pushed Bet
+105px down, out of Pump's place (390x844). Offered "Move stats under Bet"
+or "Hide it on phones"; the user chose "Move stats under Bet".
+
+Built (apps/web/src/stats, App.tsx; computers unchanged):
+- On an upright screen the panel is the sheet's last part, under Manual |
+  Auto (App renders it at the end of the controls there, beside the game
+  otherwise). With the sheet down it is out of sight and Bet stays exactly
+  where Pump is.
+- A tap on the chart button opens it and slides the sheet up to it
+  (`tapOpener`, `stats/slideSheet.ts`). On a phone a second tap slides up
+  again rather than closing a panel the player can't see; the panel's own
+  Close closes it. Focus moves into the panel, so a screen reader hears
+  where the button went.
+- The slide aims at the sheet's own end (exactly "sheet up") with snapping
+  off while it moves (`html[data-sheet-slide]`), back on where it lands, so
+  iPhone Safari takes the landing as its resting place (the quirk behind
+  the round-end jump). The tap is dropped if play starts first, so a
+  round's end never slides the sheet.
+- A third resting place at the end of what comes before the panel
+  (`.controls > :has(+ .live-stats)`), so a sheet taller than the screen
+  never hides a band at neither resting place.
+- During a round the button is greyed out (it already was: 0.45 opacity).
+- PLAYTEST.md's line on live stats says where they are on a phone now.
+
+What turned out wrong, and how it was caught:
+- First build: the panel at 190px left a 27px band of the tallest sheet
+  (three bets, Auto tab) that neither resting place showed at 375x667, 8px
+  at 320x568. Caught by measuring in the Mac's WebKit with the game on its
+  in-browser stand-in server. A 150px panel under 700px tall fixed those
+  sizes, but an independent review (three reviewers, each finding checked
+  by a skeptic) worked out by adding up the CSS that phones 721-763px tall
+  still hid the auto-play stop limits (28px at 414x736, which the
+  measurement then matched to the pixel), and that note lines (cap notes,
+  the auto-play result) bring the band back at any height. Replaced the
+  height trick with the third resting place; the 150px rule is gone.
+- The review also found: the slide aimed at the panel's bottom, 12px short
+  of "sheet up"; on an iPhone the public wins joining after a slide by code
+  could have thrown the sheet back down (same quirk as the round's end);
+  the button never collapsed anything on a phone yet said "expanded", with
+  focus left in the top bar; and three comments plus PLAYTEST.md still
+  described the old strip. Fixed as above, except "expanded": it stays,
+  on purpose, as the panel really is open and on the page; focus now goes
+  into the panel, so a screen reader hears where the button went.
+- A second review of those fixes found no new problem in how they work,
+  only: comments in styles.css, sheetFirst.ts and public-wins.css still
+  spoke of two resting places; no test called the slide itself; this
+  entry claimed "expanded" was fixed; and two slides at once (a second
+  click mid-slide) shared one flag, so the first could switch snapping
+  back on during the second. Fixed: the comments, one slide at a time
+  (a new one ends the old), and tests that run the slide against a
+  stand-in page (`test/slideSheet.test.ts`: the flag always comes off, on
+  arrival, when the page stops short, at the time limit, on a touch, and
+  with two presses) and check the button's titles on a phone.
+
+Checked: 1,939 tests, typecheck, lint, build. In the Mac's WebKit at 320x568,
+375x667, 360x740, 414x736, 411x731, 390x844, 430x932 and 768x1024: Bet's box
+is the same with the panel open or closed and after a round, Pump sits in
+it, the button is greyed out in a round and a tap there does nothing, the
+sheet stays down when a round ends, the tap's slide turns snapping off and
+on and lands at the sheet's end with focus in the panel, and every control
+in the sheet is fully on screen at one of the resting places with three
+bets on Manual and on Auto, also with $50 bets on Expert (four cap notes).
+Computers (1440x900, 1280x720, 1024x768) open and close the card beside
+the game as before; sideways phones have no button.
+
+How it was measured: a test build of the game whose client is the
+in-browser stand-in (demo/DemoClient.ts, swapped in by a Vite plugin in a
+scratch config, nothing in the repo), served to a WKWebView by a small
+Swift program, scripted with callAsyncJavaScript. No preview server was
+free.
+
+Not checked: a real iPhone. Whether the slide stays at "sheet up" when the
+public wins join is exactly the kind of thing only the phone shows.
+
+## 2026-11-22: README: problems we'd like to solve (cent rounding)
+
+- Added "Problems we'd like to solve" to the README, after Known issues,
+  and a link to it at the top. It covers cent rounding on small amounts:
+  the worst Patch (48.18% at 94%, 49.88% at 97% and 99%) and the worst
+  cash-out (86.24% at 94%, 88.99% at 97%), how many Patches it touches at
+  $0.10, $1 and $10, and three ways to solve it with their costs. Nothing
+  in the game changed.
+- The numbers come from a scratch script over every legal bet at 9400,
+  9700 and 9900 using the engine's own `patchPriceCents` and
+  `cashOutCents`; the 97% worst cases match `npm run rtp`.
+- Nothing turned out wrong. The first draft said the verify page would
+  change with a Patch rule; it replays through the engine, so that line
+  now names `npm run rtp` instead.

@@ -112,7 +112,7 @@ describe('GET /api/history', () => {
     const response = await app.inject({ method: 'GET', url: '/api/history', cookies });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json<HistoryResponse>()).toEqual({ rounds: [] });
+    expect(response.json<HistoryResponse>()).toEqual({ rounds: [], more: false });
   });
 
   it('lists a finished round with its balloons added up, and skips the round in progress', async () => {
@@ -144,6 +144,7 @@ describe('GET /api/history', () => {
           seedRevealed: false,
         },
       ],
+      more: false,
     });
   });
 
@@ -160,7 +161,7 @@ describe('GET /api/history', () => {
       cookies: stranger.cookies,
     });
 
-    expect(response.json<HistoryResponse>()).toEqual({ rounds: [] });
+    expect(response.json<HistoryResponse>()).toEqual({ rounds: [], more: false });
   });
 
   it.each(['0', '51', '-1', '2.5', 'abc', ''])('refuses limit=%s', async (limit) => {
