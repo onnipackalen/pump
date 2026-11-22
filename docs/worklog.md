@@ -3043,3 +3043,40 @@ What turned out wrong, and how it was caught:
   and its item comes off the list.
 - The hours said about 5 hours on Saturday evening, a guess written before
   the evening was over. The user said they will stop around midnight.
+
+## 2026-11-21: public wins on at the live site; the write-ups, last edits
+
+- Public wins are on at the live site. The user said: "I want them switched
+  on the real site." `render.yaml` now sets `PUBLIC_WINS` to "on"
+  (754293f). A Manual Deploy doesn't apply `render.yaml`'s settings, so the
+  Blueprint's Manual sync was approved on Render. Its one change was to
+  create that variable, and it deployed main at 754293f. That also took the
+  three "Remaining tasks" fixes live: the verify page's own copy of the
+  seeds, the sweep that goes on past a round it can't settle, and the tests
+  for any accepted difficulty list. There has been no database step since
+  21841cf. The log said `public wins: ON (PUBLIC_WINS is "on")` and
+  `opened the existing file, 7 players`. `GET /api/wins` answers
+  `"enabled": true`, and the page loads.
+- PLAYTEST: it opens with a note that the other games were looked at again
+  and again through the build, with their flaws taken as warnings
+  (SmartSoft's look, Stake's red dots). New lists: "Other changes I asked
+  for" and "Still to improve".
+- AI_USAGE: rounding is the user's call over the AI's random rounding
+  (8bdb2db). "What I caught" lists:
+  - rounding at small bets, from the user's first try at the game
+  - the simulator that measured the engine against itself
+  - the verify page that trusted the server's client seed and nonce
+  - graphics, two engines at once, and the last balloon's Pump button
+  "Play until infinity" came out: the user counts it as their own wording,
+  not a mistake by the AI.
+- For the record: the review that planted bugs in the engine ("the
+  simulator measured the engine against itself", 2026-11-20) and the final
+  check of 29f0692 were run in chats the user set up for that job.
+
+What turned out wrong, and how it was caught:
+- AI_USAGE first said the user had asked for random rounding. Git says
+  otherwise: 8bdb2db records that it was proposed and turned down, and the
+  AI chats proposed it before the user's "make rounding random". Caught by
+  searching the commits.
+- PLAYTEST listed the strain marks among the graphics taken out, but the
+  strain sheen came back later. Caught by reading it against this log.
