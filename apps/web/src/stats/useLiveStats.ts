@@ -17,9 +17,10 @@ export interface LiveStatsControl {
   readonly open: boolean;
   /**
    * What holds the panel back, or null. On an upright screen the round panel
-   * needs all of the room under the balloons during a round and auto-play,
-   * so the strip waits until play stops (see live-stats.css), and the
-   * opener says so instead of looking like it does nothing.
+   * takes the bet sheet's place during a round and auto-play, and must fit
+   * one screen, so the panel (the sheet's last part) waits until play stops
+   * (see live-stats.css), and the opener says so, greyed out, instead of
+   * looking like it does nothing.
    */
   readonly heldBy: InPlay;
   /** Whether the panel is on screen now: open and not held back. */

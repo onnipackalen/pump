@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { LiveStats, LiveStatsOpener } from '../src/stats/LiveStats';
 import { addRound, NO_LIVE_STATS, type LiveStats as Figures } from '../src/stats/liveTally';
 import { ProfitChart } from '../src/stats/ProfitChart';
+import { sheetUpTop, SLIDE_MAX_MS, slideOver } from '../src/stats/slideSheet';
 import { heldBy, tapOpener, type InPlay, type LiveStatsControl } from '../src/stats/useLiveStats';
 import { balloon, round } from './fixtures';
 
@@ -179,9 +180,42 @@ describe('where the live stats sit on an upright screen', () => {
   });
 
   it('styles them as part of the sheet, not as a strip above Bet', () => {
-    expect(upright).toMatch(/\.controls > \.live-stats \{[^}]*height: var\(--live-sheet-h/);
+    expect(upright).toMatch(/\.controls > \.live-stats \{[^}]*height: 190px/);
     expect(upright).not.toContain('.layout > .live-stats');
     expect(upright).not.toMatch(/margin-top: auto/);
+  });
+
+  it('keeps a resting place just above them, so no band of a tall sheet is out of reach', () => {
+    expect(upright).toMatch(/\.controls > :has\(\+ \.live-stats\) \{\s*scroll-snap-align: end;/);
+  });
+
+  it('turns snapping off while the chart button slides the sheet up', () => {
+    expect(upright).toMatch(/html\[data-sheet-slide\] \{\s*scroll-snap-type: none;/);
+  });
+
+  it('lets the panel take focus on an upright screen only', () => {
+    const phone = renderToStaticMarkup(<LiveStats live={{ ...control(NO_LIVE_STATS), upright: true }} />);
+    expect(phone).toMatch(/<section[^>]*tabindex="-1"/);
+    const computer = renderToStaticMarkup(<LiveStats live={control(NO_LIVE_STATS)} />);
+    expect(computer).not.toMatch(/<section[^>]*tabindex/);
+  });
+});
+
+describe('slideSheet', () => {
+  it('aims at the sheet\'s own end, never above the top of the page', () => {
+    // The sheet ends 300px below a 844px screen, the page at its top.
+    expect(sheetUpTop(1144, 0, 844)).toBe(300);
+    // Already partly up: the same place in page terms.
+    expect(sheetUpTop(944, 200, 844)).toBe(300);
+    expect(sheetUpTop(500, 0, 844)).toBe(0);
+  });
+
+  it('ends when it arrives, stops moving, or runs out of time', () => {
+    expect(slideOver(300, 300, 0, 10)).toBe(true);
+    expect(slideOver(299.5, 300, 0, 10)).toBe(true);
+    expect(slideOver(150, 300, 0, 10)).toBe(false);
+    expect(slideOver(150, 300, 6, 10)).toBe(true);
+    expect(slideOver(150, 300, 0, SLIDE_MAX_MS)).toBe(true);
   });
 });
 

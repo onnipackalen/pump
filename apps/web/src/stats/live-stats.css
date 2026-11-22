@@ -224,7 +224,7 @@
     gap: 6px;
     /* Fixed, so the line has a height to fill: about 100px with one row of
        figures, less if long amounts wrap them to a second row. */
-    height: var(--live-sheet-h, 190px);
+    height: 190px;
     padding: 10px 0 0;
     border: 0;
     border-top: 1px solid var(--line);
@@ -243,16 +243,23 @@
   .controls > .live-stats .profit-chart {
     min-height: 0;
   }
-}
-
-/*
- * A short phone: a lower line (about 60px). The sheet rests only down or up,
- * so on the tallest sheet (three bets on the Auto tab) a taller panel left a
- * band in the sheet's middle that neither resting place showed: 27px at
- * 375x667, 8px at 320x568, measured with the panel at 190px.
- */
-@media (orientation: portrait) and (max-height: 700px) {
-  .controls > .live-stats {
-    --live-sheet-h: 150px;
+  /* Focus comes here from the chart button; no ring after a tap. */
+  .controls > .live-stats:focus:not(:focus-visible) {
+    outline: none;
+  }
+  /*
+   * A third resting place, at the end of what comes just before the panel:
+   * where "sheet up" was without it. The sheet rests only in set places, so
+   * a sheet taller than the screen shows a band at neither of two: with the
+   * panel open, three bets on the Auto tab hid the auto-play stop limits on
+   * phones 721-763px tall. With this place in between, every part of the
+   * sheet is shown by one of the three.
+   */
+  .controls > :has(+ .live-stats) {
+    scroll-snap-align: end;
+  }
+  /* No snapping while the chart button slides the sheet up (slideSheet.ts). */
+  html[data-sheet-slide] {
+    scroll-snap-type: none;
   }
 }

@@ -60,7 +60,8 @@ InOut: Chicken Road
    view moves in a little. It waits there for your first pump, then lifts
    off and blows up while the view eases back out.
 3. **Live stats.** Profit over the session with a line: next to the game
-   on a computer, a strip under the game on a phone.
+   on a computer, at the bottom of the bet panel on a phone (the chart
+   button slides the panel up to it, so Bet never moves).
 4. **Public wins.** Recent, Biggest and Lucky lists at the bottom of the
    page, with a "Keep my wins private" setting. The live site shows them.
 5. **The space at the top.** The balloon grows more in its early pumps.
