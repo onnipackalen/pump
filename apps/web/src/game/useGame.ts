@@ -11,7 +11,6 @@ import type {
   RoundView,
   WalletView,
 } from '../api/contract';
-import { rememberShownHash } from '../verify/shownHashes';
 import {
   canQueueCashOut,
   cashOutsToSend,
@@ -35,6 +34,7 @@ import {
   HISTORY_SIZE,
   openGame,
   send,
+  startRoundShown,
   type OpenedGame,
 } from './session';
 import { roundWinTier } from './winTier';
@@ -379,12 +379,13 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
   // balloon is no longer in play (see waitingCashOuts below).
   const [waitingShown, setWaitingShown] = useState<readonly QueuedCashOut[]>([]);
 
-  // The server-seed hash on screen now: the one a new round is bet against.
-  // It is saved for each round, so the verify page can later check the
-  // revealed seed against what this browser showed (verify/shownHashes).
-  const shownHash = useRef<string | null>(null);
+  // The seeds on screen now: the server-seed hash, client seed and next
+  // nonce a new round is bet against. They are saved for each round, so the
+  // verify page can later check the round against what this browser showed
+  // (verify/shownHashes), not against the server's record of it.
+  const shownFairness = useRef<FairnessView | null>(null);
   useEffect(() => {
-    shownHash.current = state.fairness?.serverSeedHash ?? null;
+    shownFairness.current = state.fairness;
   }, [state.fairness]);
 
   const listenerRef = useRef(listener);
@@ -593,12 +594,17 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     async (difficultyId: string, betsCents: readonly number[]): Promise<ActionResult | null> => {
       if (inFlight.current.has('start')) return null;
       inFlight.current.add('start');
-      // The hash on screen as the bet goes out: the one this round is bet against.
-      const hashBefore = shownHash.current;
+      // The seeds on screen as the bet goes out: the ones this round is bet
+      // against. Read now, before anything is sent, and saved with the round.
+      const before = shownFairness.current;
       setState((s) => ({ ...s, starting: true, notice: null }));
       try {
-        const result = await send((key) => client.startRound({ difficultyId, betsCents }, key));
-        if (hashBefore !== null) rememberShownHash(result.round.id, hashBefore);
+        const result = await startRoundShown(client, { difficultyId, betsCents }, before);
+        // The round used the next nonce of these seeds: the panel moves on.
+        // The ref moves on too, at once, so a round started before the
+        // screen has drawn this one (auto-play) saves the new nonce.
+        const after = fairnessAfterStart(result.round);
+        shownFairness.current = after;
         queued.current = [];
         setWaitingShown([]);
         setState((s) => ({
@@ -606,8 +612,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
           starting: false,
           round: result.round,
           wallet: result.wallet,
-          // The round used the next nonce of these seeds: the panel moves on.
-          fairness: fairnessAfterStart(result.round),
+          fairness: after,
           beats: result.round.balloons.map(() => 'idle'),
           pending: result.round.balloons.map(() => false),
           patched: result.round.balloons.map(() => false),

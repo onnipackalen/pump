@@ -31,7 +31,7 @@ import {
   noRecordNote,
   recordHashProblem,
 } from '../verify/hashCheck';
-import { shownHashFor } from '../verify/shownHashes';
+import { shownFor } from '../verify/shownHashes';
 import { screenAgrees, shownReveals, topAgrees } from '../verify/shownReveals';
 
 interface VerifyPageProps {
@@ -186,7 +186,7 @@ function RoundLoader({ client, roundId }: { readonly client: GameClient; readonl
     let cancelled = false;
     client.getVerifiableRound(roundId).then(
       (record) => {
-        if (!cancelled) setLoaded({ record, shownHash: shownHashFor(record.id) });
+        if (!cancelled) setLoaded({ record, shownHash: shownFor(record.id)?.serverSeedHash ?? null });
       },
       (error: unknown) => {
         if (!cancelled) setLoaded({ error: describeFailure(error) });

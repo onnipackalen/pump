@@ -10,14 +10,23 @@ import {
 import {
   MAX_SHOWN_HASHES,
   parseShownHashes,
-  rememberShownHash,
-  shownHashFor,
-  withShownHash,
+  rememberShown,
+  shownFor,
+  withShown,
   type HashStorage,
+  type ShownSeeds,
 } from '../src/verify/shownHashes';
 
 const SHOWN = 'a'.repeat(64);
 const OTHER = 'b'.repeat(64);
+const KEY = 'pump.shownSeedHashes';
+
+/** What a screen showed before a round: a hash, a client seed and the next nonce. */
+const shown = (serverSeedHash: string, clientSeed: string | null = 'player-seed', nonce: number | null = 4): ShownSeeds => ({
+  serverSeedHash,
+  clientSeed,
+  nonce,
+});
 
 /** localStorage as a Map, the way the browser keeps it. */
 class MemoryStorage implements HashStorage {
@@ -40,60 +49,139 @@ const broken: HashStorage = {
   },
 };
 
-describe('the hash shown before each round, kept in this browser', () => {
-  it('is found again by round id', () => {
+describe('what this browser showed before each round, kept in this browser', () => {
+  it('is found again by round id: the hash, the client seed and the nonce', () => {
     const storage = new MemoryStorage();
-    rememberShownHash('round-1', SHOWN, storage);
-    rememberShownHash('round-2', OTHER, storage);
-    expect(shownHashFor('round-1', storage)).toBe(SHOWN);
-    expect(shownHashFor('round-2', storage)).toBe(OTHER);
-    expect(shownHashFor('round-3', storage)).toBeNull();
+    rememberShown('round-1', shown(SHOWN, 'mine', 0), storage);
+    rememberShown('round-2', shown(OTHER, 'also_mine-2', 17), storage);
+    expect(shownFor('round-1', storage)).toEqual(shown(SHOWN, 'mine', 0));
+    expect(shownFor('round-2', storage)).toEqual(shown(OTHER, 'also_mine-2', 17));
+    expect(shownFor('round-3', storage)).toBeNull();
   });
 
   it('keeps only the newest rounds, so it stays small', () => {
-    let list = withShownHash([], 'r0', SHOWN, 3);
-    for (const id of ['r1', 'r2', 'r3']) list = withShownHash(list, id, SHOWN, 3);
+    let list = withShown([], 'r0', shown(SHOWN), 3);
+    for (const id of ['r1', 'r2', 'r3']) list = withShown(list, id, shown(SHOWN), 3);
     expect(list.map(([id]) => id)).toEqual(['r3', 'r2', 'r1']);
     // Saving a round again moves it to the front instead of adding it twice.
-    expect(withShownHash(list, 'r1', OTHER, 3)).toEqual([
-      ['r1', OTHER],
-      ['r3', SHOWN],
-      ['r2', SHOWN],
+    expect(withShown(list, 'r1', shown(OTHER, 'x', 9), 3)).toEqual([
+      ['r1', OTHER, 'x', 9],
+      ['r3', SHOWN, 'player-seed', 4],
+      ['r2', SHOWN, 'player-seed', 4],
     ]);
   });
 
   it(`never holds more than ${MAX_SHOWN_HASHES} rounds in storage`, () => {
     const storage = new MemoryStorage();
-    for (let n = 0; n < MAX_SHOWN_HASHES + 20; n += 1) rememberShownHash(`round-${n}`, SHOWN, storage);
-    const saved = parseShownHashes(storage.getItem('pump.shownSeedHashes'));
+    // The longest client seed and a large nonce, with the server's UUID round ids.
+    const longest = shown(SHOWN, 'z'.repeat(64), 9_007_199_254_740_991);
+    const id = (n: number): string => `${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
+    for (let n = 0; n < MAX_SHOWN_HASHES + 20; n += 1) rememberShown(id(n), longest, storage);
+    const saved = parseShownHashes(storage.getItem(KEY));
     expect(saved).toHaveLength(MAX_SHOWN_HASHES);
-    expect(shownHashFor(`round-${MAX_SHOWN_HASHES + 19}`, storage)).toBe(SHOWN);
-    expect(shownHashFor('round-0', storage)).toBeNull();
-    // About 55 KB at most.
-    expect(storage.getItem('pump.shownSeedHashes')?.length ?? 0).toBeLessThan(60_000);
+    expect(shownFor(id(MAX_SHOWN_HASHES + 19), storage)).toEqual(longest);
+    expect(shownFor(id(0), storage)).toBeNull();
+    // About 100 KB at most.
+    expect(storage.getItem(KEY)?.length ?? 0).toBeLessThan(100_000);
   });
 
-  it('never throws when storage is blocked or full: it just has no record', () => {
-    expect(() => rememberShownHash('round-1', SHOWN, broken)).not.toThrow();
-    expect(shownHashFor('round-1', broken)).toBeNull();
-    expect(shownHashFor('round-1', null)).toBeNull();
+  it('never throws when storage is blocked or full: it just has no copy', () => {
+    expect(() => rememberShown('round-1', shown(SHOWN), broken)).not.toThrow();
+    expect(shownFor('round-1', broken)).toBeNull();
+    expect(shownFor('round-1', null)).toBeNull();
+  });
+
+  it('still reads the older entries, which kept only the hash', () => {
+    // Saved by the game before it kept client seeds and nonces.
+    const storage = new MemoryStorage();
+    storage.setItem(KEY, JSON.stringify([['old-round', SHOWN]]));
+    expect(shownFor('old-round', storage)).toEqual({
+      serverSeedHash: SHOWN,
+      clientSeed: null,
+      nonce: null,
+    });
+    // A new round is added in front, and the old entry stays as it was.
+    rememberShown('new-round', shown(OTHER, 'mine', 3), storage);
+    expect(parseShownHashes(storage.getItem(KEY))).toEqual([
+      ['new-round', OTHER, 'mine', 3],
+      ['old-round', SHOWN],
+    ]);
+    expect(shownFor('old-round', storage)?.clientSeed).toBeNull();
   });
 
   it('ignores anything in storage that is not a round id and a hash', () => {
     expect(parseShownHashes(null)).toEqual([]);
     expect(parseShownHashes('not json')).toEqual([]);
     expect(parseShownHashes('{"round-1":"x"}')).toEqual([]);
+    expect(parseShownHashes('"text"')).toEqual([]);
     expect(
-      parseShownHashes(JSON.stringify([['round-1', SHOWN], ['round-2', 'XYZ'], [7, SHOWN], ['round-3']])),
+      parseShownHashes(
+        JSON.stringify([
+          ['round-1', SHOWN],
+          ['round-2', 'XYZ'],
+          [7, SHOWN],
+          ['round-3'],
+          'round-4',
+          null,
+          { id: 'round-5', hash: SHOWN },
+          ['x'.repeat(129), SHOWN],
+          ['', SHOWN],
+        ]),
+      ),
     ).toEqual([['round-1', SHOWN]]);
+  });
+
+  it('keeps a client seed and nonce only as a valid pair, and the hash either way', () => {
+    const entries = parseShownHashes(
+      JSON.stringify([
+        ['ok', SHOWN, 'mine', 0],
+        // Partial: a seed with no nonce.
+        ['partial', SHOWN, 'mine'],
+        // Not a client seed: has ':', is too long, is empty, is not text.
+        ['colon', SHOWN, 'a:b', 1],
+        ['long', SHOWN, 'z'.repeat(65), 1],
+        ['empty', SHOWN, '', 1],
+        ['number', SHOWN, 12, 1],
+        // Not a nonce: below 0, not whole, too big to be exact, text.
+        ['negative', SHOWN, 'mine', -1],
+        ['fraction', SHOWN, 'mine', 1.5],
+        ['huge', SHOWN, 'mine', 2 ** 53],
+        ['text', SHOWN, 'mine', '3'],
+        // Extra parts.
+        ['extra', SHOWN, 'mine', 1, 'more'],
+      ]),
+    );
+    expect(entries[0]).toEqual(['ok', SHOWN, 'mine', 0]);
+    expect(entries.slice(1)).toEqual(
+      ['partial', 'colon', 'long', 'empty', 'number', 'negative', 'fraction', 'huge', 'text', 'extra'].map(
+        (id) => [id, SHOWN],
+      ),
+    );
+  });
+
+  it('reads at most the newest rounds from storage, however many are there', () => {
+    const many = Array.from({ length: MAX_SHOWN_HASHES * 3 }, (_, n) => [`round-${n}`, SHOWN, 'mine', n]);
+    const entries = parseShownHashes(JSON.stringify(many));
+    expect(entries).toHaveLength(MAX_SHOWN_HASHES);
+    expect(entries[0]).toEqual(['round-0', SHOWN, 'mine', 0]);
   });
 
   it('saves only a real hash: 64 lowercase hex characters', () => {
     const storage = new MemoryStorage();
-    rememberShownHash('round-1', 'hash', storage);
-    rememberShownHash('round-2', SHOWN.toUpperCase(), storage);
-    rememberShownHash('', SHOWN, storage);
+    rememberShown('round-1', shown('hash'), storage);
+    rememberShown('round-2', shown(SHOWN.toUpperCase()), storage);
+    rememberShown('', shown(SHOWN), storage);
     expect(storage.items.size).toBe(0);
+  });
+
+  it('saves the hash alone when the client seed or nonce on screen is not a real one', () => {
+    const storage = new MemoryStorage();
+    rememberShown('no-seed', shown(SHOWN, null, null), storage);
+    rememberShown('bad-seed', shown(SHOWN, 'a:b', 2), storage);
+    rememberShown('bad-nonce', shown(SHOWN, 'mine', -1), storage);
+    for (const id of ['no-seed', 'bad-seed', 'bad-nonce']) {
+      expect(shownFor(id, storage)).toEqual({ serverSeedHash: SHOWN, clientSeed: null, nonce: null });
+    }
   });
 });
 

@@ -1,5 +1,13 @@
 import { NetworkFailure, type GameClient } from '../api/client';
-import type { FairnessView, RoundSummary, RoundView, SessionView } from '../api/contract';
+import type {
+  ActionResult,
+  FairnessView,
+  RoundSummary,
+  RoundView,
+  SessionView,
+  StartRoundRequest,
+} from '../api/contract';
+import { rememberShown, type ShownSeeds } from '../verify/shownHashes';
 import { makeClientSeed } from './clientSeed';
 
 /** How many finished rounds the history list holds. */
@@ -98,4 +106,42 @@ export function fairnessAfterStart(round: RoundView): FairnessView {
     clientSeed: round.clientSeed,
     nextNonce: round.nonce + 1,
   };
+}
+
+/**
+ * What a round started now is bet against, as this browser shows it: the
+ * server-seed hash, the client seed and the next nonce from the fairness
+ * panel. Null with no seeds on screen yet.
+ */
+export function shownBefore(fairness: FairnessView | null): ShownSeeds | null {
+  if (fairness === null) return null;
+  return {
+    serverSeedHash: fairness.serverSeedHash,
+    clientSeed: fairness.clientSeed,
+    nonce: fairness.clientSeed === null ? null : fairness.nextNonce,
+  };
+}
+
+/**
+ * Starts a round, then saves what this browser showed before it, for the
+ * verify page (verify/shownHashes). Every round start goes through here:
+ * the Bet button and auto-play both call the game's startRound action,
+ * which calls this.
+ *
+ * `before` is the fairness on screen, read by the caller before anything is
+ * sent, and copied here before the request goes out. So the saved copy is
+ * what the player saw, never the server's answer. A retry under the same key
+ * (see send), which the server answers with its stored first answer, saves
+ * that same copy.
+ */
+export async function startRoundShown(
+  client: GameClient,
+  request: StartRoundRequest,
+  before: FairnessView | null,
+  remember: (roundId: string, shown: ShownSeeds) => void = rememberShown,
+): Promise<ActionResult> {
+  const shown = shownBefore(before);
+  const result = await send((key) => client.startRound(request, key));
+  if (shown !== null) remember(result.round.id, shown);
+  return result;
 }
