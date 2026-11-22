@@ -11,15 +11,21 @@
  * lint block only bans `node:*`.
  *
  * So this test reads every engine source file outside src/fair and fails if
- * one of them loads, at run time, anything from:
- *   - the fair module: a relative path into src/fair, or `@pump/engine/fair`
- *   - `@noble/...`, the hash library the fair module wraps
+ * one of them:
+ *   - loads the fair module at run time: a relative path into src/fair, or
+ *     `@pump/engine/fair`
+ *   - imports anything from `@noble/...`, the hash library the fair module
+ *     wraps, types included
  *
- * Types are fine. The engine may say `import type { Drawer } from './fair'`
- * to name the shape of the randomness it is handed. Only a whole-statement
- * `import type` / `export type` counts as types-only. `import { type Drawer }`
- * does not: this repo compiles with verbatimModuleSyntax, under which that
- * line still becomes `import {} from './fair'` and loads the module.
+ * Types from the fair module are fine. The engine may say
+ * `import type { Drawer } from './fair'` to name the shape of the randomness
+ * it is handed. Only a whole-statement `import type` / `export type` counts
+ * as types-only. `import { type Drawer }` does not: this repo compiles with
+ * verbatimModuleSyntax, under which that line still becomes
+ * `import {} from './fair'` and loads the module.
+ *
+ * Types from @noble are not fine. Hashing happens only inside src/fair, so
+ * the rules have no reason to name the hash library at all.
  *
  * The check parses each file with the TypeScript compiler, so imports split
  * over several lines, or mentioned in comments, are handled correctly.
@@ -39,14 +45,21 @@ function isInside(path: string, dir: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
-/** True when `specifier`, written in the file `fromFile`, points at crypto or seeds. */
-function isForbiddenTarget(specifier: string, fromFile: string): boolean {
+/** True when `specifier`, written in the file `fromFile`, points into the fair module. */
+function isFairModule(specifier: string, fromFile: string): boolean {
   if (specifier.startsWith('.')) return isInside(resolve(dirname(fromFile), specifier), FAIR_DIR);
-  return (
-    specifier === '@pump/engine/fair' ||
-    specifier.startsWith('@pump/engine/fair/') ||
-    specifier.startsWith('@noble/')
-  );
+  return specifier === '@pump/engine/fair' || specifier.startsWith('@pump/engine/fair/');
+}
+
+/**
+ * True when a file outside src/fair may not import `specifier` this way.
+ * `typeOnly` means the import brings in types and loads nothing. The fair
+ * module may be imported for its types; @noble may not be imported at all.
+ */
+function isForbidden(specifier: string | undefined, fromFile: string, typeOnly: boolean): boolean {
+  if (specifier === undefined) return false;
+  if (specifier.startsWith('@noble/')) return true;
+  return !typeOnly && isFairModule(specifier, fromFile);
 }
 
 /** The module text of a string-literal specifier, or undefined for anything else. */
@@ -55,18 +68,20 @@ function specifierText(node: ts.Node | undefined): string | undefined {
 }
 
 /**
- * Every run-time import of the fair module or @noble in one source file, as
- * `line N: <statement>`. Empty means the file is clean.
+ * Every forbidden import in one source file, as `line N: <statement>`:
+ * anything from @noble, types included, and every run-time import of the
+ * fair module. Empty means the file is clean.
  *
- * Kinds of statement it looks at:
- *   import ... from 'x'        allowed only as `import type ...`
- *   import 'x'                 never allowed (runs the module)
- *   export ... from 'x'        allowed only as `export type ...`
- *   import x = require('x')    allowed only as `import type x = ...`
- *   import('x')                never allowed (the lint rules also ban it)
- * A type position like `import('x').Drawer` is a type, and is allowed.
+ * Kinds of statement it looks at, and when each may name the fair module:
+ *   import ... from 'x'        only as `import type ...`
+ *   import 'x'                 never (runs the module)
+ *   export ... from 'x'        only as `export type ...`
+ *   import x = require('x')    only as `import type x = ...`
+ *   import('x')                never (the lint rules also ban it)
+ *   import('x').Drawer         always (a type position is only a type)
+ * None of them may name @noble, not even for types.
  */
-function runtimeFairImports(fileName: string, sourceText: string): string[] {
+function forbiddenImports(fileName: string, sourceText: string): string[] {
   const source = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true);
   const found: string[] = [];
 
@@ -79,23 +94,23 @@ function runtimeFairImports(fileName: string, sourceText: string): string[] {
     if (ts.isImportDeclaration(node)) {
       const target = specifierText(node.moduleSpecifier);
       const typeOnly = node.importClause?.isTypeOnly === true;
-      if (target !== undefined && !typeOnly && isForbiddenTarget(target, fileName)) report(node);
+      if (isForbidden(target, fileName, typeOnly)) report(node);
     } else if (ts.isExportDeclaration(node)) {
       const target = specifierText(node.moduleSpecifier);
-      if (target !== undefined && !node.isTypeOnly && isForbiddenTarget(target, fileName)) {
-        report(node);
-      }
+      if (isForbidden(target, fileName, node.isTypeOnly)) report(node);
     } else if (
       ts.isImportEqualsDeclaration(node) &&
       ts.isExternalModuleReference(node.moduleReference)
     ) {
       const target = specifierText(node.moduleReference.expression);
-      if (target !== undefined && !node.isTypeOnly && isForbiddenTarget(target, fileName)) {
-        report(node);
-      }
+      if (isForbidden(target, fileName, node.isTypeOnly)) report(node);
     } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       const target = specifierText(node.arguments[0]);
-      if (target !== undefined && isForbiddenTarget(target, fileName)) report(node);
+      if (isForbidden(target, fileName, false)) report(node);
+    } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
+      // A type position, like `import('x').Drawer` or `typeof import('x')`.
+      const target = specifierText(node.argument.literal);
+      if (isForbidden(target, fileName, true)) report(node);
     }
     ts.forEachChild(node, visit);
   };
@@ -114,7 +129,7 @@ function engineFilesOutsideFair(): string[] {
 
 describe('the checker itself', () => {
   const ENGINE_FILE = join(SRC_DIR, 'PumpEngine.ts');
-  const check = (text: string, file = ENGINE_FILE): string[] => runtimeFairImports(file, text);
+  const check = (text: string, file = ENGINE_FILE): string[] => forbiddenImports(file, text);
 
   it.each([
     ["import { drawRoll, hmacSha256 } from './fair';"],
@@ -126,6 +141,11 @@ describe('the checker itself', () => {
     ["import { drawerFor } from '@pump/engine/fair';"],
     ["import { sha256 } from '@noble/hashes/sha2.js';"],
     ["import { hmac } from '@noble/hashes/hmac.js';"],
+    // @noble is off limits even for types.
+    ["import type { Hash } from '@noble/hashes/utils.js';"],
+    ["export type { Hash } from '@noble/hashes/utils.js';"],
+    ["import type utils = require('@noble/hashes/utils.js');"],
+    ["type H = import('@noble/hashes/utils.js').Hash<unknown>;"],
     // Still loads the module under verbatimModuleSyntax.
     ["import { type Drawer } from './fair';"],
     ["export { drawRoll } from './fair';"],
@@ -180,9 +200,9 @@ describe('engine files outside src/fair', () => {
   });
 
   it.each(files.map((path) => [relative(SRC_DIR, path), path]))(
-    '%s loads nothing from the fair module or @noble at run time',
+    '%s imports nothing from @noble and loads nothing from the fair module',
     (_name, path) => {
-      expect(runtimeFairImports(path, readFileSync(path, 'utf8'))).toEqual([]);
+      expect(forbiddenImports(path, readFileSync(path, 'utf8'))).toEqual([]);
     },
   );
 });
