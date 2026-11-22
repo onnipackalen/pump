@@ -3428,3 +3428,36 @@ What turned out wrong, and how it was caught:
   chain of lost answers, can get past or upset the copy check.
 - A helper chat ran ci.yml's steps and the README's start steps on a fresh
   clone of feecb29; all passed; nothing turned out wrong.
+
+## 2026-11-22: the last check before handing in
+
+A final check by eight area finders (math, RTP 94% and 99% grader runs,
+wallet, fairness, a hostile player over HTTP, the screen, the docs), a
+skeptic on every finding, then a critic and three more finders on what
+nobody had covered. All checks were green at the start: 2,078 tests,
+typecheck, lint, `npm run rtp`, and `npm run sim` and `npm run hammer` at
+94% and 99%.
+
+Built or fixed:
+- Each balloon in play shows its own pop chance and Patch price, during
+  auto-play too. Before, only the picked balloon's showed, in the panel.
+- A first load that fails offers Try again instead of a dead screen.
+- The hand cash-out test picks a ladder that climbs, so a steep fifth
+  difficulty placed first no longer fails it; verifyCopy finds its round by
+  id instead of assuming it is first (it failed at random on a tie).
+- Last 10 rounds fits its Verify button in the settings sheet.
+- README: where the last 10 rounds, the keys, the seeds and the verify page
+  are; the no_session row, internal_error, the hammer's waves, what CI runs,
+  the services list, and a wider Known issues entry on database growth.
+- Engine header, fairness.md, render.yaml and index.html comments that said
+  more than the code does.
+
+What turned out wrong, and how it was caught:
+- The README promised the tests pass with any fifth difficulty; a steep one
+  placed first failed. Caught by the 99% grader-run finder.
+- The new pop-chance line first cut long amounts with "…", which would show
+  a wrong-looking price. Caught by its reviewer in a browser at 667 px wide;
+  it now shrinks instead.
+- Still open: the README hours (the windows add up to about 20¼), the stats
+  page's Net column on phones, the sideways-phone layout, and the win sound
+  that can play just before another balloon's pop is shown.
