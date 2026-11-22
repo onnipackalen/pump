@@ -214,19 +214,26 @@ separate copy in Python, written from that page alone, and the engine tests
 must match its vectors.
 
 **What the verify page trusts.** When a round starts, the browser saves the
-server-seed hash, client seed and nonce it showed before the bet went out
-(`apps/web/src/verify/shownHashes.ts`). The verify page fills those three in
-from that copy, not from the server's record, and each field says where its
-value came from. If the record names another hash, client seed or nonce, the
-page says so in a plain line and the round does not check out, even when the
-record's own seeds add up. So a server that played a round with a client
-seed or nonce of its own choosing, and named it in the record, is caught. A
-round played on another device, or after this browser's data was cleared,
-has no copy: the page then uses the server's record and says plainly that
-the check can't catch a server that changed those values. Older saved
-rounds have only the hash, and the page says that too. The bets, steps, RTP,
-ladder and payout cap come from the server's record, and the page checks
-that every pump and payment follows from them.
+server-seed hash, client seed and nonce its Provably fair panel showed before
+the bet went out (`apps/web/src/verify/shownHashes.ts`). It only bets on
+seeds in a valid form, so a copy always has all three. A start whose answer
+was lost gets its copy when the game next loads its state. The verify page
+looks the copy up by the round id the player asked for, fills those three in
+from it, not from the server's record, and each field says where its value
+came from. If the record names another hash, client seed or nonce, or is the
+record of another round, the page says so in a plain line and the round does
+not check out, even when the record's own seeds add up. So the server can't
+name other seeds in its record than the ones the screen showed before the
+round. That is all the copy proves: it is what the server's own answers put
+on the screen, so it can't show that the server kept the client seed the
+browser sent. For that, check that the panel shows your client seed before
+you bet. A round played on another device, or after this browser's data was
+cleared, has no copy: the page then uses the server's record and says
+plainly that the check can't catch a server that changed those values.
+Rounds started by an older version of the game have a copy of the hash only,
+and the page says that too. The bets, steps, RTP, ladder and payout cap come
+from the server's record, and the page checks that every pump and payment
+follows from them.
 
 **After the round: where it would have popped.** Once a round is over, each
 balloon that was cashed out below its top rung shows where it would have
