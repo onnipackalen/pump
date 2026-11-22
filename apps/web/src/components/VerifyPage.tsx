@@ -11,7 +11,7 @@ import {
   type CheckedReveal,
   type RoundCheck,
 } from '@pump/engine/fair';
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ApiFailure, NetworkFailure, type GameClient } from '../api/client';
 import type {
   BalloonStatus,
@@ -25,6 +25,7 @@ import { afterRoundText } from '../game/afterRound';
 import { HISTORY_SIZE } from '../game/session';
 import { centsToInput, formatCents, formatMultiplier, formatSignedCents, parseDollarsToCents } from '../money';
 import { actionsToText, textToActions } from '../verify/actionsText';
+import { CheckScroll, scrollBoxTo } from '../verify/checkScroll';
 import {
   clientSeedFieldLabel,
   noRecordNote,
@@ -123,16 +124,23 @@ export function VerifyPage({
   const anyUnrevealed = listed.some((r) => !r.seedRevealed);
   // Read once, so the dates in the list don't change while it is open.
   const [today] = useState(() => new Date().toDateString());
+  const box = useRef<HTMLElement>(null);
   const pick = useRef<HTMLElement>(null);
+  // The check comes up just under this list, which can be long once older
+  // rounds are loaded. Check brings it into view once it is drawn, by
+  // scrolling this page's own box only (see verify/checkScroll).
+  const [scroll] = useState(() => new CheckScroll());
+  const toCheck = useCallback((): void => {
+    const target = pick.current?.nextElementSibling;
+    if (box.current && target) scrollBoxTo(box.current, target);
+  }, []);
   const check = (id: string): void => {
+    if (scroll.pressed(id)) toCheck();
     setRoundId(id);
-    // The check comes up just under this list, which can be long once older
-    // rounds are loaded: bring it into view.
-    requestAnimationFrame(() => pick.current?.nextElementSibling?.scrollIntoView({ block: 'start' }));
   };
 
   return (
-    <main className="verify" aria-labelledby="verify-title">
+    <main ref={box} className="verify" aria-labelledby="verify-title">
       <div className="verify-inner">
         <div className="verify-head">
           <h1 id="verify-title">Verify a round</h1>
@@ -196,7 +204,15 @@ export function VerifyPage({
           </form>
         </section>
 
-        {roundId !== null && <RoundLoader key={roundId} client={client} roundId={roundId} />}
+        {roundId !== null && (
+          <RoundLoader
+            key={roundId}
+            client={client}
+            roundId={roundId}
+            scroll={scroll}
+            onScroll={toCheck}
+          />
+        )}
       </div>
     </main>
   );
@@ -351,12 +367,30 @@ export function roundToCheck(
   return { roundId, record, shown, elsewhere };
 }
 
+interface RoundLoaderProps {
+  readonly client: GameClient;
+  readonly roundId: string;
+  /** Told when the check is drawn and when it goes, so Check can scroll to it. */
+  readonly scroll: CheckScroll;
+  /** Scrolls the page to the check. */
+  readonly onScroll: () => void;
+}
+
 /**
  * Fetches one round's record, then hands it to the workbench with what this
  * browser saved before that round (hash, client seed, nonce), if anything.
  */
-function RoundLoader({ client, roundId }: { readonly client: GameClient; readonly roundId: string }) {
+function RoundLoader({ client, roundId, scroll, onScroll }: RoundLoaderProps) {
   const [loaded, setLoaded] = useState<RoundToCheck | { readonly error: string } | null>(null);
+  const drawn = loaded !== null;
+
+  // Once the check, or the note that it failed, is drawn, Check can bring it
+  // into view. Before the screen is painted, so it never shows in the wrong place.
+  useLayoutEffect(() => {
+    if (!drawn) return undefined;
+    if (scroll.shown(roundId)) onScroll();
+    return () => scroll.gone(roundId);
+  }, [drawn, roundId, scroll, onScroll]);
 
   useEffect(() => {
     let cancelled = false;
