@@ -313,15 +313,24 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
   only if they are the player's seeds now. If not (a round played, or a
   seed changed, in another tab, or a seed change whose answer was lost), it
   refuses with `seeds_changed` and changes nothing, and the panel shows the
-  seeds now. So an honest round always matches its copy. A seed change and
-  a round start are never on their way at once.
-- A start whose answer was lost, or that was refused, still keeps its
-  copy. It waits for the next full load of the game's state, or the next
-  start that goes through. Then the copy goes under the id of the round in
-  play, if that round asked for the same bets and has no copy yet. If not,
-  it is kept under a stand-in id, unless this browser already has a copy
-  with the same hash and nonce (that copy then stands for whichever round
-  used them). A refusal that carries a round in play does this at once.
+  seeds now. So an honest round matches its copy, apart from the rare
+  cases under [Known issues](#known-issues). A seed change and a round
+  start are never on their way at once.
+- A start whose answer was lost keeps its copy. It waits for the next full
+  load of the game's state, or the next start that goes through. Then the
+  copy goes under the id of the round in play, if that round asked for the
+  same bets and has no copy yet. If more than one start asked for those
+  bets, the newest one counts. The round's own seeds never pick, or the
+  server could pick by the seeds it played on.
+- Every other start on its way is kept under a stand-in id, which the page
+  finds by hash and nonce. It is skipped only if this browser already has
+  a copy of exactly the same three values, or if a start that went through
+  had the same hash and nonce (its copy then stands for them).
+- A refusal that carries a round, in play or over, does this at once, so
+  the round is checked before you can play it or verify it. A refusal
+  without a round (too little money, or `seeds_changed`) made no round, so
+  that start gets no stand-in and can't make a later honest round look
+  wrong. It can still give its copy to a round in play.
 - What the copy can't prove: it is what the server's own answers put on
   the screen. So check that the panel shows your client seed before you
   bet.
@@ -330,11 +339,13 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
   can't catch a server that changed those values.
 - A server could also give a round another id while it is played, so no
   copy is saved under its real id. The page then looks for a copy with the
-  record's hash and nonce under another id or a stand-in (one server seed
-  and nonce belong to one round only), and the round doesn't check out if
-  that copy names another client seed. This is not caught if the server
-  also moved the round to a server seed or nonce this browser has no copy
-  for; see [Known issues](#known-issues).
+  record's hash and nonce under another id (one server seed and nonce
+  belong to one round only). Under another round's id, the round never
+  checks out: it is that round again, or that round's rolls used again.
+  Under a stand-in, it doesn't check out if the copy names another client
+  seed. This is not caught if the server also moved the round to a server
+  seed or nonce this browser has no copy for; see
+  [Known issues](#known-issues).
 - Rounds started by an older version of the game have a copy of the hash
   only, and the page says so.
 - The bets, steps, RTP, ladder and payout cap come from the server's
@@ -599,13 +610,21 @@ Found in the final check before submitting, and not fixed on `main` yet:
   not long ago. Closing this fully needs the server's record to carry
   something the browser picked at the start, such as the start's
   idempotency key.
+- **Two tabs that press Bet at almost the same moment, on panels showing
+  different seeds** (one out of date): this browser can't tell which start
+  made the round, so the round gets the copy of the start pressed last. A
+  dishonest server could play on the seeds that tab showed and lose the
+  answers, and the round would check out. And if the other start made the
+  round honestly and its answer is lost too, an honest round fails the
+  check. The page then says another tab may be why.
 - **One honest round can still fail the copy check**, but only after a
-  chain of failures: a start that made no round (refused, or lost on the
-  way), then the game reloading its state, then a new client seed, then a
-  start on the same nonce whose answer is lost too, with the page closed for
-  24 hours. The 24-hour rule hands every bet of that round back, so it has
-  no draws. Its record names the new client seed, but the only copy this
-  browser has for its hash and nonce names the old one.
+  chain of failures: a start lost on the way before it reached the server,
+  then a new client seed, then a start on the same nonce whose answer is
+  lost too, and that round never gets its own copy (the page is closed
+  until the 24-hour rule ends it, or another tab loads the game while that
+  start is on its way). Its record names the new client seed, but a copy
+  this browser kept for its hash and nonce names the old one. The page
+  says this can happen without cheating.
 - **`GET /api/session` has no limit.** Every visit without a cookie makes a
   new player, so a script could fill the database.
 - **The hammer never tries to overspend over HTTP.** That case is tested
