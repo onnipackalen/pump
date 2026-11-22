@@ -3182,3 +3182,6 @@ Not checked yet: the fix itself on the user's iPhone (swipe the sheet up,
 press Bet, play to the end of the round, and the sheet should stay down).
 An independent review of what this deploy ships was still running when it
 went live.
+
+Checked afterwards by the user on their iPhone, in Safari: with the sheet
+swiped up and a round played to its end, "It stays down".
