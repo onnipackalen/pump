@@ -9,9 +9,11 @@
 
 ## What I did, and what the AI did
 
-- The AI wrote nearly all of the code, the tests and the scripts. It also
-  drafted these write-ups from my notes and messages, and I went through
-  them and corrected them.
+- The AI wrote nearly all of the code, the tests and the scripts.
+- I used it to help write these documents. I talked each one through out
+  loud, and the AI turned what I said into clear writing, tidied it up and
+  filled in the technical detail from the code. I read every draft and
+  corrected it.
 - I made the design calls:
   - the four ladders. I kept the long, gentle Easy over a shorter one the
     AI designed.
