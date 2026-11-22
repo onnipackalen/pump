@@ -22,7 +22,10 @@
  *   GET  /api/session                     -> SessionView
  *        Wallet, seeds, and the in-progress round if there is one, so a page
  *        refresh can restore it.
- *   GET  /api/history?limit=10            -> { rounds: RoundSummary[] }
+ *   GET  /api/history?limit=10&before=:roundId -> HistoryResponse
+ *        The player's finished rounds, newest first, a page at a time.
+ *        before (optional) is the id of one of their finished rounds: the
+ *        page then starts right after it. Any other id: 404 "not_found".
  *   GET  /api/stats                       -> PlayerStats
  *        The player's results over every round they have finished.
  *   GET  /api/settings                    -> PlayerSettings
@@ -415,9 +418,19 @@ export interface PublicWinsResponse {
   readonly luckiest: readonly PublicWin[];
 }
 
-/** The response of GET /api/history. */
+/**
+ * The response of GET /api/history: one page of the player's finished
+ * rounds, newest first. Rounds that finished in the same millisecond keep
+ * one fixed order (newest start first, then highest id), so walking the
+ * pages lists every round exactly once.
+ */
 export interface HistoryResponse {
   readonly rounds: readonly RoundSummary[];
+  /**
+   * True when older finished rounds remain after the last one listed. Ask
+   * for them with before=<that round's id>.
+   */
+  readonly more: boolean;
 }
 
 /**
