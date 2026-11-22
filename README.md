@@ -337,10 +337,10 @@ The rule is applied before the player's next request and by a sweep every ten
 minutes. We chose this over forfeiting the bets (unfair to a player whose
 connection dropped) and over leaving rounds open for ever (the player could
 never start another). Each round is settled in its own transaction: if one
-cannot be settled, none of it is saved, it stays as it was, and the error is
-logged with its round and player. The sweep still settles every other round
+cannot be settled, none of it is saved and it stays as it was. The sweep logs
+it as an error with its round and player, still settles every other round,
 and tries that one again next time. Until it settles, that player's own
-requests answer with an error.
+requests answer with a plain 500 error, logged without the round or player.
 
 **The hammer.** `npm run hammer` starts its own server as a separate process
 on a fresh database, has 20 players play at once, and makes every step a burst
