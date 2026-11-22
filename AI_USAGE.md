@@ -50,8 +50,9 @@ What I caught:
   different client seed that gives the same results, and the page would
   still say the round checks out. The final check I ran before submitting
   found it, and I had it fixed: the browser now keeps its own copy of the
-  seeds and checks the server's record against it. One small gap is left,
-  listed in the README under Known issues.
+  seeds and checks the server's record against it, and each round start
+  tells the server which seeds the screen showed. A few rare cases are
+  still open, listed in the README under Known issues.
 - **The AI was wrong on graphics again and again.** It kept adding
   made-up signs no real game uses (a seal on top, a grid of dots, a ghost
   outline after a pop, a tape sticker for the Patch), hint sentences all
