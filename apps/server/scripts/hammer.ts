@@ -25,7 +25,9 @@
  * First comes the storm: one moment with well over 1,000 requests in flight
  * at once. Every player starts a three-balloon round, and then every request
  * for every balloon of every player goes out together, in two waves (see
- * stormWave). Then the players play their rounds, step by step.
+ * stormWave). Then the players play their rounds, step by step. Each one
+ * bets only what its balance covers, and a player whose balance cannot
+ * cover the smallest bet stops playing.
  *
  * Every round in every answer is also checked: no balloon shows a reveal
  * ("where it would have popped") while its round is still in progress.
@@ -70,10 +72,15 @@ const roundShape = z.object({
   ),
 });
 type RoundView = z.infer<typeof roundShape>;
+const walletShape = z.object({ balanceCents: z.int() });
 const successShape = z.object({ round: roundShape });
+/** A successful start, pump or cash-out, and GET /api/session, carry the wallet. */
+const walletAnswerShape = z.object({ wallet: walletShape });
 const refusalShape = z.object({ error: z.object({ round: roundShape.nullish() }) });
+/** A 402 refusal carries the wallet as it is once the request was refused. */
+const refusalWalletShape = z.object({ error: z.object({ wallet: walletShape }) });
 const sessionShape = z.object({
-  wallet: z.object({ balanceCents: z.int() }),
+  wallet: walletShape,
   activeRound: roundShape.nullable(),
 });
 
@@ -155,7 +162,15 @@ let inFlight = 0;
 let stormPeak = 0;
 const statusCounts = new Map<number, number>();
 const failures: string[] = [];
-const checks = { pairs: 0, repeats: 0, starts: 0, refusedSeedChanges: 0, rounds: 0 };
+const checks = {
+  pairs: 0,
+  repeats: 0,
+  starts: 0,
+  /** Groups of four starts all refused, rightly, because the balance did not cover the bets. */
+  unaffordableStarts: 0,
+  refusedSeedChanges: 0,
+  rounds: 0,
+};
 /**
  * Each reveal seen on a finished round, once: round id and balloon index. The
  * same reveal comes back in the winning answer, its repeat and every late 409,
@@ -247,10 +262,26 @@ const BETS = [10, 11, 99, 100, 250, 1234, 5000, 100_000] as const;
 
 class Player {
   cookie = '';
+  /**
+   * The balance the server last reported, in cents. Bets are picked so that
+   * it covers them. In the storm a player's balloons are played at the same
+   * time, so the last answer to arrive may not be the latest; finishRound
+   * reads the session after the storm, which puts it right.
+   */
+  balanceCents = 0;
+  /** Set once this player's balance cannot cover a bet. They play no more rounds. */
+  outOfMoney = false;
   private readonly pick: (below: number) => number;
 
   constructor(readonly number: number) {
     this.pick = generator(1000 + number);
+  }
+
+  /** Keeps the balance a successful answer carries. */
+  private noteBalance(answer: Answer): void {
+    if (answer.status === 200) {
+      this.balanceCents = walletAnswerShape.parse(answer.json).wallet.balanceCents;
+    }
   }
 
   async join(): Promise<void> {
@@ -261,6 +292,7 @@ class Player {
       return;
     }
     this.cookie = token;
+    this.noteBalance(first);
     await send(this.cookie, 'PUT', '/api/fairness/client-seed', { clientSeed: `hammer-${String(this.number)}` }, newKey());
   }
 
@@ -328,12 +360,30 @@ class Player {
       if (answer !== winners[0] && (answer.status === 200 || answer.status === 409)) roundIn(answer);
     }
     const winner = winners[0];
-    return winner ? roundIn(winner) : null;
+    if (!winner) return null;
+    // The losers changed nothing, so the winner's wallet is the balance now.
+    this.noteBalance(winner);
+    return roundIn(winner);
   }
 
   private async startRound(): Promise<RoundView | null> {
     const difficulty = GAME_CONFIG.difficulties[this.pick(GAME_CONFIG.difficulties.length)];
-    const betsCents = Array.from({ length: 1 + this.pick(3) }, () => BETS[this.pick(BETS.length)] ?? 10);
+    // One to three bets, each covered by what is left of the balance.
+    const wanted = 1 + this.pick(3);
+    const betsCents: number[] = [];
+    let left = this.balanceCents;
+    for (let i = 0; i < wanted; i += 1) {
+      const fits = BETS.filter((bet) => bet <= left);
+      const bet = fits.length > 0 ? fits[this.pick(fits.length)] : undefined;
+      if (bet === undefined) break;
+      betsCents.push(bet);
+      left -= bet;
+    }
+    if (betsCents.length === 0) {
+      // Not even the smallest bet fits, so this player stops playing.
+      this.outOfMoney = true;
+      return null;
+    }
     const body = { difficultyId: difficulty?.id ?? 'easy', betsCents };
     // Four starts at once, with four different keys: one round, one set of bets.
     const answers = await Promise.all(
@@ -342,6 +392,10 @@ class Player {
       ),
     );
     checks.starts += 1;
+    if (answers.every((answer) => answer.status === 402)) {
+      await this.checkUnaffordable(answers, betsCents);
+      return null;
+    }
     const started = answers.filter((answer) => answer.status === 200);
     if (started.length !== 1) {
       fail(`player ${String(this.number)}: ${String(started.length)} of 4 simultaneous starts succeeded`);
@@ -352,7 +406,40 @@ class Player {
       }
     }
     const winner = started[0];
-    return winner ? roundIn(winner) : null;
+    if (!winner) return null;
+    this.noteBalance(winner);
+    return roundIn(winner);
+  }
+
+  /**
+   * All four starts were refused with 402. Bets are picked to fit the
+   * balance the server last reported, so this should not happen; if it
+   * does, the refusals are right only if the balance really is below the
+   * bets and they charged nothing. Each refusal says what the balance was
+   * once it was refused, and all four must match the balance read
+   * afterwards. Either way this player stops playing.
+   */
+  private async checkUnaffordable(answers: readonly Answer[], betsCents: readonly number[]): Promise<void> {
+    const costCents = betsCents.reduce((sum, bet) => sum + bet, 0);
+    const told = answers.map((answer) => refusalWalletShape.parse(answer.json).error.wallet.balanceCents);
+    const after = await this.balance();
+    const wrong = [
+      ...(after !== null && after >= costCents
+        ? [`the balance of ${String(after)} covers the bets of ${String(costCents)}`]
+        : []),
+      ...(after === null || told.some((balance) => balance !== after)
+        ? [`the refusals said the balance was ${told.join(', ')} and afterwards it was ${String(after)}`]
+        : []),
+    ];
+    if (wrong.length > 0) {
+      fail(
+        `player ${String(this.number)}: all 4 simultaneous starts were refused for want of money, ` +
+          `but ${wrong.join(', and ')}`,
+      );
+    } else {
+      checks.unaffordableStarts += 1;
+    }
+    this.outOfMoney = true;
   }
 
   async playRound(): Promise<void> {
@@ -407,7 +494,9 @@ class Player {
 
   async balance(): Promise<number | null> {
     const answer = await send(this.cookie, 'GET', '/api/session');
-    return answer.status === 200 ? sessionShape.parse(answer.json).wallet.balanceCents : null;
+    if (answer.status !== 200) return null;
+    this.balanceCents = sessionShape.parse(answer.json).wallet.balanceCents;
+    return this.balanceCents;
   }
 
   /** This player's round in progress, as the server has it now, or null. */
@@ -417,6 +506,7 @@ class Player {
       fail(`player ${String(this.number)}: GET /api/session answered ${String(answer.status)}`);
       return null;
     }
+    this.noteBalance(answer);
     const round = sessionShape.parse(answer.json).activeRound;
     return round === null ? null : roundIn({ ...answer, json: { round } });
   }
@@ -431,6 +521,7 @@ class Player {
     if (answer.status !== 200) {
       fail(`player ${String(this.number)}: the storm round did not start (${String(answer.status)})`);
     }
+    this.noteBalance(answer);
   }
 
   /**
@@ -479,6 +570,7 @@ class Player {
         fail(`player ${String(this.number)}: finishing the storm round got ${String(answer.status)}`);
         return;
       }
+      this.noteBalance(answer);
       roundIn(answer);
     }
     fail(`player ${String(this.number)}: the storm round did not finish`);
@@ -569,13 +661,15 @@ async function run(): Promise<number> {
   await Promise.all(players.map((player) => player.finishRound()));
   const stormFired = fired;
 
-  // Everyone plays at once; within each player, every step is a burst.
+  // Everyone plays at once; within each player, every step is a burst. A
+  // player whose balance no longer covers a bet stops.
   await Promise.all(
     players.map(async (player) => {
-      for (let round = 0; round < ROUNDS; round += 1) await player.playRound();
+      for (let round = 0; round < ROUNDS && !player.outOfMoney; round += 1) await player.playRound();
     }),
   );
   const balances = await Promise.all(players.map((player) => player.balance()));
+  const stopped = players.filter((player) => player.outOfMoney).length;
 
   console.log(
     `Fired ${fired.toLocaleString('en-US')} requests from ${String(PLAYERS)} players: ` +
@@ -588,6 +682,11 @@ async function run(): Promise<number> {
       .map(([status, n]) => `${String(status)} x ${n.toLocaleString('en-US')}`)
       .join(', ')}`,
   );
+  if (stopped > 0) {
+    console.log(
+      `${String(stopped)} of ${String(PLAYERS)} players stopped early: their balance could no longer cover a bet.`,
+    );
+  }
 
   // The final check reads the server's own database file, read-only.
   const db = new DatabaseSync(server.databasePath, { readOnly: true });
@@ -620,7 +719,10 @@ async function run(): Promise<number> {
   line(
     'One round from four simultaneous starts',
     !failures.some((f) => f.includes('simultaneous starts') || f.includes('losing start')),
-    `${checks.starts.toLocaleString('en-US')} times`,
+    `${checks.starts.toLocaleString('en-US')} times` +
+      (checks.unaffordableStarts > 0
+        ? `, ${checks.unaffordableStarts.toLocaleString('en-US')} of them all refused: the balance was too low`
+        : ''),
   );
   line(
     'Seeds could not be rotated mid-round',
