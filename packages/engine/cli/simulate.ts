@@ -104,9 +104,9 @@ const PUMP_LIMIT = 100_000;
  * A wide mark loses little. The checks to the cent have no luck in them and
  * carry the strictness: one wrong cent, chance or roll fails the run. And at
  * the default 10 million rounds a pump chance one point off (50% played as
- * 49%) is still at least 13 standard errors out, on every pump of every
- * shipped ladder. The closest is Hard's pump 13, tried 431,000 times in the
- * climb.
+ * 49%) is still more than 12.9 standard errors out at an RTP of 94%, 97% or
+ * 99%, on every pump of every shipped ladder. The closest is Hard's pump 13,
+ * which the climb tries about 418,000 times at 94% and 440,000 at 99%.
  */
 export const PASS_MARK = 6;
 
