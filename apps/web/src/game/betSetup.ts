@@ -1,5 +1,6 @@
-import type { Limits } from '@pump/engine';
-import { formatCents, parseDollarsToCents } from '../money';
+import type { Difficulty, Limits } from '@pump/engine';
+import type { RoundView } from '../api/contract';
+import { centsToInput, formatCents, parseDollarsToCents } from '../money';
 
 /** What the player has typed into the bet panel. One bet text per balloon. */
 export interface BetSetup {
@@ -33,6 +34,34 @@ export function checkBets(setup: BetSetup, limits: Limits, balanceCents: number)
     allValid && totalCents > balanceCents ? 'Not enough balance for these bets.' : null;
   const betsCents = allValid && problem === null ? parsed.map((cents) => cents ?? 0) : null;
   return { betsCents, errors, totalCents, problem };
+}
+
+/**
+ * The bet panel's set-up for a round in play that the panel did not set up:
+ * one restored after a page load, which always starts from the default
+ * set-up. It takes the round's difficulty and bets. Without this, once the
+ * round is over the stage would take the panel's other set-up for a new one
+ * and hide how the round ended (stage.ts), and the next bet would not start
+ * from the round just played.
+ *
+ * Null when the panel already has the round's difficulty and number of
+ * balloons, which is always so for a round started from it (auto-play's
+ * raised bets included, so they never overwrite the bets the player
+ * entered), or when the round's difficulty is no longer in the config.
+ */
+export function setupForRound(
+  round: Pick<RoundView, 'difficultyId' | 'balloons'>,
+  setup: BetSetup,
+  difficulties: readonly Difficulty[],
+): BetSetup | null {
+  if (setup.difficultyId === round.difficultyId && setup.bets.length === round.balloons.length) {
+    return null;
+  }
+  if (!difficulties.some((difficulty) => difficulty.id === round.difficultyId)) return null;
+  return {
+    difficultyId: round.difficultyId,
+    bets: round.balloons.map((balloon) => centsToInput(balloon.betCents)),
+  };
 }
 
 /** Changes the number of balloons, copying the last bet into new ones. */
