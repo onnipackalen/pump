@@ -108,48 +108,51 @@ describe('GET /api/history, a page at a time', () => {
   // Run with ids in three orders: see idOrders.ts. With ids that count up,
   // the id alone would put tied rounds in start order, so only the other two
   // show that the start time is really used to place a page.
-  it.each(ID_ORDERS)('walks through 125 rounds, many finished in the same millisecond, each once and in order (ids %s)', async (idOrder) => {
-    const world = worldWithIds(idOrder);
-    const seat = await Seat.join(world.app);
-    const played = await playMany(seat, world, 125);
-    const playerId = playerOf(world.db, played[0] ?? '');
-    const stored = finishedOf(world.db, playerId);
-    const order = expectedOrder(stored);
-    expect(new Set(order)).toEqual(new Set(played));
+  it.each(ID_ORDERS)(
+    'walks through 125 rounds, many finished in the same millisecond, each once and in order (ids %s)',
+    async (idOrder) => {
+      const world = worldWithIds(idOrder);
+      const seat = await Seat.join(world.app);
+      const played = await playMany(seat, world, 125);
+      const playerId = playerOf(world.db, played[0] ?? '');
+      const stored = finishedOf(world.db, playerId);
+      const order = expectedOrder(stored);
+      expect(new Set(order)).toEqual(new Set(played));
 
-    // The ties are really there: rounds sharing a finish time, some of them
-    // with different start times and some with the same start time too.
-    const byFinish = new Map<string, Placed[]>();
-    for (const r of stored) byFinish.set(r.finishedAt, [...(byFinish.get(r.finishedAt) ?? []), r]);
-    const groups = [...byFinish.values()];
-    expect(Math.max(...groups.map((group) => group.length))).toBeGreaterThanOrEqual(3);
-    expect(groups.some((group) => new Set(group.map((r) => r.startedAt)).size > 1)).toBe(true);
-    expect(
-      stored.some((x) =>
-        stored.some((y) => x.id !== y.id && x.finishedAt === y.finishedAt && x.startedAt === y.startedAt),
-      ),
-    ).toBe(true);
-    // Unless the ids count up, some tied rounds have their ids the other way
-    // round from their start times: there, only the start time puts them in
-    // the right order.
-    const idAgainstStart = stored.some((x) =>
-      stored.some((y) => x.finishedAt === y.finishedAt && x.startedAt > y.startedAt && x.id < y.id),
-    );
-    expect(idAgainstStart).toBe(idOrder !== 'counting up');
+      // The ties are really there: rounds sharing a finish time, some of them
+      // with different start times and some with the same start time too.
+      const byFinish = new Map<string, Placed[]>();
+      for (const r of stored) byFinish.set(r.finishedAt, [...(byFinish.get(r.finishedAt) ?? []), r]);
+      const groups = [...byFinish.values()];
+      expect(Math.max(...groups.map((group) => group.length))).toBeGreaterThanOrEqual(3);
+      expect(groups.some((group) => new Set(group.map((r) => r.startedAt)).size > 1)).toBe(true);
+      expect(
+        stored.some((x) =>
+          stored.some((y) => x.id !== y.id && x.finishedAt === y.finishedAt && x.startedAt === y.startedAt),
+        ),
+      ).toBe(true);
+      // Unless the ids count up, some tied rounds have their ids the other way
+      // round from their start times: there, only the start time puts them in
+      // the right order.
+      const idAgainstStart = stored.some((x) =>
+        stored.some((y) => x.finishedAt === y.finishedAt && x.startedAt > y.startedAt && x.id < y.id),
+      );
+      expect(idAgainstStart).toBe(idOrder !== 'counting up');
 
-    // Page sizes that cut the ties in every place they can.
-    for (const limit of [1, 2, 3, 7, 10, HISTORY_MAX_LIMIT]) {
-      const pages = await walk(seat, limit);
-      const ids = pages.flatMap((page) => page.rounds.map((r) => r.id));
-      expect(ids, `limit ${String(limit)}`).toEqual(order);
-      expect(pages.length).toBe(Math.ceil(order.length / limit));
-      pages.forEach((page, n) => {
-        const last = n === pages.length - 1;
-        expect(page.more).toBe(!last);
-        if (!last) expect(page.rounds).toHaveLength(limit);
-      });
-    }
-  });
+      // Page sizes that cut the ties in every place they can.
+      for (const limit of [1, 2, 3, 7, 10, HISTORY_MAX_LIMIT]) {
+        const pages = await walk(seat, limit);
+        const ids = pages.flatMap((page) => page.rounds.map((r) => r.id));
+        expect(ids, `limit ${String(limit)}`).toEqual(order);
+        expect(pages.length).toBe(Math.ceil(order.length / limit));
+        pages.forEach((page, n) => {
+          const last = n === pages.length - 1;
+          expect(page.more).toBe(!last);
+          if (!last) expect(page.rounds).toHaveLength(limit);
+        });
+      }
+    },
+  );
 
   it('answers as before with no cursor: the newest rounds, 10 by default, and says if more remain', async () => {
     const world = testWorld();
