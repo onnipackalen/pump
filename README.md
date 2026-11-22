@@ -396,7 +396,10 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
   balloon, and a finished round, from ever changing again. A draw index can
   be recorded for one pump only.
 - **The server seed stays secret.** Only its SHA-256 is shown until the
-  player rotates. The code that reads seeds can't read an active one.
+  player rotates. An active seed is read in one place only
+  (`secretForDrawing` in `apps/server/src/repositories/seeds.ts`), by the
+  game service, to work out draws inside the transaction that makes them;
+  it never goes into an answer.
 - **Players are anonymous.** A random token in an httpOnly cookie; the
   database stores only its hash.
 - **The books can be checked from the data alone.** `reconcile()` compares
