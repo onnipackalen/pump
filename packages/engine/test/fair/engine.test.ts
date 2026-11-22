@@ -15,8 +15,9 @@
  * had not cashed out.
  *
  * It runs at 9400, 9700 and 9900 (and the configured RTP) on every
- * difficulty. Choices come from a small seeded generator, never Math.random,
- * so a failure always reproduces.
+ * difficulty, and on a fixed ladder from fixtures.ts that never changes.
+ * Choices come from a small seeded generator, never Math.random, so a
+ * failure always reproduces.
  */
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
@@ -43,11 +44,20 @@ import {
   verifyRound,
   type RoundRecord,
 } from '@pump/engine/fair';
+import { fixedConfig } from '../fixtures';
 
 /** The three RTP values reviewers will try, plus whatever is configured now. */
 const RTPS = [...new Set([9400, 9700, 9900, RTP_BP])];
 const RICH = 1_000_000_000;
+/** Every case plays this many rounds. */
 const ROUNDS_PER_CASE = 200;
+/**
+ * A case plays on past ROUNDS_PER_CASE, up to this many rounds, while some
+ * path its ladder can take has not shown up yet. As shipped every path shows
+ * up within ROUNDS_PER_CASE; a new ladder may make one rarer (a top pump
+ * that seldom survives makes a reveal to the top rare).
+ */
+const MOST_ROUNDS_PER_CASE = 5000;
 
 /** Bets that must be played on every ladder at every RTP: edges and awkward amounts. */
 const SPECIAL_BETS = [10, 11, 99, 12_345, 100_000];
@@ -243,24 +253,75 @@ function pumpedOn(
   }
 }
 
-const CASES = RTPS.flatMap((rtpBp) =>
-  GAME_CONFIG.difficulties.map((difficulty) => [rtpBp, difficulty.id] as const),
-);
+/** Every path a round can take, as playRound tallies them. */
+const EVERY_PATH: readonly string[] = [
+  'survived',
+  'saved',
+  'popped',
+  'top',
+  'cash out',
+  'abandoned cashed',
+  'abandoned refunded',
+  'reveal popped',
+  'reveal top',
+  'reveal after a Patch save',
+  ...SPECIAL_BETS.map((bet) => `bet ${String(bet)}`),
+];
+
+/**
+ * The paths a ladder can take at all. On a one-rung ladder the first pump
+ * goes to the top, so no pump survives below it; a Patch is sold from pump
+ * 2 on, so there is none; and no balloon is ever in play on a rung, so
+ * there is no cash-out below the top, by hand or by the 24-hour rule, and
+ * no reveal.
+ */
+function pathsOf(ladder: readonly number[]): readonly string[] {
+  if (ladder.length >= 2) return EVERY_PATH;
+  const none = new Set([
+    'survived',
+    'saved',
+    'cash out',
+    'abandoned cashed',
+    'reveal popped',
+    'reveal top',
+    'reveal after a Patch save',
+  ]);
+  return EVERY_PATH.filter((path) => !none.has(path));
+}
+
+/** One case: an RTP, a name for the ladder, the config it is in, and its difficulty id. */
+type Case = readonly [rtpBp: number, name: string, config: GameConfig, id: string];
+
+const CASES: readonly Case[] = RTPS.flatMap((rtpBp) => [
+  // Every configured difficulty...
+  ...GAME_CONFIG.difficulties.map(
+    (difficulty): Case => [rtpBp, difficulty.id, { ...GAME_CONFIG, rtpBp }, difficulty.id],
+  ),
+  // ...and a fixed ladder that takes every path, so the check of every
+  // path never goes away, whatever the config holds.
+  [rtpBp, 'the fixed medium ladder', fixedConfig(rtpBp), 'medium'] as const,
+]);
 
 describe('verifyRound on rounds played by the live engine with real seeds', () => {
-  it.each(CASES)('at RTP %i on %s, every round verifies and recomputes exactly', (rtpBp, id) => {
-    const config: GameConfig = { ...GAME_CONFIG, rtpBp };
-    const pick = generator(rtpBp * 31 + id.length * 7919 + (id.codePointAt(0) ?? 0));
+  it.each(CASES)('at RTP %i on %s, every round verifies and recomputes exactly', (rtpBp, name, config, id) => {
+    const ladder = config.difficulties.find((d) => d.id === id)?.ladder ?? [];
+    const paths = pathsOf(ladder);
+    const pick = generator(rtpBp * 31 + name.length * 7919 + (name.codePointAt(0) ?? 0));
     const seen: Seen = new Map();
+    const missing = (): readonly string[] => paths.filter((path) => (seen.get(path) ?? 0) === 0);
 
     // One player: the server seed rotates every 25 rounds (nonce back to 0),
     // and the client seed is edited now and then (nonce carries on).
     let serverSeed = '';
     let nonce = 0;
     let clientSeed = clientSeedFrom(pick);
-    for (let r = 0; r < ROUNDS_PER_CASE; r += 1) {
+    for (
+      let r = 0;
+      r < ROUNDS_PER_CASE || (r < MOST_ROUNDS_PER_CASE && missing().length > 0);
+      r += 1
+    ) {
       if (r % 25 === 0) {
-        serverSeed = serverSeedFor(`engine.test ${String(rtpBp)} ${id} ${String(r)}`);
+        serverSeed = serverSeedFor(`engine.test ${String(rtpBp)} ${name} ${String(r)}`);
         nonce = 0;
       }
       if (pick(8) === 0) clientSeed = clientSeedFrom(pick);
@@ -321,22 +382,12 @@ describe('verifyRound on rounds played by the live engine with real seeds', () =
       });
     }
 
-    // Every path was taken: each kind of pump outcome, both kinds of
-    // settlement, player cash-outs, and every special bet.
-    for (const path of [
-      'survived',
-      'saved',
-      'popped',
-      'top',
-      'cash out',
-      'abandoned cashed',
-      'abandoned refunded',
-      'reveal popped',
-      'reveal top',
-      'reveal after a Patch save',
-      ...SPECIAL_BETS.map((bet) => `bet ${String(bet)}`),
-    ]) {
+    // Every path the ladder can take was taken: each kind of pump outcome,
+    // both kinds of settlement, player cash-outs, and every special bet.
+    // On the shipped ladders and the fixed one that is every path there is.
+    if (name === 'the fixed medium ladder') expect(paths).toEqual(EVERY_PATH);
+    for (const path of paths) {
       expect(seen.get(path) ?? 0, path).toBeGreaterThan(0);
     }
-  });
+  }, 60_000);
 });
