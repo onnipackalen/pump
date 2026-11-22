@@ -24,6 +24,8 @@ Stake: Pump
 - It uses the space. We had a lot of empty space at the top, and our
   balloon needed to grow more.
 - Switching levels is easy.
+- Its house edge seems to come from the inflating. (In ours it all sits on
+  the first pump; the README shows why.)
 - I really like its look, but I also like our pump.
 
 SmartSoft: Balloon
@@ -49,8 +51,7 @@ InOut: Chicken Road
 3. **Live stats.** Profit over the session with a line: next to the game
    on a computer, a strip under the game on a phone.
 4. **Public wins.** Recent, Biggest and Lucky lists at the bottom of the
-   page, with a "Keep my wins private" setting. It's built, but switched
-   off on the live site for now (the `PUBLIC_WINS` setting).
+   page, with a "Keep my wins private" setting. The live site shows them.
 5. **The space at the top.** The balloon grows more in its early pumps.
    Each balloon has its own row of multiplier steps:
    - on a computer, in the space at the top
@@ -69,6 +70,8 @@ I didn't copy Stake's look. I kept ours.
 
 ## What I found playing ours
 
+Bugs:
+
 - Pump, Patch and Cash out were too easy to mix up, so Patch got its own
   clear button.
 - On a phone you couldn't start a new round after one ended: the bet panel
@@ -79,3 +82,50 @@ I didn't copy Stake's look. I kept ours.
 - Changing the number of balloons or the difficulty didn't show until the
   next round. Now the screen changes at once and slides into place.
 - Auto-play's target was fiddly to change, so it got − and + buttons.
+
+Other changes I asked for:
+
+- **Less on the screen.** The first screen had hint sentences, a stats grid
+  under every balloon and side panels. I showed the chat Stake's screen and
+  asked for almost no sentences, big numbers, and settings always one tap
+  away.
+- **Ladders tuned for fun.** I asked whether the ladders were tuned for
+  enjoyment. They weren't: Easy popped 9% to 17% of the time on every pump
+  after the first, there were no round rungs like 2x, 5x or 10x, and a
+  $1,000 bet topped out at $62,000 on Hard. They were redesigned with round
+  rungs, and a rung at exactly 100x so the top bet can win the full cap.
+- **Only signs real games use.** Several made-up graphics were taken out:
+  a seal on top, a grid of dots for the odds, a ghost outline after a pop,
+  a cash-out tick and a tape sticker for the Patch. The Patch shows in
+  words instead.
+- **Bet at the top.** I had the bet panel's order reversed, so Bet comes
+  first.
+- **Phone and computer don't look the same.** The swipe-up sheet is for
+  phones only. A computer keeps the panel as a card beside the game.
+- **No snapping back.** After a round, the old pump was swapped for a fresh
+  one in a single frame. Now the new pump sets itself up with a short
+  animation.
+- **The air going up the hose.** I asked for the hose itself to swell as
+  the air goes up, not a dot on top of it. I spotted the first version
+  sticking out of the hose at the bend, picked the size of the swell, and
+  had the flashing removed while it waits.
+- **Tension on every level.** The balloon's strain now follows each
+  ladder's own range of pop chances, so Easy builds up too, not just
+  Expert.
+- **Three balloons on a phone.** This was the hardest fit. With two or three
+  balloons, each Pump button shows a small "next 1.23×" instead of a full
+  row of steps.
+
+## Still to improve
+
+- **The smallest phone held sideways** (568 × 320) still has to scroll
+  inside the bet panel.
+- **The sheet's handle is only a picture.** Tapping it does nothing; you
+  have to swipe.
+- **Easy's pace.** I'm not entirely sure about how slowly it builds.
+- **A mode that keeps growing, like a rocket game.** I'd like to make one,
+  but I decided not to.
+- **Patches on tiny bets.** On Easy with small bets, some Patches cost as
+  much as the step can win. See whether players buy them.
+- **Stake's tap-a-step.** On Stake you can tap a future step to see its
+  profit and chance. I haven't decided whether we want it.
