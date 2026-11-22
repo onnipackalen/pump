@@ -62,6 +62,30 @@ export function cappedDifficulty(): Difficulty {
   );
 }
 
+/**
+ * For tests that need balloons to get past pump 1 within a set number of
+ * tries: of the difficulties `wanted` is true for, the one whose first pump
+ * pops least often (the lowest first rung; the first of those in the list).
+ * It is used if pump 1 survives at least half the time at `rtpBp`. If not,
+ * as when every such ladder starts steep, the made long ladder is used, so
+ * a steep first difficulty can never make such a test fail by bad luck.
+ */
+export function surestStart(
+  rtpBp: number,
+  wanted: (difficulty: Difficulty) => boolean = () => true,
+  difficulties: readonly Difficulty[] = GAME_CONFIG.difficulties,
+): Difficulty {
+  let best: Difficulty | undefined;
+  for (const d of difficulties.filter(wanted)) {
+    if (best === undefined || (d.ladder[0] ?? Infinity) < (best.ladder[0] ?? Infinity)) best = d;
+  }
+  // Pump 1 survives with chance R / m_1 = rtpBp / (100 * h_1). That is at
+  // least a half when 2 * rtpBp >= 100 * h_1.
+  if (best !== undefined && 2 * rtpBp >= 100 * (best.ladder[0] ?? Infinity)) return best;
+  if (!wanted(MADE_LONG)) throw new Error('The made long ladder does not have what the test needs');
+  return MADE_LONG;
+}
+
 /** The game config, with `difficulty` added at the end when it is not in it already. */
 export function configWith(difficulty: Difficulty, config: GameConfig = GAME_CONFIG): GameConfig {
   if (config.difficulties.some((d) => d.id === difficulty.id)) return config;

@@ -1,6 +1,14 @@
-import { GAME_CONFIG, ladderProblems, topRungForBet } from '@pump/engine';
+import { GAME_CONFIG, ladderProblems, topRungForBet, type Difficulty } from '@pump/engine';
 import { describe, expect, it } from 'vitest';
-import { BASE, cappedDifficulty, difficultyWithRungs, MADE_CAPPED, MADE_DIFFICULTIES, MADE_LONG } from './fixtures';
+import {
+  BASE,
+  cappedDifficulty,
+  difficultyWithRungs,
+  MADE_CAPPED,
+  MADE_DIFFICULTIES,
+  MADE_LONG,
+  surestStart,
+} from './fixtures';
 
 /** The ladders the tests make for themselves must be ladders the game would accept. */
 describe('the ladders made for tests', () => {
@@ -43,5 +51,23 @@ describe('the ladders made for tests', () => {
       capped.ladder.length,
     );
     expect(topRungForBet(capped.ladder, 100, limits.maxPayoutCents)).toBe(capped.ladder.length);
+  });
+
+  it('give a test that needs pump 1 to hold a ladder where it holds at least half the time', () => {
+    // A legal ladder starting at 20x: pump 1 holds under 5% of the time.
+    const steep: Difficulty = { id: 'made-steep', label: 'Made steep', ladder: [2000, 50_000, 1_500_000] };
+    for (const rtpBp of rtps) {
+      expect(ladderProblems(rtpBp, steep.ladder, limits)).toEqual([]);
+      // The config, the config with the steep one first, and the steep one alone.
+      for (const list of [GAME_CONFIG.difficulties, [steep, ...GAME_CONFIG.difficulties], [steep]]) {
+        const got = surestStart(rtpBp, () => true, list);
+        expect(got).not.toBe(steep);
+        // R / m_1 >= 1/2.
+        expect(2 * rtpBp).toBeGreaterThanOrEqual(100 * (got.ladder[0] ?? Infinity));
+        // From the list when one there will do.
+        const fits = list.some((d) => 2 * rtpBp >= 100 * (d.ladder[0] ?? Infinity));
+        expect(got === MADE_LONG).toBe(!fits);
+      }
+    }
   });
 });
