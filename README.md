@@ -328,9 +328,12 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
   had the same hash and nonce (its copy then stands for them).
 - A refusal that carries a round, in play or over, does this at once, so
   the round is checked before you can play it or verify it. A refusal
-  without a round (too little money, or `seeds_changed`) made no round, so
-  that start gets no stand-in and can't make a later honest round look
-  wrong. It can still give its copy to a round in play.
+  without a round (too little money, or `seeds_changed`) made no round on
+  an honest server, so that start is dropped and can't make a later honest
+  round look wrong. But if a round in play asked for its bets, the refusal
+  is in doubt: the start gives that round its copy if it has none yet, and
+  otherwise keeps a stand-in (a server could call the round it made by an
+  older round's id). See [Known issues](#known-issues).
 - What the copy can't prove: it is what the server's own answers put on
   the screen. So check that the panel shows your client seed before you
   bet.
@@ -610,6 +613,13 @@ Found in the final check before submitting, and not fixed on `main` yet:
   not long ago. Closing this fully needs the server's record to carry
   something the browser picked at the start, such as the start's
   idempotency key.
+- **A start refused with no round in its answer keeps its copy only if a
+  round for its bets turns up in play.** A dishonest server could refuse a
+  start, play the round anyway on a client seed it picked, and end it
+  before this browser sees it in play. That round can then get past the
+  copy check: the page says it has no copy of it, and calls that a warning
+  sign. Keeping a copy for every refused start would close this, but then
+  a tab left out of date could make honest rounds fail the check.
 - **Two tabs that press Bet at almost the same moment, on panels showing
   different seeds** (one out of date): this browser can't tell which start
   made the round, so the round gets the copy of the start pressed last. A

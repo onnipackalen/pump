@@ -119,8 +119,10 @@ from the rare cases under Known issues in the README.
 If the answer to a bet never arrives, your browser still keeps what it
 showed: under the round's id if it finds that round in play, and otherwise
 as a copy the page finds by the round's server seed hash and nonce. A bet
-the server refused made no round, so it is kept only if a round for it
-turns up in play. On
+the server refused, with no round in its answer, made no round if the
+server is honest. So it is kept only if a round for the same bets turns up
+in play: under that round's id if it has no copy yet, and otherwise as a
+copy the page finds by server seed hash and nonce. On
 another device, or after you clear your browser's data, it has no copy. It
 then uses the server's record and says so, and it can't catch a server that
 changed those three. It also has no copy if the server
