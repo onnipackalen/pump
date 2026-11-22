@@ -30,6 +30,7 @@ import {
 } from '../src/wins/polling';
 import { PublicWins, PublicWinsPanel, WINS_TABS, type WinsList } from '../src/wins/PublicWins';
 import { SHEET_SLACK_PX, winsMayJoin } from '../src/wins/sheetFirst';
+import { configWith, surestStart } from './fixtures';
 
 const key = (): string => crypto.randomUUID();
 
@@ -124,12 +125,20 @@ describe('HttpClient: public wins and settings', () => {
   });
 });
 
-/** Plays one-balloon rounds in the demo (one pump, then cash out) until `count` are won. */
+/**
+ * The difficulty the demo wins are played on: one whose first pump survives
+ * at least half the time (Easy, as shipped), so 50 tries miss a win with a
+ * chance of at most 1 in 2^50, whatever difficulty the config puts first.
+ */
+const SURE = surestStart(GAME_CONFIG.rtpBp);
+const SURE_CONFIG = configWith(SURE);
+
+/** Plays one-balloon rounds in the demo (one pump, then cash out) until each bet has won once. */
 async function playWins(client: DemoClient, betsCents: readonly number[]): Promise<void> {
   for (const betCents of betsCents) {
     for (let tries = 0; tries < 50; tries += 1) {
       const { round } = await client.startRound(
-        { difficultyId: GAME_CONFIG.difficulties[0]?.id ?? 'easy', betsCents: [betCents] },
+        { difficultyId: SURE.id, betsCents: [betCents] },
         key(),
       );
       const pumped = await client.pump(
@@ -148,7 +157,7 @@ async function playWins(client: DemoClient, betsCents: readonly number[]): Promi
 
 describe('DemoClient: public wins and settings', () => {
   it('lists the demo player’s own wins in the three orders, all under one tag', async () => {
-    const client = new DemoClient(GAME_CONFIG, 0);
+    const client = new DemoClient(SURE_CONFIG, 0);
     await client.setClientSeed('demo-seed', key());
     expect(await client.getPublicWins()).toEqual(NONE);
 
@@ -164,14 +173,14 @@ describe('DemoClient: public wins and settings', () => {
       expect(Number.isSafeInteger(w.payoutCents)).toBe(true);
       expect(w.netCents).toBe(w.payoutCents - w.wageredCents);
       expect(w.netCents).toBeGreaterThan(0);
-      const ladder = GAME_CONFIG.difficulties[0]?.ladder ?? [];
-      expect(w.multiplierHundredths).toBe(ladder[0]);
+      expect(w.difficultyId).toBe(SURE.id);
+      expect(w.multiplierHundredths).toBe(SURE.ladder[0]);
     }
     expect(wins.luckiest).toHaveLength(3);
   });
 
   it('keeps the wins out of the lists while private, past ones too, and back when not', async () => {
-    const client = new DemoClient(GAME_CONFIG, 0);
+    const client = new DemoClient(SURE_CONFIG, 0);
     await client.setClientSeed('demo-seed', key());
     await playWins(client, [100]);
     expect(await client.getSettings()).toEqual({ winsPrivate: false });

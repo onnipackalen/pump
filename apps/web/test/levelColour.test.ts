@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { GAME_CONFIG, type Difficulty } from '@pump/engine';
+import { cashOutCents, GAME_CONFIG, multiplierAt, topRungForBet, type Difficulty } from '@pump/engine';
 import { Balloon } from '../src/balloon/Balloon';
 import { FLOOR_Y } from '../src/balloon/hoseShape';
 import { BalloonCard, PreviewCard } from '../src/components/BalloonCard';
@@ -15,11 +15,13 @@ import {
   levelOf,
   MAX_LEVEL_MARKS,
 } from '../src/game/level';
-import { balloon } from './fixtures';
+import { balloon, freeId } from './fixtures';
 
 const css = readFileSync(new URL('../src/balloon/balloon.css', import.meta.url), 'utf8');
 const pageCss = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const difficulties = GAME_CONFIG.difficulties;
+/** The four difficulties the game ships with. Each keeps a colour of its own. */
+const SHIPPED = ['easy', 'medium', 'hard', 'expert'] as const;
 
 /** A colour token as a sheet sets it, like "  --mint: #4fe0a8;". */
 function token(sheet: string, name: string): string {
@@ -76,13 +78,25 @@ function svgTag(html: string): string {
 }
 
 describe('the difficulty colours', () => {
-  it('give every configured difficulty a colour of its own', () => {
-    for (const d of difficulties) {
-      expect(Object.hasOwn(LEVEL_COLOURS, d.id), d.id).toBe(true);
-      expect(levelColour(d.id)).not.toBe(LEVEL_FALLBACK);
+  it('give each of the four shipped difficulties a colour of its own', () => {
+    for (const id of SHIPPED) {
+      expect(Object.hasOwn(LEVEL_COLOURS, id), id).toBe(true);
+      expect(levelColour(id)).not.toBe(LEVEL_FALLBACK);
     }
-    const used = difficulties.map((d) => levelColour(d.id));
+    const used = SHIPPED.map((id) => levelColour(id));
     expect(new Set(used).size).toBe(used.length);
+  });
+
+  it('give every configured difficulty its own colour if it has one, the fallback if not', () => {
+    // A difficulty added to the config with no colour still draws, in the
+    // fallback (level.ts). Two configured difficulties never share a colour
+    // of their own.
+    for (const d of difficulties) {
+      const own = Object.hasOwn(LEVEL_COLOURS, d.id) ? LEVEL_COLOURS[d.id] : undefined;
+      expect(levelColour(d.id), d.id).toBe(own ?? LEVEL_FALLBACK);
+    }
+    const own = difficulties.filter((d) => Object.hasOwn(LEVEL_COLOURS, d.id)).map((d) => levelColour(d.id));
+    expect(new Set(own).size).toBe(own.length);
   });
 
   it('falls back for a difficulty with no colour, even one named like a built-in', () => {
@@ -147,8 +161,11 @@ describe('levelOf', () => {
   });
 
   it('still draws a difficulty added to the config, in the fallback colour', () => {
-    const extra: Difficulty = { id: 'insane', label: 'Insane', ladder: [300, 1000] };
-    const level = levelOf('insane', [...difficulties, extra]);
+    // An id no configured difficulty has and no colour is kept for.
+    const id = freeId('made-extra');
+    expect(difficulties.some((d) => d.id === id) || Object.hasOwn(LEVEL_COLOURS, id)).toBe(false);
+    const extra: Difficulty = { id, label: 'Made extra', ladder: [300, 1000] };
+    const level = levelOf(id, [...difficulties, extra]);
     expect(level.colour).toBe(LEVEL_FALLBACK);
     expect(level.marks).toBe(Math.min(difficulties.length + 1, MAX_LEVEL_MARKS));
   });
@@ -227,12 +244,23 @@ describe('the cards pass the difficulty to the pump', () => {
   const noop = (): void => undefined;
 
   it.each(difficulties.map((d) => d.id))('a balloon in a round on %s', (id) => {
+    const ladder = difficulties.find((d) => d.id === id)?.ladder ?? [];
+    // A $1 balloon in play two pumps up, or lower on a ladder too short for that.
+    const top = topRungForBet(ladder, 100, GAME_CONFIG.limits.maxPayoutCents);
+    const rung = Math.min(2, top - 1);
+    const view = balloon({
+      rung,
+      drawIndex: rung,
+      topRung: top,
+      multiplierHundredths: rung === 0 ? null : multiplierAt(ladder, rung),
+      cashOutCents: rung === 0 ? null : cashOutCents(100, ladder, rung),
+    });
     const html = renderToStaticMarkup(
       createElement(BalloonCard, {
-        balloon: balloon({ rung: 2, multiplierHundredths: 150, cashOutCents: 150 }),
+        balloon: view,
         difficultyId: id,
         rtpBp: GAME_CONFIG.rtpBp,
-        ladder: difficulties.find((d) => d.id === id)?.ladder ?? [],
+        ladder,
         beat: 'idle',
         patched: false,
         outcome: null,

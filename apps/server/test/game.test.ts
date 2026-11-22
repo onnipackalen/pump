@@ -1,5 +1,5 @@
 import type { HistoryResponse, RoundView } from '@pump/contract';
-import { GAME_CONFIG, type Difficulty, type GameConfig } from '@pump/engine';
+import { GAME_CONFIG, type GameConfig } from '@pump/engine';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app';
 import { immediate } from '../src/db/transaction';
@@ -12,6 +12,7 @@ import {
   newKey,
   Seat,
   secretSeed,
+  TINY,
   willSurvive,
   type Foretold,
 } from './play';
@@ -19,8 +20,6 @@ import {
 /** The three RTP values reviewers will try, plus whatever is configured now. */
 const RTPS = [...new Set([9400, 9700, 9900, GAME_CONFIG.rtpBp])];
 
-/** A short ladder, added by configuration alone, so tests can reach the top rung. */
-const TINY: Difficulty = { id: 'tiny', label: 'Tiny', ladder: [101, 111, 123] };
 
 function configAt(rtpBp: number): GameConfig {
   return { ...GAME_CONFIG, rtpBp, difficulties: [...GAME_CONFIG.difficulties, TINY] };
@@ -55,7 +54,7 @@ async function deal(
   options: { difficultyId?: string; bets?: readonly number[]; config?: GameConfig } = {},
 ): Promise<Table> {
   const config = options.config ?? configAt(GAME_CONFIG.rtpBp);
-  const difficultyId = options.difficultyId ?? 'tiny';
+  const difficultyId = options.difficultyId ?? TINY.id;
   const world = testWorld(config);
   const seat = await Seat.join(world.app, null);
   const foretold = {
@@ -226,7 +225,7 @@ describe('starting a round', () => {
     const pumped = (await seat.pump(round, 0)).body.round;
     await seat.cashOut(pumped, 0);
 
-    const next = await seat.start('tiny', [1000]);
+    const next = await seat.start(TINY.id, [1000]);
 
     expect(round.nonce).toBe(0);
     expect(next.body.round.nonce).toBe(1);
@@ -593,7 +592,7 @@ describe('balloons in one round', () => {
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({
       id: round.id,
-      difficultyId: 'tiny',
+      difficultyId: TINY.id,
       balloonCount: 2,
       betCents: 1500,
       nonce: 0,

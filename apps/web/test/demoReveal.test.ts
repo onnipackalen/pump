@@ -16,6 +16,7 @@ import type { BalloonView, RoundView } from '../src/api/contract';
 import { DemoClient } from '../src/demo/DemoClient';
 import { afterRoundLine } from '../src/game/afterRound';
 import { formatMultiplier } from '../src/money';
+import { climbsAll, configWith, MADE_LONG, surestStart } from './fixtures';
 
 vi.mock('@pump/engine/fair', async (importOriginal) => {
   const actual = await importOriginal<typeof Fair>();
@@ -119,12 +120,18 @@ describe.each(RTPS)('the demo at RTP %i', (rtpBp) => {
   });
 
   it('makes no reveal draw for a refused request, and a repeat gets the same answer', async () => {
-    const client = await newClient(config);
-    const difficultyId = DIFFICULTIES[0]?.id ?? 'easy';
+    // A ladder where a $1 balloon is still in play after one pump, and pump
+    // 1 survives at least half the time (Easy, as shipped). Both balloons
+    // then get past pump 1 at least a quarter of the time, so 1000 tries
+    // miss with a chance of about 1 in 10^125, whatever ladder comes first.
+    const difficulty = surestStart(rtpBp, (d) => d.ladder.length >= 2 && climbsAll(d.ladder, 100));
+    const client = await newClient(configWith(difficulty, config));
+    const difficultyId = difficulty.id;
 
     // A round with two balloons, both pumped once and still in play.
     let round: RoundView | null = null;
-    while (round === null) {
+    for (let tries = 0; round === null; tries += 1) {
+      if (tries === 1000) throw new Error('no round left both balloons in play');
       let started = (await client.startRound({ difficultyId, betsCents: [100, 100] }, key())).round;
       for (const index of [0, 1]) {
         const b = started.balloons[index];
@@ -176,8 +183,16 @@ describe.each(RTPS)('the demo at RTP %i', (rtpBp) => {
   });
 
   it('says each ending in the spec’s words', async () => {
-    // A three-rung ladder (the start of a real one), so the top is in reach.
-    const ladder = (DIFFICULTIES[0]?.ladder ?? []).slice(0, 3);
+    // A three-rung ladder, so the top is in reach: the start of the
+    // configured ladder that gives the best chance of getting there (Easy,
+    // as shipped), or of the long made one if it gives a better chance.
+    const ladder = [...DIFFICULTIES, MADE_LONG]
+      .filter((d) => d.ladder.length >= 3)
+      .map((d) => d.ladder.slice(0, 3))
+      .reduce((best, next) =>
+        // Survive pumps 2 and 3: h1 / h3. Higher is better.
+        (next[0] ?? 0) * (best[2] ?? 1) > (best[0] ?? 0) * (next[2] ?? 1) ? next : best,
+      );
     const short: GameConfig = {
       ...config,
       difficulties: [{ id: 'short', label: 'Short', ladder }],

@@ -18,7 +18,7 @@ import {
   onlyPlayerId,
   testWorld,
 } from './helpers';
-import { Seat } from './play';
+import { ladderOf, Seat } from './play';
 
 const ORDER = GAME_CONFIG.difficulties.map((difficulty) => difficulty.id);
 
@@ -338,9 +338,10 @@ describe.each([9400, 9700, 9900])('stats after the 24-hour rule, at RTP %i', (rt
       paidOutCents: paid,
       netCents: paid - 1000,
       profit: [{ round: 1, netCents: paid - 1000 }],
-      // If balloon 1 held, it cashed out at 1.04x: $10.40 back on the $10
-      // really played, a real win of $0.40. Counting the refunded $5 as stake
-      // would wrongly make it a $4.60 loss. If it popped, there is no win.
+      // If balloon 1 held, it cashed out at Medium's first rung (1.04x as
+      // shipped: $10.40 back on the $10 really played, a real win of $0.40).
+      // Counting the refunded $5 as stake would wrongly make that a $4.60
+      // loss. If it popped, there is no win.
       bestWin:
         paid > 1000
           ? {
@@ -349,7 +350,7 @@ describe.each([9400, 9700, 9900])('stats after the 24-hour rule, at RTP %i', (rt
               netCents: paid - 1000,
               wageredCents: 1000,
               payoutCents: paid,
-              multiplierHundredths: 104,
+              multiplierHundredths: ladderOf(config, 'medium')[0],
               finishedAt: settled?.finishedAt,
               seedRevealed: false,
             }

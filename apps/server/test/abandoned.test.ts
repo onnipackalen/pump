@@ -1,5 +1,5 @@
 import type { HistoryResponse, VerifiableRound } from '@pump/contract';
-import { GAME_CONFIG, replayBalloon, type Difficulty, type GameConfig, type Round } from '@pump/engine';
+import { GAME_CONFIG, replayBalloon, type GameConfig, type Round } from '@pump/engine';
 import { drawRoll } from '@pump/engine/fair';
 import { describe, expect, it } from 'vitest';
 import { text } from '../src/db/rows';
@@ -9,9 +9,8 @@ import { reconcile } from '../src/services/reconcile';
 import { ABANDONED_AFTER_MS } from '../src/settings';
 import { runAbandonedSweep, type SweepLog } from '../src/sweep';
 import { count, onlyPlayerId, testWorld, type TestWorld } from './helpers';
-import { clientSeedWhere, ladderOf, Seat, secretSeed, willSurvive, type Foretold } from './play';
+import { clientSeedWhere, ladderOf, Seat, secretSeed, TINY, willSurvive, type Foretold } from './play';
 
-const TINY: Difficulty = { id: 'tiny', label: 'Tiny', ladder: [101, 111, 123] };
 const CONFIG: GameConfig = {
   ...GAME_CONFIG,
   difficulties: [...GAME_CONFIG.difficulties, TINY],
@@ -27,7 +26,7 @@ async function table(): Promise<{ world: TestWorld; seat: Seat }> {
     serverSeed: secretSeed(world.db),
     nonce: 0,
     rtpBp: CONFIG.rtpBp,
-    ladder: ladderOf(CONFIG, 'tiny'),
+    ladder: ladderOf(CONFIG, TINY.id),
   };
   const good = (round: Foretold): boolean =>
     willSurvive(round, 0, 0, 1) && willSurvive(round, 0, 1, 2) && willSurvive(round, 1, 0, 1);
@@ -38,7 +37,7 @@ async function table(): Promise<{ world: TestWorld; seat: Seat }> {
 describe('a round left alone for 24 hours', () => {
   it('is settled before the player’s next request: pumped balloons cash out, unpumped bets come back', async () => {
     const { world, seat } = await table();
-    let round = (await seat.start('tiny', [1000, 1000, 1000])).body.round;
+    let round = (await seat.start(TINY.id, [1000, 1000, 1000])).body.round;
     round = (await seat.pump(round, 0)).body.round;
     round = (await seat.pump(round, 0)).body.round;
     await seat.pump(round, 1);
@@ -64,7 +63,7 @@ describe('a round left alone for 24 hours', () => {
 
   it('is not settled one millisecond earlier', async () => {
     const { world, seat } = await table();
-    let round = (await seat.start('tiny', [1000, 1000, 1000])).body.round;
+    let round = (await seat.start(TINY.id, [1000, 1000, 1000])).body.round;
     round = (await seat.pump(round, 0)).body.round;
     world.runtime.advance(ABANDONED_AFTER_MS - 1);
 
@@ -76,7 +75,7 @@ describe('a round left alone for 24 hours', () => {
 
   it('counts the 24 hours from the last thing that happened, not from the start', async () => {
     const { world, seat } = await table();
-    let round = (await seat.start('tiny', [1000, 1000, 1000])).body.round;
+    let round = (await seat.start(TINY.id, [1000, 1000, 1000])).body.round;
     world.runtime.advance(23 * HOUR);
     round = (await seat.pump(round, 0)).body.round;
     world.runtime.advance(23 * HOUR);
@@ -89,7 +88,7 @@ describe('a round left alone for 24 hours', () => {
 
   it('is not kept alive by looking, or by a refused request', async () => {
     const { world, seat } = await table();
-    const round = (await seat.start('tiny', [1000, 1000, 1000])).body.round;
+    const round = (await seat.start(TINY.id, [1000, 1000, 1000])).body.round;
     world.runtime.advance(23 * HOUR);
     await seat.session();
     // Refused: no cash-out before the first pump.
@@ -101,7 +100,7 @@ describe('a round left alone for 24 hours', () => {
 
   it('is settled before the request that found it, so that request sees the settled state', async () => {
     const { world, seat } = await table();
-    let round = (await seat.start('tiny', [1000, 1000, 1000])).body.round;
+    let round = (await seat.start(TINY.id, [1000, 1000, 1000])).body.round;
     round = (await seat.pump(round, 0)).body.round;
     world.runtime.advance(ABANDONED_AFTER_MS);
 
@@ -122,10 +121,10 @@ describe('a round left alone for 24 hours', () => {
 
   it('lets a new round start straight away', async () => {
     const { world, seat } = await table();
-    await seat.start('tiny', [1000, 1000, 1000]);
+    await seat.start(TINY.id, [1000, 1000, 1000]);
     world.runtime.advance(ABANDONED_AFTER_MS);
 
-    const next = await seat.start('tiny', [500]);
+    const next = await seat.start(TINY.id, [500]);
 
     expect(next.status).toBe(200);
     expect(next.body.round.nonce).toBe(1);
@@ -134,7 +133,7 @@ describe('a round left alone for 24 hours', () => {
 
   it('is settled by the sweep for a player who never comes back', async () => {
     const { world, seat } = await table();
-    let round = (await seat.start('tiny', [1000, 1000, 1000])).body.round;
+    let round = (await seat.start(TINY.id, [1000, 1000, 1000])).body.round;
     round = (await seat.pump(round, 0)).body.round;
     const other = await Seat.join(world.app);
     await other.start('easy', [2500]);
@@ -153,7 +152,7 @@ describe('a round left alone for 24 hours', () => {
 
   it('shows in the history as a finished round', async () => {
     const { world, seat } = await table();
-    const round = (await seat.start('tiny', [1000, 1000, 1000])).body.round;
+    const round = (await seat.start(TINY.id, [1000, 1000, 1000])).body.round;
     await seat.pump(round, 0);
     world.runtime.advance(ABANDONED_AFTER_MS);
 
@@ -187,12 +186,12 @@ describe('the sweep, when one round cannot be settled', () => {
       serverSeed: text(seedRow, 'seed'),
       nonce: 0,
       rtpBp: CONFIG.rtpBp,
-      ladder: ladderOf(CONFIG, 'tiny'),
+      ladder: ladderOf(CONFIG, TINY.id),
     };
     await seat.setClientSeed(
       clientSeedWhere((clientSeed) => willSurvive({ ...foretold, clientSeed }, 0, 0, 1)),
     );
-    const round = (await seat.start('tiny', [1000, 1000])).body.round;
+    const round = (await seat.start(TINY.id, [1000, 1000])).body.round;
     expect((await seat.pump(round, 0)).body.outcome).toBe('survived');
     const playerId = roundsRepository(world.db).find(round.id)?.playerId;
     if (playerId === undefined) throw new Error('The round was not stored');
@@ -451,7 +450,7 @@ function replay(verifiable: VerifiableRound) {
 describe('checking a finished round', () => {
   async function finishedRound() {
     const { world, seat } = await table();
-    let round = (await seat.start('tiny', [1234, 777, 10])).body.round;
+    let round = (await seat.start(TINY.id, [1234, 777, 10])).body.round;
     round = (await seat.pump(round, 0)).body.round;
     round = (await seat.pump(round, 0, { patch: true })).body.round;
     round = (await seat.cashOut(round, 0)).body.round;
@@ -476,7 +475,7 @@ describe('checking a finished round', () => {
   it('is refused for a round still in progress, even after an earlier seed was revealed', async () => {
     const { seat } = await table();
     await seat.rotate();
-    const round = (await seat.start('tiny', [1000])).body.round;
+    const round = (await seat.start(TINY.id, [1000])).body.round;
 
     const reply = await seat.get(`/api/rounds/${round.id}/verify`);
 
@@ -494,7 +493,7 @@ describe('checking a finished round', () => {
     const verifiable = reply.body;
     expect(verifiable).toMatchObject({
       id: round.id,
-      difficultyId: 'tiny',
+      difficultyId: TINY.id,
       rtpBp: CONFIG.rtpBp,
       ladder: TINY.ladder,
       maxPayoutCents: CONFIG.limits.maxPayoutCents,

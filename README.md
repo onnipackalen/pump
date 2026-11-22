@@ -187,8 +187,12 @@ Why they look like this:
   $1,000, can win exactly the $100,000 cap.
 
 Adding a fifth difficulty is one more entry in `DIFFICULTIES`, with no
-engine change, and `npm run rtp` checks it like the others. (Three tests
-still assume the four shipped ladders; see [Known issues](#known-issues).)
+engine change, and `npm run rtp` checks it like the others. The tests ask
+for the shape of ladder they need, not for the four shipped ones, so they
+pass with one added. We checked this with short, long and steep extra
+ladders, first and last in the list, at 94%, 97% and 99%. The screen would
+still need a colour for it: today it would get the pump's grey and the
+same four rings as Expert.
 
 ### The payout cap
 
@@ -549,11 +553,6 @@ Found in the final check before submitting, and not fixed on `main` yet:
   the same results the player saw, and the page would say the round checks
   out. Being fixed: the browser will keep its own copy of the client seed
   and nonce shown before each round, and check against that.
-- **A fifth difficulty breaks three tests.** The engine, `npm run rtp` and
-  `npm run sim` handle it with no change. But the level colour test wants a
-  colour for every difficulty, one web test assumes every ladder has at
-  least 10 rungs, and one fairness test expects a "reveal to the top" in a
-  short random sample. Being fixed.
 - **`GET /api/session` has no limit.** Every visit without a cookie makes a
   new player, so a script could fill the database.
 - **The hammer never tries to overspend over HTTP.** That case is tested

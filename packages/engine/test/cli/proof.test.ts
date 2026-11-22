@@ -90,7 +90,12 @@ describe.each(DIFFICULTIES)('proof for $id', ({ ladder }) => {
     expect(scan.cashOutsWithinRtp).toBe(true);
     expect(scan.patchesWithinRtp).toBe(true);
     expect(compare(scan.worstCashOut.value, rtpOf(rtpBp))).toBeLessThanOrEqual(0);
-    expect(scan.worstPatch).not.toBeNull();
+    // A Patch is sold from pump 2 on, so only a one-rung ladder has none.
+    if (ladder.length === 1) {
+      expect(scan.worstPatch).toBeNull();
+    } else {
+      expect(scan.worstPatch).not.toBeNull();
+    }
     if (scan.worstPatch !== null) {
       expect(compare(scan.worstPatch.value, rtpOf(rtpBp))).toBeLessThanOrEqual(0);
     }
@@ -179,7 +184,8 @@ describe('strategyExpectation', () => {
   it.each(RTPS)('never returns more than the RTP, whatever the Patch chance, at %i', (rtp) => {
     for (const { ladder: l } of DIFFICULTIES) {
       for (const bet of [10, 13, 100, 1234, 2000]) {
-        for (const target of [1, 2, l.length]) {
+        // The first rung, the second, and the top: as many as the ladder has.
+        for (const target of new Set([1, Math.min(2, l.length), l.length])) {
           for (const chance of [ZERO, fr(1, 4), fr(1, 2), fr(1)]) {
             const { paid, returned } = strategyExpectation(rtp, l, bet, target, chance);
             expect(compare(div(returned, paid), rtpOf(rtp))).toBeLessThanOrEqual(0);

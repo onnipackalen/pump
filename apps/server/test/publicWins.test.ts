@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { PublicWin, PublicWinsResponse, RoundView } from '@pump/contract';
-import { GAME_CONFIG, type GameConfig } from '@pump/engine';
+import { GAME_CONFIG, topRungForBet, type Difficulty } from '@pump/engine';
 import { describe, expect, it } from 'vitest';
 import { text } from '../src/db/rows';
 import { featuresFromEnv } from '../src/features';
@@ -28,7 +28,15 @@ import {
   testWorld,
   type TestWorld,
 } from './helpers';
-import { clientSeedWhere, ladderOf, Seat, willSurvive, type Foretold } from './play';
+import {
+  clientSeedWhere,
+  ladderOf,
+  MADE_LONG,
+  Seat,
+  willSurvive,
+  withDifficulty,
+  type Foretold,
+} from './play';
 
 // GET /api/wins shows every visitor the wins of all players. These tests
 // check three things: only real wins of finished rounds are listed, with the
@@ -45,8 +53,10 @@ import { clientSeedWhere, ladderOf, Seat, willSurvive, type Foretold } from './p
 // and its bets. Running at 9400, 9700 and 9900 shows that rounds stored at
 // each RTP are listed the same way; it is one check, not three different ones.
 //
-// The expected numbers are worked out from whatever the first ladder is, so
-// these tests keep passing when the ladders are retuned.
+// The expected numbers are worked out from the ladder the rounds are played
+// on, so these tests keep passing when the ladders are retuned. That is the
+// first configured ladder with room for every round below (Easy, as
+// shipped), or a ladder made for tests if no configured one has room.
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;
@@ -151,10 +161,27 @@ async function handMadeWorld(): Promise<{ world: TestWorld; playerId: string }> 
   return { world, playerId: onlyPlayerId(world.db) };
 }
 
+/** The bet A uses in the first test below, worked out from a ladder. */
+function betAOf(ladder: readonly number[]): number {
+  const h3 = ladder[2] ?? 0;
+  const h4 = ladder[3] ?? 0;
+  return 100 * (Math.floor((h4 - 100) / (h3 - 100)) + 1);
+}
+
+/**
+ * Room for every round below: 5 rungs or more, and the largest bet used
+ * (twice A's bet, or $12 in the ten-wins test) still below its top on rung 4.
+ */
+function hasRoom({ ladder }: Difficulty): boolean {
+  if (ladder.length < 5) return false;
+  const largest = Math.max(1200, 2 * betAOf(ladder));
+  return topRungForBet(ladder, largest, GAME_CONFIG.limits.maxPayoutCents) >= 5;
+}
+
 describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => {
-  const config: GameConfig = { ...GAME_CONFIG, rtpBp };
-  const easy = config.difficulties[0]?.id ?? 'easy';
-  const ladder = ladderOf(config, easy);
+  const { config, difficulty } = withDifficulty({ ...GAME_CONFIG, rtpBp }, hasRoom, MADE_LONG);
+  const playedOn = difficulty.id;
+  const ladder = ladderOf(config, playedOn);
   const h3 = ladder[2] ?? 0;
   const h4 = ladder[3] ?? 0;
   /** What a round cashed out at `rung` pays on `betCents`, worked out here from the ladder. */
@@ -166,14 +193,14 @@ describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => 
     // D will bet 100 at rung 4 and gain h4 - 100. A bets 100 * n at rung 3 and
     // gains n * (h3 - 100), with n picked so that A gains more. Any valid
     // ladder has h3 > 100 and h4 > h3, so this works for every ladder.
-    const betA = 100 * (Math.floor((h4 - 100) / (h3 - 100)) + 1);
+    const betA = betAOf(ladder);
 
     // A: cashes out at rung 3. A win.
     const a = await join(world);
-    const finishedA = await cashOutAt(world, a, easy, betA, 3);
+    const finishedA = await cashOutAt(world, a, playedOn, betA, 3);
     // B: pops on the first pump. A loss.
     const b = await join(world);
-    const popped = await startKnown(world, b, easy, [1000], 0, true);
+    const popped = await startKnown(world, b, playedOn, [1000], 0, true);
     expect(popped.status).toBe('finished');
     // C: got back exactly what went in. Nothing was gained: not a win.
     const c = await join(world);
@@ -183,12 +210,12 @@ describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => 
     // D: a small bet cashed out one rung higher. A smaller gain than A's at
     // a higher multiplier.
     const d = await join(world);
-    const finishedD = await cashOutAt(world, d, easy, 100, 4);
+    const finishedD = await cashOutAt(world, d, playedOn, 100, 4);
     // F: bets twice, pumps the first balloon to rung 3 and walks away. The
     // 24-hour rule cashes that balloon out and hands the other bet back. The
     // bet that came back was never played, so the stake is one bet.
     const f = await join(world);
-    await startKnown(world, f, easy, [2 * betA, 2 * betA], 3);
+    await startKnown(world, f, playedOn, [2 * betA, 2 * betA], 3);
     world.runtime.advance(ABANDONED_AFTER_MS);
     const finishedF = world.runtime.now().toISOString();
     expect((await f.seat.session()).body.activeRound).toBeNull();
@@ -205,7 +232,7 @@ describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => 
 
     const winA = {
       playerTag: playerTag(a.id, DAY_ONE),
-      difficultyId: easy,
+      difficultyId: playedOn,
       wageredCents: betA,
       payoutCents: payoutAt(betA, 3),
       netCents: payoutAt(betA, 3) - betA,
@@ -214,7 +241,7 @@ describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => 
     };
     const winD = {
       playerTag: playerTag(d.id, DAY_ONE),
-      difficultyId: easy,
+      difficultyId: playedOn,
       wageredCents: 100,
       payoutCents: payoutAt(100, 4),
       netCents: payoutAt(100, 4) - 100,
@@ -223,7 +250,7 @@ describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => 
     };
     const winF = {
       playerTag: playerTag(f.id, DAY_TWO),
-      difficultyId: easy,
+      difficultyId: playedOn,
       wageredCents: 2 * betA,
       payoutCents: payoutAt(2 * betA, 3),
       netCents: payoutAt(2 * betA, 3) - 2 * betA,
@@ -247,13 +274,13 @@ describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => 
   it('sends nothing that could identify a player or a round, and makes no player', async () => {
     const world = testWorld(config);
     const a = await join(world);
-    await cashOutAt(world, a, easy, 1000, 3);
-    await cashOutAt(world, a, easy, 500, 2);
+    await cashOutAt(world, a, playedOn, 1000, 3);
+    await cashOutAt(world, a, playedOn, 500, 2);
     const d = await join(world);
-    await cashOutAt(world, d, easy, 100, 2);
+    await cashOutAt(world, d, playedOn, 100, 2);
     // The next day, A wins once more.
     world.runtime.advance(DAY);
-    await cashOutAt(world, a, easy, 300, 2);
+    await cashOutAt(world, a, playedOn, 300, 2);
     const playersBefore = count(world.db, 'players');
 
     const { answer, raw } = await publicWins(world);
@@ -310,7 +337,7 @@ describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => 
     for (let n = 0; n < 12; n += 1) {
       const bet = 100 + n * 100;
       bets.push(bet);
-      await cashOutAt(world, a, easy, bet, 1);
+      await cashOutAt(world, a, playedOn, bet, 1);
     }
 
     const first = await publicWins(world);
@@ -327,7 +354,7 @@ describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => 
     // A win made inside the five seconds does not show yet...
     const read = world.runtime.now().getTime();
     const late = await join(world);
-    const round = await startKnown(world, late, easy, [100], 2);
+    const round = await startKnown(world, late, playedOn, [100], 2);
     await late.seat.cashOut(round, 0);
     // (startKnown moves the clock a minute; put it back just inside the five seconds.)
     world.runtime.advance(read + 4_999 - world.runtime.now().getTime());
@@ -344,10 +371,10 @@ describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => 
   it('leaves a player out at once when they keep their wins private, past wins too, and shows them again when they change their mind', async () => {
     const world = testWorld(config);
     const a = await join(world);
-    await cashOutAt(world, a, easy, 1000, 3);
-    await cashOutAt(world, a, easy, 500, 2);
+    await cashOutAt(world, a, playedOn, 1000, 3);
+    await cashOutAt(world, a, playedOn, 500, 2);
     const d = await join(world);
-    await cashOutAt(world, d, easy, 100, 2);
+    await cashOutAt(world, d, playedOn, 100, 2);
     const settings = (player: Player, winsPrivate?: boolean) =>
       world.app.inject({
         method: winsPrivate === undefined ? 'GET' : 'PUT',
@@ -382,7 +409,7 @@ describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => 
 
     // It stays that way when the lists are read again, also for a win A
     // makes from now on.
-    await cashOutAt(world, a, easy, 700, 2);
+    await cashOutAt(world, a, playedOn, 700, 2);
     world.runtime.advance(5_000);
     expect(new Set(await tagsShown())).toEqual(new Set([tagD]));
     expect((await publicWins(world)).answer.recent).toHaveLength(1);
@@ -401,7 +428,7 @@ describe.each([9400, 9700, 9900])('the public wins lists at RTP %i', (rtpBp) => 
   it('is empty when it is switched off, whatever has been won', async () => {
     const world = testWorld(config, { publicWins: false });
     const a = await join(world);
-    await cashOutAt(world, a, easy, 1000, 3);
+    await cashOutAt(world, a, playedOn, 1000, 3);
 
     const { answer } = await publicWins(world);
 

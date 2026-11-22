@@ -103,13 +103,15 @@ describe.each(DIFFICULTIES)('simulating $id', (difficulty) => {
       expect(stats.standardError).toBeGreaterThan(0);
     });
 
+    // The exact expectation takes seconds on a ladder of 80 rungs or more,
+    // so it gets a longer time limit.
     it('expects no more than the RTP, and close to it', () => {
       const expected = expectedFor(config, difficulty);
       const expectedRtp = div(expected.returned, expected.paid);
       expect(compare(expectedRtp, rtpOf(rtpBp))).toBeLessThanOrEqual(0);
       // Cent rounding on these bets costs well under half a point.
       expect(toNumber(rtpOf(rtpBp)) - toNumber(expectedRtp)).toBeLessThan(0.005);
-    });
+    }, 60_000);
 
     it('sees every pump survive about as often as its exact chance', () => {
       expect(stats.worstPumpZ).toBeLessThan(5);
