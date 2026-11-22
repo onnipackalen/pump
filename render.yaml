@@ -4,7 +4,7 @@
 # typing mistake.
 #
 # To use it: on render.com choose New > Blueprint and pick this repository.
-# The steps, and how to check the site afterwards, are in the README.
+# The steps, and how to check the site afterwards, are in docs/live-site.md.
 
 services:
   - type: web

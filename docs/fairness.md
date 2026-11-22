@@ -26,7 +26,7 @@ your client seed.
 | Server seed hash | SHA-256 of those 64 characters, as lowercase hex. Shown from the start. | `947d192d090f6845f059ae8e45b1d90105b3a34cfdcf209e7369fda4b5d60071` |
 | Client seed | 1 to 64 characters from `A-Z a-z 0-9 _ -`. Yours to edit between rounds. | `myseed` |
 | Nonce | Round counter for this server seed: 0, 1, 2, ... Never resets while the server seed is active. | `5` |
-| Balloon index | Which balloon: 0, 1 or 2. | `0` |
+| Balloon index | Which balloon: 0, 1 or 2. Balloon 1 on the screen is index 0. | `0` |
 | Draw index | How many draws this balloon has had before this one: 0, 1, 2, ... A pump saved by a Patch counts as a draw. After the round, the reveal carries on the same count. | `0` |
 | Block | Starts at 0. Only goes up in the rare case described in step 4. | `0` |
 
@@ -86,6 +86,11 @@ decimals are used anywhere.
 A balloon's **rung** is how many ladder steps it has climbed: 0 before its
 first pump, 1 after one pump that survived, and so on. Every pump tries to
 move the balloon up one rung.
+
+Everything you need is on the verify page, and in
+`GET /api/rounds/:id/verify`: the round's RTP, ladder, payout cap, nonce,
+client seed, revealed server seed, each balloon's actions, and the exact
+message of every draw.
 
 1. After rotating, take the revealed server seed and check that its SHA-256
    matches the hash you were shown while playing.
