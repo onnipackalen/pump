@@ -10,6 +10,7 @@ import { playersRepository } from './repositories/players';
 import { systemRuntime } from './runtime';
 import { buildServices } from './services';
 import { ABANDONED_SWEEP_EVERY_MS } from './settings';
+import { runAbandonedSweep } from './sweep';
 
 /** A path inside this package, wherever the server was started from. */
 const inPackage = (relative: string): string =>
@@ -94,23 +95,10 @@ else app.log.info('serving the API only (the game screen has not been built: npm
 // The 24-hour rule for players who never come back: now and then, settle
 // every round that has been left idle that long. A round that cannot be
 // settled is rolled back, left active and logged as an error; the others are
-// settled anyway, and the next sweep tries it again.
+// settled anyway, and the next sweep tries it again (see sweep.ts).
 const { game } = buildServices(runtime);
 const sweep = setInterval(() => {
-  try {
-    const { settled, failed } = game.sweepAbandoned();
-    if (settled > 0) app.log.info({ settled }, 'settled abandoned rounds');
-    for (const { roundId, playerId, error } of failed) {
-      app.log.error(
-        { err: error, roundId, playerId },
-        'could not settle an abandoned round: nothing was changed, it stays active, the next sweep tries again',
-      );
-    }
-  } catch (error) {
-    // The last guard, for anything the sweep did not catch itself (say, it
-    // could not even list the idle rounds).
-    app.log.error(error, 'the abandoned-round sweep failed');
-  }
+  runAbandonedSweep(game, app.log);
 }, ABANDONED_SWEEP_EVERY_MS);
 sweep.unref();
 

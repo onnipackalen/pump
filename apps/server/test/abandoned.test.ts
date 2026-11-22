@@ -7,6 +7,7 @@ import { ledgerRepository } from '../src/repositories/ledger';
 import { roundsRepository } from '../src/repositories/rounds';
 import { reconcile } from '../src/services/reconcile';
 import { ABANDONED_AFTER_MS } from '../src/settings';
+import { runAbandonedSweep, type SweepLog } from '../src/sweep';
 import { count, onlyPlayerId, testWorld, type TestWorld } from './helpers';
 import { clientSeedWhere, ladderOf, Seat, secretSeed, willSurvive, type Foretold } from './play';
 
@@ -220,6 +221,12 @@ describe('the sweep, when one round cannot be settled', () => {
     return off === 0;
   }
 
+  /** A database rule that refuses to close this one round. */
+  const cannotClose = (roundId: string): string => `
+    CREATE TRIGGER test_fault BEFORE UPDATE OF status ON rounds
+    WHEN NEW.id = '${roundId}'
+    BEGIN SELECT RAISE(ABORT, 'test fault: this round cannot be closed'); END`;
+
   // The fault is a database rule that refuses one write for this one round,
   // the way the schema's own guards refuse a bad write. Each is later in the
   // settle than the one before, so more has been written when it fires, and
@@ -239,13 +246,7 @@ describe('the sweep, when one round cannot be settled', () => {
         WHEN NEW.round_id = '${roundId}'
         BEGIN SELECT RAISE(ABORT, 'test fault: no reveal for this round'); END`,
     },
-    {
-      when: 'closing the round',
-      trigger: (roundId: string) => `
-        CREATE TRIGGER test_fault BEFORE UPDATE OF status ON rounds
-        WHEN NEW.id = '${roundId}'
-        BEGIN SELECT RAISE(ABORT, 'test fault: this round cannot be closed'); END`,
-    },
+    { when: 'closing the round', trigger: cannotClose },
   ];
 
   it.each(FAULTS)(
@@ -321,6 +322,92 @@ describe('the sweep, when one round cannot be settled', () => {
       expect(reconcile(world.db).problems).toEqual([]);
     },
   );
+
+  interface KeptLine {
+    readonly level: 'info' | 'error';
+    readonly details: unknown;
+    readonly message: string;
+  }
+
+  /** A logger that keeps every line it is given, for the test to read. */
+  function keptLog(): { log: SweepLog; lines: KeptLine[] } {
+    const lines: KeptLine[] = [];
+    const log: SweepLog = {
+      info: (details, message) => {
+        lines.push({ level: 'info', details, message });
+      },
+      error: (details, message) => {
+        lines.push({ level: 'error', details, message });
+      },
+    };
+    return { log, lines };
+  }
+
+  /** A kept line with its error (under `err`, where the server's logger looks) cut down to its message. */
+  function plain(line: KeptLine): KeptLine {
+    const { details } = line;
+    if (typeof details !== 'object' || details === null || !('err' in details)) return line;
+    const { err } = details;
+    return { ...line, details: { ...details, err: err instanceof Error ? err.message : err } };
+  }
+
+  it('the server logs each round it could not settle as an error, with its round, player and error', async () => {
+    const world = testWorld(CONFIG);
+    const first = await idleRound(world);
+    world.runtime.advance(60_000);
+    const broken = await idleRound(world);
+    world.runtime.advance(ABANDONED_AFTER_MS);
+    world.db.exec(cannotClose(broken.roundId));
+    const { log, lines } = keptLog();
+    const settledOne: KeptLine = {
+      level: 'info',
+      details: { settled: 1 },
+      message: 'settled abandoned rounds',
+    };
+    const failure: KeptLine = {
+      level: 'error',
+      details: { err: 'test fault: this round cannot be closed', ...broken },
+      message:
+        'could not settle an abandoned round: nothing was changed, it stays active, the next sweep tries again',
+    };
+
+    runAbandonedSweep(world.services.game, log);
+    expect(lines.map(plain)).toEqual([settledOne, failure]);
+    expect(roundsRepository(world.db).find(first.roundId)?.status).toBe('finished');
+
+    // Next time, nothing is settled, so there is no info line: only the error again.
+    lines.length = 0;
+    runAbandonedSweep(world.services.game, log);
+    expect(lines.map(plain)).toEqual([failure]);
+
+    // Once the cause is fixed: settled, and no error.
+    world.db.exec('DROP TRIGGER test_fault');
+    lines.length = 0;
+    runAbandonedSweep(world.services.game, log);
+    expect(lines).toEqual([settledOne]);
+
+    // Nothing left to do: nothing is logged.
+    lines.length = 0;
+    runAbandonedSweep(world.services.game, log);
+    expect(lines).toEqual([]);
+  });
+
+  it('the server logs a sweep that fails as a whole, and keeps running', () => {
+    const cause = new Error('could not list the idle rounds');
+    const game = {
+      sweepAbandoned: (): never => {
+        throw cause;
+      },
+    };
+    const { log, lines } = keptLog();
+
+    expect(() => {
+      runAbandonedSweep(game, log);
+    }).not.toThrow();
+    expect(lines).toEqual([
+      { level: 'error', details: cause, message: 'the abandoned-round sweep failed' },
+    ]);
+  });
 });
 
 /** Plays a stored round again with the engine and the real draw code, as the verify page does. */
