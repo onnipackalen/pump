@@ -25,7 +25,10 @@
  *   round whose start answer was lost still gets its copy (see
  *   rememberStarting, and keepLostStartCopy in game/session.ts). Each one
  *   ends as a copy: under its round's id, or under a stand-in id
- *   (rememberStandIn), so what the screen showed is never thrown away.
+ *   (rememberStandIn), so what the screen showed is never thrown away. The
+ *   only ones dropped are a start the server refused with no round in its
+ *   answer (markRefused), which made no round, and a start with the same
+ *   hash and nonce as one that went through, whose copy then stands for it.
  *
  * Why a new key, not longer entries under the old one: an older build still
  * open in another tab rewrites the old key with only the two-part entries it
@@ -86,6 +89,13 @@ export interface StartOnItsWay {
   readonly difficultyId: string;
   readonly betsCents: readonly number[];
   readonly shown: SeedsBeforeRound;
+  /**
+   * Set once the server refused it with no round in its answer (too little
+   * money, or seeds_changed, say). For an honest server that start made no
+   * round, so it never gets a stand-in copy: one could only give an honest
+   * round a false alarm. See keepLostStartCopy in game/session.ts.
+   */
+  readonly refused?: true;
 }
 
 /** The part of localStorage used here, so tests can hand in their own. */
@@ -240,11 +250,12 @@ export function rememberShown(
   }
 }
 
-/** Whether this browser saved any copy with this hash and nonce, under any id. Never throws. */
-function hasCopyWith(serverSeedHash: string, nonce: number, storage: HashStorage): boolean {
+/** Whether this browser saved a copy of exactly these three values, under any id. Never throws. */
+function hasCopyOf(shown: SeedsBeforeRound, storage: HashStorage): boolean {
   try {
     return parseShown(storage.getItem(KEY)).some(
-      ([, hash, , savedNonce]) => hash === serverSeedHash && savedNonce === nonce,
+      ([, hash, clientSeed, nonce]) =>
+        hash === shown.serverSeedHash && clientSeed === shown.clientSeed && nonce === shown.nonce,
     );
   } catch {
     return false;
@@ -267,17 +278,19 @@ export function isStandIn(roundId: string): boolean {
  * game/session.ts.
  *
  * A stand-in is never found by a round id (shownFor), only by its hash and
- * nonce (copiesWithSameNonce). Nothing is saved if this browser already has
- * a copy with the same hash and nonce, under any id: one server seed and
- * nonce belong to one round only, so that copy already stands for whichever
- * round used them.
+ * nonce (copiesWithSameNonce). Nothing is saved only if this browser already
+ * has a copy of exactly these three values, under any id: that copy says
+ * the same thing. A copy with the same hash and nonce but another client
+ * seed does not count. Each one is what the screen showed for a start, and
+ * a server that played the round on one of them must not get rid of the
+ * other.
  */
 export function rememberStandIn(
   shown: SeedsBeforeRound,
   storage: HashStorage | null = browserStorage(),
 ): void {
   if (!storage || !validSeeds(shown)) return;
-  if (hasCopyWith(shown.serverSeedHash, shown.nonce, storage)) return;
+  if (hasCopyOf(shown, storage)) return;
   rememberShown(`?start:${String(shown.nonce)}:${shown.serverSeedHash}`, shown, storage);
 }
 
@@ -326,10 +339,18 @@ export function copiesWithSameNonce(
   }
 }
 
-/** One stored start on its way: [difficultyId, betsCents, hash, clientSeed, nonce]. */
+/** The sixth part of a stored start the server refused (see markRefused). */
+const REFUSED = 'refused';
+
+/**
+ * One stored start on its way: [difficultyId, betsCents, hash, clientSeed,
+ * nonce], and 'refused' as a sixth part once the server refused it.
+ */
 function startFrom(value: unknown): StartOnItsWay | null {
-  if (!Array.isArray(value) || value.length !== 5) return null;
-  const [difficultyId, betsCents, serverSeedHash, clientSeed, nonce] = value as unknown[];
+  if (!Array.isArray(value) || (value.length !== 5 && value.length !== 6)) return null;
+  const [difficultyId, betsCents, serverSeedHash, clientSeed, nonce, answer] = value as unknown[];
+  const refused = value.length === 6;
+  if (refused && answer !== REFUSED) return null;
   if (typeof difficultyId !== 'string' || difficultyId.length === 0 || difficultyId.length > 64) {
     return null;
   }
@@ -337,7 +358,27 @@ function startFrom(value: unknown): StartOnItsWay | null {
   const bets = betsCents as unknown[];
   if (!bets.every(isWhole)) return null;
   const shown = { serverSeedHash, clientSeed, nonce };
-  return validSeeds(shown) ? { difficultyId, betsCents: bets, shown } : null;
+  if (!validSeeds(shown)) return null;
+  return { difficultyId, betsCents: bets, shown, ...(refused ? { refused: true as const } : {}) };
+}
+
+/** A start as it is stored (see startFrom). */
+function storedStart(start: StartOnItsWay): unknown[] {
+  const { difficultyId, betsCents, shown } = start;
+  const entry: unknown[] = [difficultyId, betsCents, shown.serverSeedHash, shown.clientSeed, shown.nonce];
+  return start.refused === true ? [...entry, REFUSED] : entry;
+}
+
+/** Whether two starts asked for the same bets on the same seeds on screen. */
+function sameStart(a: StartOnItsWay, b: StartOnItsWay): boolean {
+  return (
+    a.difficultyId === b.difficultyId &&
+    a.betsCents.length === b.betsCents.length &&
+    a.betsCents.every((bet, i) => bet === b.betsCents[i]) &&
+    a.shown.serverSeedHash === b.shown.serverSeedHash &&
+    a.shown.clientSeed === b.shown.clientSeed &&
+    a.shown.nonce === b.shown.nonce
+  );
 }
 
 /**
@@ -352,18 +393,34 @@ export function rememberStarting(
   if (!storage || !validSeeds(start.shown)) return;
   try {
     const list = listFrom(storage.getItem(STARTING_KEY), startFrom, MAX_STARTING);
+    // A start being sent has no answer yet, so it is never marked refused.
     const { difficultyId, betsCents, shown } = start;
-    const entry = [difficultyId, betsCents, shown.serverSeedHash, shown.clientSeed, shown.nonce];
-    const stored = list.map((s) => [
-      s.difficultyId,
-      s.betsCents,
-      s.shown.serverSeedHash,
-      s.shown.clientSeed,
-      s.shown.nonce,
-    ]);
-    storage.setItem(STARTING_KEY, JSON.stringify([entry, ...stored].slice(0, MAX_STARTING)));
+    const entries = [storedStart({ difficultyId, betsCents, shown }), ...list.map(storedStart)];
+    storage.setItem(STARTING_KEY, JSON.stringify(entries.slice(0, MAX_STARTING)));
   } catch {
     // Full or blocked: only a start whose answer is lost goes without a copy.
+  }
+}
+
+/**
+ * Marks a start on its way as refused: the server answered it with a
+ * refusal that carries no round. The newest start with these same values
+ * that is not marked yet gets the mark. Does nothing if another tab has
+ * already settled it, or if storage fails.
+ */
+export function markRefused(
+  start: StartOnItsWay,
+  storage: HashStorage | null = browserStorage(),
+): void {
+  if (!storage) return;
+  try {
+    const list = listFrom(storage.getItem(STARTING_KEY), startFrom, MAX_STARTING);
+    const at = list.findIndex((s) => s.refused !== true && sameStart(s, start));
+    if (at < 0) return;
+    const marked = list.map((s, i) => (i === at ? { ...s, refused: true as const } : s));
+    storage.setItem(STARTING_KEY, JSON.stringify(marked.map(storedStart)));
+  } catch {
+    // Blocked: the start stays as it is, and may get a stand-in later.
   }
 }
 

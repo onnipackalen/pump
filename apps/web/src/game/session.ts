@@ -9,6 +9,7 @@ import type {
 } from '../api/contract';
 import {
   forgetStarting,
+  markRefused,
   rememberShown,
   rememberStandIn,
   rememberStarting,
@@ -176,14 +177,16 @@ export function shownBefore(fairness: FairnessView | null): SeedsBeforeRound | n
  * page.
  *
  * The start is remembered as on its way until it is settled, and its seeds
- * are never thrown away:
- * - it goes through: they are saved under the round's id, and every start on
- *   its way is settled (settleStarts);
- * - the refusal puts a round in play on screen (a 409 that carries it): that
- *   round gets its copy now, before the player can play it
- *   (keepLostStartCopy);
- * - anything else (both tries lose the answer, or another refusal): the next
- *   full load of the state settles it (keepLostStartCopy).
+ * are never thrown away while they could be evidence:
+ * - it goes through: they are saved under the round's id, and every other
+ *   start on its way is settled (settleStarts);
+ * - the refusal carries a round (a 409 with the round as it is now, in play
+ *   or over): that round gets its copy now, before the player can play or
+ *   check it (keepLostStartCopy);
+ * - any other refusal: it is marked refused (for an honest server it made no
+ *   round), and the next full load of the state, or the next start that
+ *   goes through, settles it;
+ * - both tries lose the answer: the same, unmarked.
  *
  * Throws SeedsNotShown, sending nothing, if the screen shows no valid seeds.
  */
@@ -196,7 +199,8 @@ export async function startRoundShown(
   const shown = shownBefore(before);
   if (shown === null) throw new SeedsNotShown();
   const { difficultyId, betsCents } = request;
-  rememberStarting({ difficultyId, betsCents, shown }, storage);
+  const start: StartOnItsWay = { difficultyId, betsCents, shown };
+  rememberStarting(start, storage);
   const sent: StartRoundRequest = {
     difficultyId,
     betsCents,
@@ -210,46 +214,58 @@ export async function startRoundShown(
   try {
     result = await send((key) => client.startRound(sent, key));
   } catch (error) {
-    const round = roundInPlayIn(error);
-    if (round !== null) keepLostStartCopy(round, storage);
+    if (error instanceof ApiFailure) {
+      const round = roundIn(error);
+      if (round !== null) keepLostStartCopy(round, storage);
+      else markRefused(start, storage);
+    }
     throw error;
   }
   rememberShown(result.round.id, shown, storage);
-  settleStarts(storage);
+  settleStarts(startsOnTheirWay(storage), storage, shown);
   return result;
 }
 
-/** The round in play a refusal carries (a 409 with the round as it is now), or null. */
-function roundInPlayIn(error: unknown): RoundView | null {
-  if (!(error instanceof ApiFailure)) return null;
+/** The round a refusal carries (a 409 with the round as it is now, in play or over), or null. */
+function roundIn(error: ApiFailure): RoundView | null {
   const round = error.body.round;
-  return round?.status === 'active' ? round : null;
+  return round !== undefined && round !== null && typeof round === 'object' ? round : null;
 }
 
 /**
- * Settles every start on its way: each one's seeds are kept under a
- * stand-in id (rememberStandIn), then the starts are forgotten.
- *
- * Why this is safe after a start went through, and keeps the evidence: one
- * server seed and nonce belong to one round only. So a start on its way with
- * the same hash and nonce as a round this browser already has a copy of
- * cannot have made another round; it needs no copy of its own, and none is
- * saved. Any other start on its way may have made a round whose answer was
- * lost, or that the server named with another id; its stand-in is found by
- * that round's hash and nonce on the verify page.
+ * Settles these starts on their way, then forgets every start on its way.
+ * Each one keeps its seeds under a stand-in id (rememberStandIn), so what
+ * the screen showed is never thrown away while it could be evidence. Two
+ * kinds are dropped instead:
+ * - a start the server refused with no round in its answer (marked
+ *   refused). For an honest server it made no round, so a stand-in could
+ *   only make a later honest round on the same nonce look wrong.
+ * - after a start went through (`wentThrough`, the seeds it was bet
+ *   against): a start with the same hash and nonce. One server seed and
+ *   nonce belong to one round only, so it made no other round, and any
+ *   round the server names with that hash and nonce is checked against the
+ *   copy just saved.
+ * Any other start may have made a round whose answer was lost, or that the
+ * server named with another id. Its stand-in is found by that round's hash
+ * and nonce on the verify page.
  */
-function settleStarts(storage?: HashStorage | null): void {
-  for (const start of startsOnTheirWay(storage)) rememberStandIn(start.shown, storage);
+function settleStarts(
+  starts: readonly StartOnItsWay[],
+  storage: HashStorage | null | undefined,
+  wentThrough: SeedsBeforeRound | null = null,
+): void {
+  for (const start of starts) {
+    if (start.refused === true) continue;
+    if (
+      wentThrough !== null &&
+      start.shown.serverSeedHash === wentThrough.serverSeedHash &&
+      start.shown.nonce === wentThrough.nonce
+    ) {
+      continue;
+    }
+    rememberStandIn(start.shown, storage);
+  }
   forgetStarting(storage);
-}
-
-/** Whether this start was bet against the seeds this round names: the same hash, client seed and nonce. */
-function betOn(start: StartOnItsWay, round: RoundView): boolean {
-  return (
-    start.shown.serverSeedHash === round.serverSeedHash &&
-    start.shown.clientSeed === round.clientSeed &&
-    start.shown.nonce === round.nonce
-  );
 }
 
 /** Whether this start asked for this round: the same difficulty, and the same bet on each balloon. */
@@ -264,33 +280,36 @@ function askedFor(start: StartOnItsWay, round: RoundView): boolean {
 /**
  * Called with the round in play whenever the whole state is loaded again
  * (the first load, a reload, or a resync after a lost answer or a refusal),
- * and with the round a start's refusal puts in play. Not while this tab's
- * own start is on its way: its own answer is still to come.
+ * and with the round a start's refusal carries, in play or over. Not while
+ * this tab's own start is on its way: its own answer is still to come.
  *
  * A start whose answer never came (both tries lost, or the page closed) may
  * have started this round. If this browser has no copy of it, and a start
  * on its way asked for this difficulty and these bets, the round gets the
  * seeds that start was bet against: what the screen showed, not what the
  * round says. So a server that played a round on seeds of its own and then
- * lost the answer on purpose is still checked. With two tabs, two starts can
- * ask for the same bets: the one bet against the seeds the round names is
- * taken first (an honest server plays a round on exactly those), and
- * otherwise the newest.
+ * lost the answer on purpose is still checked.
  *
- * Then every start on its way is settled (settleStarts). A start that made
- * no copy under this round's id (the round already had one, or it asked for
- * other bets, or there is no round in play because its round is over) keeps
- * its seeds under a stand-in id, unless a copy with the same hash and nonce
- * is already saved. So what the screen showed for a start is never thrown
- * away.
+ * If more than one start asked for these bets, the newest one is taken,
+ * whatever its answer was. Never the one whose seeds agree with the round:
+ * then the server, by picking the seeds it played on, would pick which
+ * start's copy the round gets. A start marked refused can still be taken
+ * here, so a server that refused a start and still made its round is
+ * checked too.
+ *
+ * Then every other start on its way is settled (settleStarts): kept under
+ * a stand-in id, or dropped if it was refused.
  */
-export function keepLostStartCopy(activeRound: RoundView | null, storage?: HashStorage | null): void {
+export function keepLostStartCopy(round: RoundView | null, storage?: HashStorage | null): void {
   const starting = startsOnTheirWay(storage);
   if (starting.length === 0) return;
-  if (activeRound !== null && shownFor(activeRound.id, storage) === null) {
-    const asked = starting.filter((s) => askedFor(s, activeRound));
-    const start = asked.find((s) => betOn(s, activeRound)) ?? asked[0];
-    if (start) rememberShown(activeRound.id, start.shown, storage);
+  let rest = starting;
+  if (round !== null && shownFor(round.id, storage) === null) {
+    const start = starting.find((s) => askedFor(s, round));
+    if (start) {
+      rememberShown(round.id, start.shown, storage);
+      rest = starting.filter((s) => s !== start);
+    }
   }
-  settleStarts(storage);
+  settleStarts(rest, storage);
 }

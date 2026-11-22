@@ -1,8 +1,14 @@
 import { GAME_CONFIG } from '@pump/engine';
 import { verifyRound } from '@pump/engine/fair';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { NetworkFailure } from '../src/api/client';
-import type { FairnessView, RotateResult } from '../src/api/contract';
+import { ApiFailure, NetworkFailure } from '../src/api/client';
+import type {
+  ActionResult,
+  FairnessView,
+  RotateResult,
+  SessionView,
+  StartRoundRequest,
+} from '../src/api/contract';
 import { formFrom, roundFrom, roundToCheck } from '../src/components/VerifyPage';
 import { DemoClient } from '../src/demo/DemoClient';
 import { SEED_CHANGE_BUSY_TEXT, SEEDS_CHANGED_TEXT } from '../src/game/refusal';
@@ -158,6 +164,70 @@ describe('a tab left out of date by another tab', () => {
     expect(reason).toBe('error');
     expect(started).toEqual([]);
     expect(tabB.current().state.notice?.text).toBe(SEEDS_CHANGED_TEXT);
+  }, 30_000);
+});
+
+/**
+ * A cheating server: it refuses one start with "internal_error" (the screen
+ * loads nothing again), lets the player save a new client seed, then plays
+ * the next start on the old client seed and loses both answers. Its panel
+ * keeps showing the new seed.
+ */
+class PlaysOnReplacedSeed extends DemoClient {
+  mode: 'honest' | 'refuse' | 'rig' = 'honest';
+  showSeed: string | null = null;
+  realId: string | null = null;
+
+  override async startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
+    if (this.mode === 'refuse') {
+      this.mode = 'honest';
+      throw new ApiFailure({ code: 'internal_error', message: 'Something went wrong on our side.' });
+    }
+    if (this.mode === 'rig') {
+      if (this.realId === null) {
+        await super.setClientSeed('player-seed', key());
+        const { difficultyId, betsCents } = request;
+        this.realId = (await super.startRound({ difficultyId, betsCents }, k)).round.id;
+      } else {
+        // Both tries have lost their answer; answers come again after this.
+        this.mode = 'honest';
+      }
+      throw new NetworkFailure('The game server did not answer properly (502).');
+    }
+    return super.startRound(request, k);
+  }
+
+  override async getSession(): Promise<SessionView> {
+    const s = await super.getSession();
+    return this.showSeed === null ? s : { ...s, fairness: { ...s.fairness, clientSeed: this.showSeed } };
+  }
+}
+
+describe('a cheating server that plays a Bet on the client seed the player replaced', () => {
+  it('does not get the round past the verify page', async () => {
+    const server = new PlaysOnReplacedSeed(GAME_CONFIG, 5);
+    const tab = await openTab(server);
+    expect(await tab.current().setClientSeed('player-seed')).toBe(true);
+
+    server.mode = 'refuse';
+    expect(await tab.current().actions.startRound(DIFFICULTY, [100])).toBeNull();
+    expect(await tab.current().setClientSeed('new-seed')).toBe(true);
+    server.showSeed = 'new-seed';
+    expect(panel(tab).clientSeed).toBe('new-seed');
+
+    server.mode = 'rig';
+    expect(await tab.current().actions.startRound(DIFFICULTY, [100])).toBeNull();
+    // The resync puts the round in play on screen.
+    await until(() => tab.current().state.round?.status === 'active');
+    const round = tab.current().state.round;
+    if (!round || round.id !== server.realId) throw new Error('the rigged round is on screen');
+    await finish(tab, round.id);
+
+    await server.rotateSeed(key());
+    const record = await server.getVerifiableRound(round.id);
+    expect(record.clientSeed).toBe('player-seed');
+    expect(verifyRound(record).ok).toBe(true);
+    expect(await checksOut(server, round.id)).toBe(false);
   }, 30_000);
 });
 

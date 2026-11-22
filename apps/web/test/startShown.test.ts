@@ -25,6 +25,7 @@ import {
 import {
   copiesWithSameNonce,
   isStandIn,
+  markRefused,
   parseShown,
   rememberShown,
   rememberStarting,
@@ -301,16 +302,33 @@ describe('what the screen showed for a start is never thrown away', () => {
     expect(startsOnTheirWay(storage)).toEqual([]);
   });
 
-  it('of two starts with the same bets (two tabs), the round gets the one bet against its own seeds', async () => {
+  it('of two starts with the same bets, the round gets the newest, never the one whose seeds agree with it', async () => {
     const { client, fairness } = await demo(new LosesEveryStartAnswer(GAME_CONFIG, 0));
     const storage = memoryStorage();
     await startRoundShown(client, REQUEST, fairness, storage).catch(() => null);
     const { activeRound } = await client.getSession();
     if (!activeRound) throw new Error('the start was applied');
-    // The other tab still showed the client seed from before, and its start came later.
-    rememberStarting({ ...REQUEST, shown: { ...copyOf(fairness), clientSeed: 'old-seed' } }, storage);
+    // A later start that asked for the same bets, on another client seed.
+    rememberStarting({ ...REQUEST, shown: { ...copyOf(fairness), clientSeed: 'later-seed' } }, storage);
     keepLostStartCopy(activeRound, storage);
-    expect(shownFor(activeRound.id, storage)).toEqual(copyOf(fairness));
+    // The round's own seeds do not pick: else the server would pick by the seeds it played on.
+    expect(shownFor(activeRound.id, storage)).toEqual({ ...copyOf(fairness), clientSeed: 'later-seed' });
+    // The older start keeps a stand-in.
+    expect(standIns(storage).map(([, , clientSeed]) => clientSeed)).toEqual(['player-seed']);
+  });
+
+  it('the same when the newest of them was refused', async () => {
+    const { client, fairness } = await demo(new LosesEveryStartAnswer(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    await startRoundShown(client, REQUEST, fairness, storage).catch(() => null);
+    const { activeRound } = await client.getSession();
+    if (!activeRound) throw new Error('the start was applied');
+    const later = { ...REQUEST, shown: { ...copyOf(fairness), clientSeed: 'later-seed' } };
+    rememberStarting(later, storage);
+    markRefused(later, storage);
+    expect(startsOnTheirWay(storage)[0]?.refused).toBe(true);
+    keepLostStartCopy(activeRound, storage);
+    expect(shownFor(activeRound.id, storage)?.clientSeed).toBe('later-seed');
   });
 
   it('a start that matches no round in play keeps a stand-in, found by hash and nonce only', () => {
@@ -322,12 +340,26 @@ describe('what the screen showed for a start is never thrown away', () => {
     expect(startsOnTheirWay(storage)).toEqual([]);
   });
 
-  it('no stand-in for a start whose hash and nonce already have a copy (one seed and nonce, one round)', () => {
+  it('a stand-in is skipped only for an exact copy: another client seed on the same hash and nonce keeps its own', () => {
     const storage = memoryStorage();
     rememberShown('round-a', seedsAt(4, 'tab-a-seed'), storage);
     rememberStarting({ ...REQUEST, shown: seedsAt(4) }, storage);
+    rememberStarting({ ...REQUEST, shown: seedsAt(4, 'tab-a-seed') }, storage);
     keepLostStartCopy(null, storage);
-    expect(standIns(storage)).toEqual([]);
+    expect(standIns(storage)).toEqual([[`?start:4:${H}`, H, 'player-seed', 4]]);
+    expect(startsOnTheirWay(storage)).toEqual([]);
+  });
+
+  it('a start the server refused with no round in its answer leaves no stand-in', async () => {
+    const storage = memoryStorage();
+    const { client, fairness } = await demo(new DemoClient(GAME_CONFIG, 0));
+    // A panel out of date: the client seed was changed elsewhere.
+    await client.setClientSeed('changed-elsewhere', key());
+    const refusal = await startRoundShown(client, REQUEST, fairness, storage).catch((e: unknown) => e);
+    expect(refusal instanceof ApiFailure && refusal.code).toBe('seeds_changed');
+    expect(startsOnTheirWay(storage)).toEqual([{ ...REQUEST, shown: copyOf(fairness), refused: true }]);
+    keepLostStartCopy(null, storage);
+    expect(parseShown(storage.getItem('pump.shownSeeds'))).toEqual([]);
     expect(startsOnTheirWay(storage)).toEqual([]);
   });
 
