@@ -2,7 +2,7 @@ import { GAME_CONFIG } from '@pump/engine';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { FairnessView, RoundSummary } from '../src/api/contract';
-import { FairnessPanel, notSavedText } from '../src/components/FairnessPanel';
+import { FairnessPanel, notSavedText, SAVE_UNSURE_TEXT, saveLine } from '../src/components/FairnessPanel';
 import { VerifyPage } from '../src/components/VerifyPage';
 import { DemoClient } from '../src/demo/DemoClient';
 
@@ -15,7 +15,7 @@ function panel(locked: boolean, changing: boolean): string {
       revealed={[]}
       locked={locked}
       changing={changing}
-      onSaveClientSeed={() => Promise.resolve(true)}
+      onSaveClientSeed={() => Promise.resolve('saved' as const)}
       onRotate={() => undefined}
     />,
   );
@@ -39,6 +39,14 @@ describe('the Provably fair panel while a seed change is on its way', () => {
   it('after a save that did not go through, says which seed is still in use', () => {
     expect(notSavedText('player-seed')).toBe('Not saved. Rounds still use “player-seed”.');
     expect(notSavedText('')).toBe('Not saved.');
+  });
+
+  it('after a save whose answer was lost, says only that it is not sure', () => {
+    expect(saveLine('not-saved', 'player-seed')).toBe(notSavedText('player-seed'));
+    expect(saveLine('unsure', 'player-seed')).toBe(SAVE_UNSURE_TEXT);
+    expect(SAVE_UNSURE_TEXT).not.toContain('player-seed');
+    expect(saveLine('saved', 'player-seed')).toBeNull();
+    expect(saveLine(null, 'player-seed')).toBeNull();
   });
 });
 

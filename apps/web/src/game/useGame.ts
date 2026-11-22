@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ApiFailure, type GameClient } from '../api/client';
+import { ApiFailure, NetworkFailure, type GameClient } from '../api/client';
 import type {
   ActionResult,
   BalloonView,
@@ -150,6 +150,14 @@ export interface GameActions {
   readonly cashOut: (round: RoundView, balloonIndex: number) => Promise<ActionResult | null>;
 }
 
+/**
+ * How a client seed save went: 'saved' once the server has saved it;
+ * 'not-saved' when it was not sent (another seed change was on its way) or
+ * the server refused it; 'unsure' when no answer came, so the server may
+ * or may not have saved it.
+ */
+export type SeedSave = 'saved' | 'not-saved' | 'unsure';
+
 export interface Game {
   readonly state: GameState;
   /** Stable from render to render. */
@@ -170,7 +178,10 @@ export interface Game {
    * was busy is waiting to go (or on its way).
    */
   readonly waitingCashOuts: readonly boolean[];
+  /** Saves a client seed. True once the server has saved it. */
   readonly setClientSeed: (clientSeed: string) => Promise<boolean>;
+  /** The same, and says how it went (see SeedSave). */
+  readonly saveClientSeed: (clientSeed: string) => Promise<SeedSave>;
   readonly rotateSeed: () => void;
   readonly dismissNotice: () => void;
 }
@@ -900,9 +911,11 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     [seedGate],
   );
 
-  const setClientSeed = useCallback(
-    (clientSeed: string): Promise<boolean> =>
-      changeSeeds(async () => {
+  const saveClientSeed = useCallback(
+    async (clientSeed: string): Promise<SeedSave> => {
+      // Not sent (another change is on its way) or refused, unless found otherwise.
+      let outcome: SeedSave = 'not-saved';
+      await changeSeeds(async () => {
         try {
           const fairness = await send((key) => client.setClientSeed(clientSeed, key));
           shownFairness.current = fairness;
@@ -911,13 +924,23 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
             fairness,
             notice: { tone: 'info', text: 'Client seed saved.' },
           }));
+          outcome = 'saved';
           return true;
         } catch (error) {
+          // No answer came: the server may have saved it all the same.
+          if (error instanceof NetworkFailure) outcome = 'unsure';
           handleFailure(error, null);
           return false;
         }
-      }),
+      });
+      return outcome;
+    },
     [changeSeeds, client, handleFailure],
+  );
+
+  const setClientSeed = useCallback(
+    async (clientSeed: string): Promise<boolean> => (await saveClientSeed(clientSeed)) === 'saved',
+    [saveClientSeed],
   );
 
   const rotateSeed = useCallback(() => {
@@ -963,6 +986,7 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
     cashOut,
     waitingCashOuts,
     setClientSeed,
+    saveClientSeed,
     rotateSeed,
     dismissNotice,
   };

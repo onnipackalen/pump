@@ -479,7 +479,7 @@ export function App() {
                 // Also while a start is on its way: the round is bet against the seeds on screen.
                 locked={roundActive || autoRunning || state.starting}
                 changing={state.seedChanging}
-                onSaveClientSeed={game.setClientSeed}
+                onSaveClientSeed={game.saveClientSeed}
                 onRotate={game.rotateSeed}
               />
             )}

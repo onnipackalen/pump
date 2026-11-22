@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FairnessView, RevealedSeed } from '../api/contract';
 import { CLIENT_SEED_PATTERN } from '../game/clientSeed';
+import type { SeedSave } from '../game/useGame';
 
 interface FairnessPanelProps {
   readonly fairness: FairnessView;
@@ -9,7 +10,7 @@ interface FairnessPanelProps {
   readonly locked: boolean;
   /** A seed change is on its way: Save and Rotate wait for it. */
   readonly changing: boolean;
-  readonly onSaveClientSeed: (clientSeed: string) => Promise<boolean>;
+  readonly onSaveClientSeed: (clientSeed: string) => Promise<SeedSave>;
   readonly onRotate: () => void;
 }
 
@@ -75,7 +76,7 @@ interface ClientSeedFormProps {
   readonly saved: string;
   readonly locked: boolean;
   readonly changing: boolean;
-  readonly onSave: (clientSeed: string) => Promise<boolean>;
+  readonly onSave: (clientSeed: string) => Promise<SeedSave>;
 }
 
 /** The line under the box after a save that did not go through, naming the seed still in use. */
@@ -83,12 +84,29 @@ export function notSavedText(saved: string): string {
   return saved === '' ? 'Not saved.' : `Not saved. Rounds still use “${saved}”.`;
 }
 
-function ClientSeedForm({ saved, locked, changing, onSave }: ClientSeedFormProps) {
+/** The line under the box after a save whose answer was lost: the server may have saved it. */
+export const SAVE_UNSURE_TEXT = 'Not sure it was saved: the answer was lost.';
+
+/**
+ * The line under the box after the last save, or null. Only a save that
+ * surely did not go through says which seed is still in use. Once the
+ * server's seeds load again and name the new one, the box starts over with
+ * it (FairnessPanel keys the form by the saved seed), and the line goes.
+ */
+export function saveLine(outcome: SeedSave | null, saved: string): string | null {
+  if (outcome === 'not-saved') return notSavedText(saved);
+  if (outcome === 'unsure') return SAVE_UNSURE_TEXT;
+  return null;
+}
+
+/** Exported for tests. */
+export function ClientSeedForm({ saved, locked, changing, onSave }: ClientSeedFormProps) {
   const [text, setText] = useState(saved);
   const [saving, setSaving] = useState(false);
-  // The last save did not go through, so the box shows a seed that is not in use.
-  const [notSaved, setNotSaved] = useState(false);
+  // How the last save went, while the box still shows the seed it sent.
+  const [outcome, setOutcome] = useState<SeedSave | null>(null);
   const valid = CLIENT_SEED_PATTERN.test(text);
+  const line = valid && text !== saved ? saveLine(outcome, saved) : null;
 
   return (
     <form
@@ -97,15 +115,15 @@ function ClientSeedForm({ saved, locked, changing, onSave }: ClientSeedFormProps
         event.preventDefault();
         if (!valid || text === saved || changing) return;
         setSaving(true);
-        setNotSaved(false);
+        setOutcome(null);
         void onSave(text).then(
-          (done) => {
+          (result) => {
             setSaving(false);
-            setNotSaved(!done);
+            setOutcome(result);
           },
           () => {
             setSaving(false);
-            setNotSaved(true);
+            setOutcome('unsure');
           },
         );
       }}
@@ -122,7 +140,7 @@ function ClientSeedForm({ saved, locked, changing, onSave }: ClientSeedFormProps
           aria-invalid={!valid}
           onChange={(event) => {
             setText(event.target.value);
-            setNotSaved(false);
+            setOutcome(null);
           }}
         />
       </label>
@@ -134,7 +152,7 @@ function ClientSeedForm({ saved, locked, changing, onSave }: ClientSeedFormProps
         Save
       </button>
       {!valid && <p className="bet-note error">1 to 64 of A–Z, a–z, 0–9, _ and -</p>}
-      {valid && notSaved && text !== saved && <p className="bet-note error">{notSavedText(saved)}</p>}
+      {line !== null && <p className="bet-note error">{line}</p>}
     </form>
   );
 }
