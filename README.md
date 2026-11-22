@@ -623,4 +623,6 @@ competition), so the project ran for longer than my hours.
 
 **What I cut:** the development of a special game mode, one that keeps
 growing, like a rocket game. I'd like to build it, but left it out to fit
-the time.
+the time. I'd also have liked to theme the pumps and balloons to the
+background. I wasn't sure it was a good idea, though: it might clutter the
+screen and pull focus from the main idea.
