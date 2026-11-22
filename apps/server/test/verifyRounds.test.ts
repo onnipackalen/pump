@@ -4,7 +4,16 @@ import { verifyRound } from '@pump/engine/fair';
 import { describe, expect, it } from 'vitest';
 import { ABANDONED_AFTER_MS } from '../src/settings';
 import { testWorld, type TestWorld } from './helpers';
-import { clientSeedWhere, Seat, secretSeed, willSurvive, type Foretold } from './play';
+import {
+  clientSeedWhere,
+  MADE_CAPPED,
+  MADE_LONG,
+  Seat,
+  secretSeed,
+  willSurvive,
+  withDifficulty,
+  type Foretold,
+} from './play';
 
 // A player checks a round with verifyRound, in their browser, from what the
 // server sends once the seed is revealed. This test plays rounds through the
@@ -33,18 +42,25 @@ function topRungOf(ladder: readonly number[], betCents: number, maxPayoutCents: 
   return top;
 }
 
+/** True when the payout cap keeps the largest bet below the top of this ladder. */
+function cappedForLargestBet(config: GameConfig, ladder: readonly number[]): boolean {
+  return topRungOf(ladder, config.limits.maxBetCents, config.limits.maxPayoutCents) < ladder.length;
+}
+
 /**
- * The difficulty whose top is nearest for the largest bet. With the ladders
- * as they are, that is one where the payout cap locks the upper rungs.
+ * Of the difficulties where the payout cap locks the upper rungs for the
+ * largest bet, the one whose top is nearest for that bet.
  */
 function nearestTop(config: GameConfig): Reachable {
-  const all = config.difficulties.map((difficulty) => ({
-    id: difficulty.id,
-    ladder: difficulty.ladder,
-    top: topRungOf(difficulty.ladder, config.limits.maxBetCents, config.limits.maxPayoutCents),
-  }));
+  const all = config.difficulties
+    .filter((difficulty) => cappedForLargestBet(config, difficulty.ladder))
+    .map((difficulty) => ({
+      id: difficulty.id,
+      ladder: difficulty.ladder,
+      top: topRungOf(difficulty.ladder, config.limits.maxBetCents, config.limits.maxPayoutCents),
+    }));
   const [first, ...rest] = all;
-  if (!first) throw new Error('The config has no difficulties');
+  if (!first) throw new Error('No difficulty in the config is capped for the largest bet');
   return rest.reduce((best, next) => (next.top < best.top ? next : best), first);
 }
 
@@ -67,7 +83,19 @@ async function abandon(world: TestWorld, seat: Seat): Promise<void> {
 }
 
 describe.each([9400, 9700, 9900])('rounds the server played, checked as a player checks them, at RTP %i', (rtpBp) => {
-  const config: GameConfig = { ...GAME_CONFIG, rtpBp };
+  // Round 1 needs a ladder the cap cuts short for the largest bet; rounds 2
+  // and 3 one where $5 is still in play after a pump. The first configured
+  // ones (Expert and Easy, as shipped), or ladders made for tests if none.
+  const withCapped = withDifficulty(
+    { ...GAME_CONFIG, rtpBp },
+    (d) => cappedForLargestBet(GAME_CONFIG, d.ladder),
+    MADE_CAPPED,
+  );
+  const { config, difficulty: played } = withDifficulty(
+    withCapped.config,
+    (d) => topRungOf(d.ladder, 500, GAME_CONFIG.limits.maxPayoutCents) >= 2,
+    MADE_LONG,
+  );
   const { minBetCents, maxBetCents, maxPayoutCents } = config.limits;
 
   it('checks out however the round ended: top rung, cash-out, pop, Patch save, 24-hour rule, refund', async () => {
@@ -108,17 +136,15 @@ describe.each([9400, 9700, 9900])('rounds the server played, checked as a player
 
     // Round 2: balloon 0 survives a pump, then a Patch saves it from a pop;
     // balloon 1 pops at once; balloon 2 is never pumped. Then 24 hours pass.
-    const easy = config.difficulties[0];
-    if (!easy) throw new Error('The config has no difficulties');
     await seat.setClientSeed(
       clientSeedWhere((clientSeed) => {
-        const round = foretold(1, easy.ladder, clientSeed);
+        const round = foretold(1, played.ladder, clientSeed);
         return (
           willSurvive(round, 0, 0, 1) && !willSurvive(round, 0, 1, 2) && !willSurvive(round, 1, 0, 1)
         );
       }),
     );
-    let second = (await seat.start(easy.id, [250, 250, 250])).body.round;
+    let second = (await seat.start(played.id, [250, 250, 250])).body.round;
     ({ round: second, outcome } = await pumpOnce(seat, second, 0));
     expect(outcome).toBe('survived');
     ({ round: second, outcome } = await pumpOnce(seat, second, 0, true));
@@ -129,9 +155,9 @@ describe.each([9400, 9700, 9900])('rounds the server played, checked as a player
 
     // Round 3: one pump, then the player cashes out.
     await seat.setClientSeed(
-      clientSeedWhere((clientSeed) => willSurvive(foretold(2, easy.ladder, clientSeed), 0, 0, 1)),
+      clientSeedWhere((clientSeed) => willSurvive(foretold(2, played.ladder, clientSeed), 0, 0, 1)),
     );
-    let third = (await seat.start(easy.id, [500])).body.round;
+    let third = (await seat.start(played.id, [500])).body.round;
     ({ round: third } = await pumpOnce(seat, third, 0));
     third = (await seat.cashOut(third, 0)).body.round;
     expect(third.status).toBe('finished');

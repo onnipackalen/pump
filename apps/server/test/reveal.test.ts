@@ -6,6 +6,7 @@ import type {
 } from '@pump/contract';
 import {
   GAME_CONFIG,
+  ladderProblems,
   LIMITS,
   surviveChance,
   type Difficulty,
@@ -375,10 +376,20 @@ describe.each(RTPS)('reveals at RTP %i', (rtpBp) => {
   it('uses the round’s own RTP, ladder and cap, even after a restart with new ones', async () => {
     const { world, seat, round, foretold } = await deal(survives(1), config);
     const pumped = ok(await seat.pump(round, 0)).round;
+    const rtpAfter = rtpBp === 9400 ? 9900 : 9400;
+    const limitsAfter: Limits = { ...LIMITS, maxPayoutCents: 9_000_000 };
     const changed: GameConfig = {
-      rtpBp: rtpBp === 9400 ? 9900 : 9400,
-      limits: { ...LIMITS, maxPayoutCents: 9_000_000 },
-      difficulties: [...GAME_CONFIG.difficulties, { ...TINY, ladder: [105, 130, 170] }],
+      rtpBp: rtpAfter,
+      limits: limitsAfter,
+      // The configured difficulties that can still start under the new RTP
+      // and the lower cap (a ladder whose top pays more than that cap at the
+      // smallest bet cannot), and Tiny with a new ladder.
+      difficulties: [
+        ...GAME_CONFIG.difficulties.filter(
+          (d) => ladderProblems(rtpAfter, d.ladder, limitsAfter).length === 0,
+        ),
+        { ...TINY, ladder: [105, 130, 170] },
+      ],
     };
     const restarted = seat.on(buildApp({ runtime: { ...world.runtime, config: changed } }));
 
