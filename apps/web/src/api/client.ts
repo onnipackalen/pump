@@ -4,6 +4,7 @@ import type {
   ApiErrorCode,
   CashOutBody,
   FairnessView,
+  HistoryResponse,
   PlayerSettings,
   PlayerStats,
   PublicWinsResponse,
@@ -30,7 +31,14 @@ export interface GameClient {
   readonly isDemo: boolean;
 
   getSession(): Promise<SessionView>;
+  /** The latest finished rounds, newest first: the game's own list. */
   getHistory(limit: number): Promise<readonly RoundSummary[]>;
+  /**
+   * One page of finished rounds, newest first. With `before`, the id of a
+   * round listed earlier, the page starts right after that round; `more`
+   * says whether older rounds remain.
+   */
+  getHistoryPage(limit: number, before: string | null): Promise<HistoryResponse>;
   /** The player's results over every finished round, for the stats page. */
   getStats(): Promise<PlayerStats>;
   startRound(request: StartRoundRequest, key: string): Promise<ActionResult>;

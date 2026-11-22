@@ -49,6 +49,7 @@ import type {
   BalloonView,
   CashOutBody,
   FairnessView,
+  HistoryResponse,
   PlayerSettings,
   PublicWin,
   PublicWinsResponse,
@@ -68,6 +69,12 @@ const STARTING_BALANCE_CENTS = 1_000_000;
 
 /** As on the server: each public list holds at most ten wins. */
 const PUBLIC_WINS_PER_LIST = 10;
+
+/** As on the server: one page of the history holds 1 to 50 rounds. */
+const HISTORY_MAX_LIMIT = 50;
+
+/** As on the server: a round id is 1 to 64 characters from A-Z, a-z, 0-9, _ and -. */
+const ROUND_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** A round as the demo "server" keeps it: the engine's round plus its seeds and actions. */
 interface DemoRound {
@@ -108,6 +115,21 @@ function fail(body: ApiErrorBody): never {
   throw new ApiFailure(body);
 }
 
+/**
+ * The history's order, the server's own: newest finish first, then newest
+ * start, then the highest id. Plain character order, as the database
+ * compares text, so rounds that finished in the same millisecond still keep
+ * one fixed order and paging never skips or repeats one.
+ */
+function historyOrder(a: DemoRound, b: DemoRound): number {
+  const later = (x: string, y: string): number => (x === y ? 0 : x > y ? -1 : 1);
+  return (
+    later(a.finishedAt ?? '', b.finishedAt ?? '') ||
+    later(a.startedAt, b.startedAt) ||
+    later(a.id, b.id)
+  );
+}
+
 export class DemoClient implements GameClient {
   readonly isDemo = true;
 
@@ -145,8 +167,35 @@ export class DemoClient implements GameClient {
   }
 
   async getHistory(limit: number): Promise<readonly RoundSummary[]> {
+    return (await this.getHistoryPage(limit, null)).rounds;
+  }
+
+  /**
+   * The history a page at a time, paged as the server pages it: the same
+   * order, the same limits, and `before` must be one of the finished rounds
+   * (the page then starts right after it).
+   */
+  async getHistoryPage(limit: number, before: string | null): Promise<HistoryResponse> {
     await sleep(this.latencyMs);
-    return this.finished.slice(0, limit).map((r) => this.summary(r));
+    if (!Number.isInteger(limit) || limit < 1 || limit > HISTORY_MAX_LIMIT) {
+      fail({ code: 'invalid_request', message: 'Ask for 1 to 50 rounds at a time.' });
+    }
+    if (before !== null && !ROUND_ID_PATTERN.test(before)) {
+      fail({ code: 'invalid_request', message: 'That is not a round id.' });
+    }
+    const listed = [...this.finished].sort(historyOrder);
+    let from = 0;
+    if (before !== null) {
+      const at = listed.findIndex((r) => r.id === before);
+      if (at < 0) {
+        fail({ code: 'not_found', message: 'There is no finished round of yours with that id.' });
+      }
+      from = at + 1;
+    }
+    return {
+      rounds: listed.slice(from, from + limit).map((r) => this.summary(r)),
+      more: listed.length > from + limit,
+    };
   }
 
   /**
