@@ -106,7 +106,12 @@ move the balloon up one rung.
    matches what the game showed.
 
 The verify page in the game does all of this in your browser, the reveal
-included, using the same code the server uses.
+included, using the same code the server uses. It takes the hash, client
+seed and nonce from the copy your browser saved when each round started, not
+from the server's record, and tells you if the record names other ones. On
+another device, or after you clear your browser's data, it has no copy. It
+then uses the server's record and says so, and it can't catch a server that
+changed those three. Check them against what you saw while playing.
 
 ## Worked example: a round with a Patch save
 

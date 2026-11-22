@@ -213,6 +213,21 @@ examples. `packages/engine/test/fair/reference/fair_reference.py` is a
 separate copy in Python, written from that page alone, and the engine tests
 must match its vectors.
 
+**What the verify page trusts.** When a round starts, the browser saves the
+server-seed hash, client seed and nonce it showed before the bet went out
+(`apps/web/src/verify/shownHashes.ts`). The verify page fills those three in
+from that copy, not from the server's record, and each field says where its
+value came from. If the record names another hash, client seed or nonce, the
+page says so in a plain line and the round does not check out, even when the
+record's own seeds add up. So a server that played a round with a client
+seed or nonce of its own choosing, and named it in the record, is caught. A
+round played on another device, or after this browser's data was cleared,
+has no copy: the page then uses the server's record and says plainly that
+the check can't catch a server that changed those values. Older saved
+rounds have only the hash, and the page says that too. The bets, steps, RTP,
+ladder and payout cap come from the server's record, and the page checks
+that every pump and payment follows from them.
+
 **After the round: where it would have popped.** Once a round is over, each
 balloon that was cashed out below its top rung shows where it would have
 popped. The server plays it on with plain pumps (no Patch), using the draws
