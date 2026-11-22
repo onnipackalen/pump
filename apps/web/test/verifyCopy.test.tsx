@@ -440,6 +440,15 @@ describe('the record is checked against this browser’s copy of the round asked
 });
 
 /**
+ * The start as a dishonest server treats it: it skips the check of the seeds
+ * the screen showed (expectedSeeds), so it can play on seeds of its own.
+ */
+const unchecked = (request: StartRoundRequest): StartRoundRequest => ({
+  difficultyId: request.difficultyId,
+  betsCents: request.betsCents,
+});
+
+/**
  * A server that plays the round on a client seed of its own, then loses
  * every answer to the start (both tries), so the browser never sees the
  * round's id from the start itself.
@@ -451,7 +460,7 @@ class RigsAndLosesStart extends DemoClient {
       this.rigged = true;
       await super.setClientSeed('server-picked', key());
     }
-    await super.startRound(request, k);
+    await super.startRound(unchecked(request), k);
     throw new NetworkFailure('The game server did not answer properly (502).');
   }
 }
@@ -493,7 +502,7 @@ class AnswersUnderAnotherId extends DemoClient {
 
   override async startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
     await super.setClientSeed('server-picked', key());
-    const answer = await super.startRound(request, k);
+    const answer = await super.startRound(unchecked(request), k);
     return { ...answer, round: { ...answer.round, id: this.idFor(answer.round.id), clientSeed: 'player-seed' } };
   }
 }

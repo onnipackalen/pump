@@ -100,11 +100,13 @@ class StartsThenSaysRoundActive extends DemoClient {
   }
 }
 
-/** Counts the starts sent, and the server never gets one it should not. */
+/** Counts the starts sent, and keeps what each one asked for. */
 class CountsStarts extends DemoClient {
   starts = 0;
+  readonly sent: StartRoundRequest[] = [];
   override startRound(request: StartRoundRequest, k: string): Promise<ActionResult> {
     this.starts += 1;
+    this.sent.push(request);
     return super.startRound(request, k);
   }
 }
@@ -141,6 +143,14 @@ describe('a round start saves what this browser showed before it', () => {
     expect(client.starts).toBe(2);
     expect((await client.getSession()).fairness.nextNonce).toBe(fairness.nextNonce + 1);
     expect(shownFor(result.round.id, storage)).toEqual(copyOf(fairness));
+  });
+
+  it('sends exactly the seeds it saves, as expectedSeeds, so the server can refuse other ones', async () => {
+    const { client, fairness } = await demo(new CountsStarts(GAME_CONFIG, 0));
+    const storage = memoryStorage();
+    const { round } = await startRoundShown(client, REQUEST, fairness, storage);
+    expect(client.sent).toEqual([{ ...REQUEST, expectedSeeds: copyOf(fairness) }]);
+    expect(shownFor(round.id, storage)).toEqual(client.sent[0]?.expectedSeeds);
   });
 
   it('saves no round copy for a start the server refuses', async () => {

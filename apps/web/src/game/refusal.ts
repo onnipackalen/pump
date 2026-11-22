@@ -1,6 +1,6 @@
 import { ApiFailure, NetworkFailure } from '../api/client';
-import type { RoundView } from '../api/contract';
-import { SeedsNotShown } from './session';
+import type { FairnessView, RoundView } from '../api/contract';
+import { SeedsNotShown, shownBefore } from './session';
 
 /**
  * What the screen does when an action fails. Plain functions, no React, so
@@ -21,9 +21,11 @@ export function describeFailure(error: unknown): string {
  *   cookie has gone, or the server's data was reset). Start again the way the
  *   first visit does.
  * - 'resync': the screen may be behind the server. The answer may have been
- *   lost on the way, a round the screen doesn't show is in the way, or the
- *   round the screen shows no longer exists, or the seeds on screen could
- *   not be bet on (SeedsNotShown). Ask for the whole state again.
+ *   lost on the way, a round the screen doesn't show is in the way, the
+ *   round the screen shows no longer exists, the seeds on screen could not
+ *   be bet on (SeedsNotShown), or they are no longer the player's seeds
+ *   (seeds_changed: a round played, or a seed changed, in another tab).
+ *   Ask for the whole state again.
  * - 'none': the refusal says all there is (a 409 with the round as it is now
  *   carries that round; too little money carries the balance).
  */
@@ -35,6 +37,7 @@ export function afterFailure(error: unknown): 'start-over' | 'resync' | 'none' {
       return 'start-over';
     case 'round_active':
     case 'not_found':
+    case 'seeds_changed':
       return 'resync';
     case 'conflict':
       return error.body.round ? 'none' : 'resync';
@@ -42,6 +45,27 @@ export function afterFailure(error: unknown): 'start-over' | 'resync' | 'none' {
       return 'none';
   }
 }
+
+/**
+ * The seeds a "seeds_changed" refusal carries: the player's seeds as they
+ * are now, for the Provably fair panel. Null for any other failure, or for
+ * seeds not in a form a round can be started on (the resync that follows
+ * loads them again).
+ */
+export function seedsInRefusal(error: unknown): FairnessView | null {
+  if (!(error instanceof ApiFailure) || error.code !== 'seeds_changed') return null;
+  const fairness = error.body.fairness;
+  return fairness !== undefined && shownBefore(fairness) !== null ? fairness : null;
+}
+
+/**
+ * Said when a round start is refused because the seeds on screen are no
+ * longer the player's seeds. The screen's own words, so they are the same
+ * with the real server and the in-browser demo.
+ */
+export const SEEDS_CHANGED_TEXT =
+  'No round was started: the seeds changed since this screen last showed them (in another ' +
+  'tab, say). Check Provably fair, then press Bet again.';
 
 /** The finished round a refusal carries, if it carries one. */
 export function finishedRefusal(error: unknown): RoundView | null {
@@ -88,14 +112,18 @@ export function closedForIdle(before: RoundView | null, after: RoundView, nowMs:
 
 /**
  * The notice for a failure. A refusal that carries a finished round is said
- * calmly, as information: the round is over, and here is how it ended. Every
- * other failure is an error, in the server's own words.
+ * calmly, as information: the round is over, and here is how it ended. A
+ * start refused because the seeds changed says so in this screen's words.
+ * Every other failure is an error, in the server's own words.
  */
 export function failureNotice(
   error: unknown,
   before: RoundView | null,
   nowMs: number,
 ): { readonly tone: 'info' | 'error'; readonly text: string } {
+  if (error instanceof ApiFailure && error.code === 'seeds_changed') {
+    return { tone: 'error', text: SEEDS_CHANGED_TEXT };
+  }
   const finished = finishedRefusal(error);
   if (finished) {
     return {

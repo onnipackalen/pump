@@ -25,6 +25,7 @@ import {
   failureNotice,
   finishedRefusal,
   LOST_SESSION_TEXT,
+  seedsInRefusal,
 } from './refusal';
 import { pressMs } from './risk';
 import { isOlder } from './roundOrder';
@@ -569,9 +570,18 @@ export function useGame(client: GameClient, listener?: GameListener): Game {
       }
       const then = afterFailure(error);
       const finished = finishedRefusal(error);
+      // A start refused because the seeds changed carries the seeds now:
+      // the panel shows them at once, and the next start reads them (the
+      // resync below loads everything else).
+      const seeds = seedsInRefusal(error);
+      if (seeds) shownFairness.current = seeds;
       const nowMs = Date.now();
       setState((s) => {
-        let next: GameState = { ...s, notice: failureNotice(error, s.round, nowMs) };
+        let next: GameState = {
+          ...s,
+          notice: failureNotice(error, s.round, nowMs),
+          ...(seeds ? { fairness: seeds } : {}),
+        };
         if (balloonIndex !== null) {
           next = {
             ...next,

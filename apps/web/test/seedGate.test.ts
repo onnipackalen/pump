@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { GAME_CONFIG } from '@pump/engine';
 import { describe, expect, it } from 'vitest';
+import { ApiFailure } from '../src/api/client';
 import type { FairnessView, RoundView, StartRoundRequest } from '../src/api/contract';
 import { DemoClient } from '../src/demo/DemoClient';
 import { SeedGate } from '../src/game/seedGate';
@@ -64,7 +65,7 @@ async function betDuringSeedChange(
   });
   // The seeds on screen are read when the start runs, as useGame reads its ref.
   const start = () => startRoundShown(client, REQUEST, onScreen, storage);
-  const started = wait ? await gate.start(start) : await start();
+  const started = await (wait ? gate.start(start) : start()).finally(() => changing);
   expect(await changing).toBe(true);
   if (started === null) throw new Error('the start should have gone');
   await finish(client, started.round);
@@ -74,9 +75,14 @@ async function betDuringSeedChange(
 }
 
 describe('a round start and a seed change are never on their way at once', () => {
-  it('without the gate, an honest round would be called a mismatch (the old fault)', async () => {
-    const problems = await betDuringSeedChange((c) => c.setClientSeed('new-seed', key()), false);
-    expect(problems.join(' ')).toContain('“new-seed”, but this browser saved “old-seed”');
+  it('without the gate, the server refuses the start (seeds_changed), so no round can fail the verify page', async () => {
+    // Before the start named the seeds it showed, this honest round was
+    // played on "new-seed" while this browser saved "old-seed".
+    const failure = await betDuringSeedChange((c) => c.setClientSeed('new-seed', key()), false).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(ApiFailure);
+    expect(failure instanceof ApiFailure && failure.code).toBe('seeds_changed');
   });
 
   it('a start pressed while a client seed save is on its way waits for it, and matches its record', async () => {

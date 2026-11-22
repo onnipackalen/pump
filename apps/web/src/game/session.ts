@@ -169,6 +169,13 @@ export function shownBefore(fairness: FairnessView | null): SeedsBeforeRound | n
  * remembered as on its way, and the next full load of the state gives the
  * round it started this copy (keepLostStartCopy).
  *
+ * The request carries those same three values (expectedSeeds). The server
+ * starts the round only if they are the player's seeds now, and otherwise
+ * refuses with "seeds_changed", changing nothing. So an honest server never
+ * plays a round on seeds other than the ones saved here: a panel left out
+ * of date in another tab gets a refusal, not a round that fails the verify
+ * page.
+ *
  * Throws SeedsNotShown, sending nothing, if the screen shows no valid seeds.
  */
 export async function startRoundShown(
@@ -179,8 +186,18 @@ export async function startRoundShown(
 ): Promise<ActionResult> {
   const shown = shownBefore(before);
   if (shown === null) throw new SeedsNotShown();
-  rememberStarting({ difficultyId: request.difficultyId, betsCents: request.betsCents, shown }, storage);
-  const result = await send((key) => client.startRound(request, key));
+  const { difficultyId, betsCents } = request;
+  rememberStarting({ difficultyId, betsCents, shown }, storage);
+  const sent: StartRoundRequest = {
+    difficultyId,
+    betsCents,
+    expectedSeeds: {
+      serverSeedHash: shown.serverSeedHash,
+      clientSeed: shown.clientSeed,
+      nonce: shown.nonce,
+    },
+  };
+  const result = await send((key) => client.startRound(sent, key));
   rememberShown(result.round.id, shown, storage);
   // A start went through, so no earlier start left a round in play.
   forgetStarting(storage);
