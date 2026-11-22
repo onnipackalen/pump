@@ -276,7 +276,17 @@ const EVERY_PATH: readonly string[] = [
  * no reveal.
  */
 function pathsOf(ladder: readonly number[]): readonly string[] {
-  if (ladder.length >= 2) return EVERY_PATH;
+  if (ladder.length >= 2) {
+    // A reveal gets to the top only if the top pump survives. The pop
+    // chance rises with every pump, so the last pump is the least likely to
+    // survive. If it survives less than once in a hundred, a reveal to the
+    // top may not show up even in MOST_ROUNDS_PER_CASE rounds, so it is not
+    // asked for. Every shipped ladder and the fixed one are far above that.
+    const last = ladder.at(-1) ?? 0;
+    const beforeLast = ladder.at(-2) ?? 0;
+    const rareTop = 100 * beforeLast < last;
+    return rareTop ? EVERY_PATH.filter((path) => path !== 'reveal top') : EVERY_PATH;
+  }
   const none = new Set([
     'survived',
     'saved',
