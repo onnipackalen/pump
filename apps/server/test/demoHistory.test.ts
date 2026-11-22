@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiFailure, type GameClient } from '../../web/src/api/client';
 import { HttpClient } from '../../web/src/api/httpClient';
 import { DemoClient } from '../../web/src/demo/DemoClient';
-import { testWorld } from './helpers';
+import { worldWithIds } from './idOrders';
 
 // The in-browser demo stands in for the server, so its history must page
 // exactly as the server's does: the same order (ties included), the same
@@ -115,7 +115,9 @@ interface Table {
 }
 
 async function server(): Promise<Table> {
-  const world = testWorld();
+  // Ids in no order, as real ones are (and as the demo's own are), so tied
+  // rounds are put in order by their start times, not by their ids.
+  const world = worldWithIds('in no order');
   const client = new HttpClient(serverFetch(world.app));
   await client.getSession();
   await client.setClientSeed('test-seed', key());

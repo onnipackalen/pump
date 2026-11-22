@@ -5,6 +5,7 @@ import type { Db } from '../src/db/database';
 import { text } from '../src/db/rows';
 import { HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT } from '../src/settings';
 import { testWorld, type TestWorld } from './helpers';
+import { ID_ORDERS, worldWithIds } from './idOrders';
 import { Seat } from './play';
 
 // GET /api/history a page at a time: `before` is the id of one of the
@@ -104,8 +105,11 @@ async function walk(seat: Seat, limit: number): Promise<HistoryResponse[]> {
 }
 
 describe('GET /api/history, a page at a time', () => {
-  it('walks through 125 rounds, many finished in the same millisecond, each once and in order', async () => {
-    const world = testWorld();
+  // Run with ids in three orders: see idOrders.ts. With ids that count up,
+  // the id alone would put tied rounds in start order, so only the other two
+  // show that the start time is really used to place a page.
+  it.each(ID_ORDERS)('walks through 125 rounds, many finished in the same millisecond, each once and in order (ids %s)', async (idOrder) => {
+    const world = worldWithIds(idOrder);
     const seat = await Seat.join(world.app);
     const played = await playMany(seat, world, 125);
     const playerId = playerOf(world.db, played[0] ?? '');
@@ -125,6 +129,13 @@ describe('GET /api/history, a page at a time', () => {
         stored.some((y) => x.id !== y.id && x.finishedAt === y.finishedAt && x.startedAt === y.startedAt),
       ),
     ).toBe(true);
+    // Unless the ids count up, some tied rounds have their ids the other way
+    // round from their start times: there, only the start time puts them in
+    // the right order.
+    const idAgainstStart = stored.some((x) =>
+      stored.some((y) => x.finishedAt === y.finishedAt && x.startedAt > y.startedAt && x.id < y.id),
+    );
+    expect(idAgainstStart).toBe(idOrder !== 'counting up');
 
     // Page sizes that cut the ties in every place they can.
     for (const limit of [1, 2, 3, 7, 10, HISTORY_MAX_LIMIT]) {
