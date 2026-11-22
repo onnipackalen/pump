@@ -5,7 +5,9 @@ import { useEffect, useState } from 'react';
  *
  * There the page rests in three places: sheet down (the top of the page),
  * sheet up (the sheet's bottom at the screen's bottom) and the end of the
- * wins table. Scroll snapping alone cannot keep a quick flick from flying
+ * wins table. (With the live stats open there is a fourth, just above them
+ * at the sheet's end; stats/live-stats.css. It is not the top, so it counts
+ * like sheet up here.) Scroll snapping alone cannot keep a quick flick from flying
  * past the middle one: measured in Chrome, a flick up from sheet down went
  * on to the wins every time, scroll-snap-stop or not, because the whole
  * app is itself a snap area and its end is the wins' end.
@@ -38,8 +40,8 @@ export interface PageAtRest {
 
 /**
  * Whether the wins may be on the page, decided once it is at rest. Yes when
- * it rests anywhere but the top (with the wins hidden the only other resting
- * place is sheet up), or when the whole sheet already fits on the screen
+ * it rests anywhere but the top (with the wins hidden the other resting
+ * places are sheet up, and the place above open live stats), or when the whole sheet already fits on the screen
  * (a tall tablet, where sheet down and sheet up are the same place).
  */
 export function winsMayJoin({ scrollTop, sheetBottom, screenHeight }: PageAtRest): boolean {

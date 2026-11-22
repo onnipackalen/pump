@@ -3254,9 +3254,21 @@ What turned out wrong, and how it was caught:
   could have thrown the sheet back down (same quirk as the round's end);
   the button never collapsed anything on a phone yet said "expanded", with
   focus left in the top bar; and three comments plus PLAYTEST.md still
-  described the old strip. All fixed as above.
+  described the old strip. Fixed as above, except "expanded": it stays,
+  on purpose, as the panel really is open and on the page; focus now goes
+  into the panel, so a screen reader hears where the button went.
+- A second review of those fixes found no new problem in how they work,
+  only: comments in styles.css, sheetFirst.ts and public-wins.css still
+  spoke of two resting places; no test called the slide itself; this
+  entry claimed "expanded" was fixed; and two slides at once (a second
+  click mid-slide) shared one flag, so the first could switch snapping
+  back on during the second. Fixed: the comments, one slide at a time
+  (a new one ends the old), and tests that run the slide against a
+  stand-in page (`test/slideSheet.test.ts`: the flag always comes off, on
+  arrival, when the page stops short, at the time limit, on a touch, and
+  with two presses) and check the button's titles on a phone.
 
-Checked: 1,933 tests, typecheck, lint, build. In the Mac's WebKit at 320x568,
+Checked: 1,939 tests, typecheck, lint, build. In the Mac's WebKit at 320x568,
 375x667, 360x740, 414x736, 411x731, 390x844, 430x932 and 768x1024: Bet's box
 is the same with the panel open or closed and after a round, Pump sits in
 it, the button is greyed out in a round and a tap there does nothing, the

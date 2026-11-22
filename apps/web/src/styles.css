@@ -256,7 +256,9 @@ body {
  *   top bar, so the page's scroll moves only the panel, over it. The page
  *   comes to rest in one of two places, sheet down or sheet up. (Under
  *   the sheet are the public wins; their table's end is a third place, one
- *   more swipe up. The two sheet places stay where they were.)
+ *   more swipe up. The two sheet places stay where they were. With the
+ *   live stats open, the sheet's last part, there is one more place just
+ *   above them: stats/live-stats.css.)
  * - The top bar stays at the top the whole time, so the balance and the
  *   settings button are always there.
  * - The page never scrolls sideways: the app is clipped at its sides.
@@ -278,7 +280,8 @@ body {
     height: auto;
     overflow-x: hidden;
     overflow-y: auto;
-    /* Sheet down (the top of the page) or sheet up (its end), nothing between. */
+    /* Sheet down (the top of the page) or sheet up (its end); see above for
+       the wins' end and the place above open live stats. */
     scroll-snap-type: y mandatory;
   }
   /*

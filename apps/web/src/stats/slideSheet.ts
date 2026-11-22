@@ -33,26 +33,37 @@ export function slideOver(at: number, target: number, stillFrames: number, elaps
   return Math.abs(at - target) <= 1 || stillFrames >= 6 || elapsedMs >= SLIDE_MAX_MS;
 }
 
+/** Ends the slide in progress, if any: one slide at a time owns the flag. */
+let endCurrent: (() => void) | null = null;
+
 /** Slides the page so `sheet`'s bottom edge meets the screen's bottom. */
 export function slideSheetUp(sheet: Element, smooth: boolean): void {
+  // A second press mid-slide (a mouse or keyboard has no touch to end the
+  // first) starts again from here, so two slides never share the flag.
+  endCurrent?.();
   const root = document.documentElement;
   const scroller = document.scrollingElement ?? root;
   const target = sheetUpTop(sheet.getBoundingClientRect().bottom, scroller.scrollTop, window.innerHeight);
   const started = performance.now();
   let last = scroller.scrollTop;
   let still = 0;
+  let over = false;
 
   const finish = (): void => {
+    if (over) return;
+    over = true;
     delete root.dataset.sheetSlide;
     window.removeEventListener('touchstart', finish);
+    if (endCurrent === finish) endCurrent = null;
   };
+  endCurrent = finish;
   // A finger on the screen takes over: snapping comes back at once.
   window.addEventListener('touchstart', finish, { passive: true });
   root.dataset.sheetSlide = '';
   window.scrollTo({ top: target, behavior: smooth ? 'smooth' : 'auto' });
 
   const watch = (): void => {
-    if (root.dataset.sheetSlide === undefined) return;
+    if (over) return;
     const at = scroller.scrollTop;
     still = Math.abs(at - last) < 0.5 ? still + 1 : 0;
     last = at;

@@ -123,7 +123,7 @@ describe('LiveStatsOpener', () => {
   });
 
   it('says it is waiting, and never claims to be open, while play holds the panel back', () => {
-    // Open before the round: on an upright screen the strip waits for it to end.
+    // Open before the round: on an upright screen the panel waits for it to end.
     const round = renderToStaticMarkup(
       <LiveStatsOpener live={control(NO_LIVE_STATS, true, 'round')} />,
     );
@@ -137,6 +137,25 @@ describe('LiveStatsOpener', () => {
     );
     expect(auto).toContain('title="Live stats after auto-play"');
     expect(auto).toContain('aria-disabled="true"');
+  });
+});
+
+describe('LiveStatsOpener on an upright screen', () => {
+  it('says it shows the panel once it is open, as a tap there shows rather than closes', () => {
+    const open = renderToStaticMarkup(
+      <LiveStatsOpener live={{ ...control(NO_LIVE_STATS, true), upright: true }} />,
+    );
+    expect(open).toContain('title="Show live stats"');
+    // Still true: the panel is open and on the page, at the bottom of the sheet.
+    expect(open).toContain('aria-expanded="true"');
+    const closed = renderToStaticMarkup(
+      <LiveStatsOpener live={{ ...control(NO_LIVE_STATS, false), upright: true }} />,
+    );
+    expect(closed).toContain('title="Live stats"');
+    const held = renderToStaticMarkup(
+      <LiveStatsOpener live={{ ...control(NO_LIVE_STATS, true, 'round'), upright: true }} />,
+    );
+    expect(held).toContain('title="Live stats after this round"');
   });
 });
 

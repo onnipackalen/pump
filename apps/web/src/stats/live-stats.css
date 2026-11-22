@@ -15,8 +15,9 @@
  *   bet control and Manual | Auto. With the sheet down it is out of sight
  *   and Bet stays exactly where Pump was (the user: "pump and bet have to be
  *   in same spot"); a tap on the chart button opens it and slides the sheet
- *   up to it (useLiveStats: tapOpener), and the sheet keeps its two resting
- *   places (down at the top of the page, up at its end; styles.css). During
+ *   up to it (useLiveStats: tapOpener, stats/slideSheet.ts). The sheet keeps
+ *   its resting places (down at the top of the page, up at its end;
+ *   styles.css) and gains one just above the panel (below). During
  *   a round or auto-play the round panel takes the sheet's place, so the
  *   panel waits until play stops (useLiveStats leaves it out, and the button
  *   is greyed out and says it is waiting).
@@ -249,7 +250,8 @@
   }
   /*
    * A third resting place, at the end of what comes just before the panel:
-   * where "sheet up" was without it. The sheet rests only in set places, so
+   * where "sheet up" was without it, less the sheet's bottom padding. The
+   * sheet rests only in set places, so
    * a sheet taller than the screen shows a band at neither of two: with the
    * panel open, three bets on the Auto tab hid the auto-play stop limits on
    * phones 721-763px tall. With this place in between, every part of the
