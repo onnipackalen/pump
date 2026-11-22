@@ -291,6 +291,8 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
   After that, every round played with it can be checked.
 - The nonce belongs to the server seed and goes up by one each round.
   Changing the client seed never resets it, so a round can't be replayed.
+- The verify page lists every finished round with its id: the newest ten,
+  then older ones a page at a time with **Older rounds**.
 - [docs/fairness.md](docs/fairness.md) is the recipe for players, with
   worked examples.
 - `packages/engine/test/fair/reference/fair_reference.py` is a separate
@@ -450,7 +452,7 @@ All JSON. The exact shapes are TypeScript types in `packages/contract`.
 | --- | --- |
 | `GET /api/health` | Answers `{ "status": "ok" }`. Render calls it to see the server is up. |
 | `GET /api/session` | Wallet, seeds and the round in progress, so a page refresh restores it. A first visit creates the player with $10,000 and sets the cookie. It is the only request that creates a player, so the screen loads it first. |
-| `GET /api/history?limit=10` | The player's latest finished rounds. |
+| `GET /api/history?limit=10&before=<id>` | The player's finished rounds, newest first, a page at a time (`limit` 1 to 50, default 10). `before` is the id of one of their finished rounds: the page starts right after it, and `more` says if older rounds remain. Rounds that finished in the same millisecond keep one order, so each round is on exactly one page. Any other `before` (another player's round, a round in play, no round) gets 404 `not_found`. |
 | `GET /api/stats` | The player's results over every finished round: profit over time, best win, rounds by difficulty. |
 | `GET /api/settings` | The player's own choices: `{ winsPrivate }`. |
 | `PUT /api/settings` | Changes them. `{ winsPrivate: true }` takes all of the player's wins, past ones too, out of the public lists at once. |
