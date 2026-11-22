@@ -59,7 +59,7 @@
   ],
 
   "proof": [
-    "Patch price needs BigInt: the numerator can exceed 2^53 (for example 2.4e17 for a 100000c bet going from 59x to 100x). Never compute it as a float ceil(p * B * m / R); that overcharges by a cent in thousands of bet/rung cases.",
+    "Patch price needs BigInt: the numerator betCents * L[k] * (L[k+1] - L[k]) * 100 can exceed 2^53 (about 9.007e15). For example 2000 * 125000 * 375000 * 100 = 9.375e15 for a 2000c bet going from 1250x to 5000x on the expert test ladder below. Never compute it as a float ceil(p * B * m / R); that overcharges by a cent in thousands of bet/rung cases.",
     "Assert 'Patch never over RTP' against the exact, unrounded value of the saved balloon (popChance * bet * multiplier), not its floored cash-out: pumping on can be worth more than the floored cash-out.",
     "Scan every legal bet (10 to 100000 cents) on every rung and report the worst cash-out RTP and worst Patch RTP with the bet where each occurs. Small bets fall well under RTP from cent rounding; that is allowed and must be shown, not hidden. Do not gate Patches by bet size.",
     "The worst cases for the ladders in use are printed by `npm run rtp`, not copied here. They sit at the smallest bets, where one cent is a large share of the amount.",
