@@ -7,8 +7,10 @@
  *       fresh database file), hammers it over real HTTP, and stops it.
  *
  *   npm run hammer -- --url=http://localhost:3000 --db=data/pump.db
- *       Hammers a server you already have running. --db is that server's
- *       SQLite file, which is opened read-only for the final check.
+ *       Hammers a server you already have running. --db must come with
+ *       --url: it is that server's SQLite file (its DATABASE_PATH), opened
+ *       read-only for the final check. Through npm, a relative path starts
+ *       in apps/server, where data/pump.db is the server's own default.
  *
  *   --players=20 --rounds=8     how hard to hit it (these are the defaults)
  *
@@ -32,23 +34,27 @@
  * Every round in every answer is also checked: no balloon shows a reveal
  * ("where it would have popped") while its round is still in progress.
  *
- * Then it reads the database and runs the full reconcile: every balance
- * equals the sum of its ledger rows, the ledger chain is unbroken, every
- * balloon was charged and paid exactly what its round says, and every
- * finished round holds exactly the reveals it should.
+ * Then it reads the database. First it makes sure the file is the one the
+ * server uses: each player of this run has a client seed no other run uses
+ * (see RUN_TAG), and the file must hold exactly those players. Only then
+ * does it run the full reconcile: every balance equals the sum of its
+ * ledger rows, the ledger chain is unbroken, every balloon was charged and
+ * paid exactly what its round says, and every finished round holds exactly
+ * the reveals it should.
  *
  * It exits with an error if anything is wrong.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve as fullPath } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { GAME_CONFIG } from '@pump/engine';
 import { z } from 'zod';
-import { int } from '../src/db/rows';
-import { reconcile } from '../src/services/reconcile';
+import { int, text } from '../src/db/rows';
+import { reconcile, type ReconcileReport } from '../src/services/reconcile';
 
 // The parts of the server's answers this script reads. Every answer is
 // checked against these, so a malformed answer fails the run.
@@ -133,11 +139,27 @@ function checkOptions(): void {
       '--db is the database of the server given by --url. Without --url the hammer starts its own server on a fresh database.',
     );
   }
+  // Without it the final check would read some other file and could pass
+  // about a database this run never touched.
+  if (option('url') !== undefined && option('db') === undefined) {
+    throw new Error(
+      '--url needs --db: the SQLite file that server was started with (its DATABASE_PATH), which the final check reads. ' +
+        'Like this: npm run hammer -- --url=http://localhost:3000 --db=data/pump.db',
+    );
+  }
 }
 
 checkOptions();
 const PLAYERS = wholeOption('players', 20);
 const ROUNDS = wholeOption('rounds', 8);
+
+/**
+ * This run's mark, random so that no other run has it. Each player's client
+ * seed is this mark and the player's number, so the final check can find
+ * exactly this run's players in the database. (A client seed is 1 to 64
+ * characters from A-Z, a-z, 0-9, _ and -. These are at most 40 long.)
+ */
+const RUN_TAG = `hammer-${String(process.pid)}-${randomBytes(4).toString('hex')}`;
 
 /** Balloons in each player's storm round: the most a round may have. */
 const STORM_BALLOONS = GAME_CONFIG.limits.maxBalloons;
@@ -262,6 +284,8 @@ const BETS = [10, 11, 99, 100, 250, 1234, 5000, 100_000] as const;
 
 class Player {
   cookie = '';
+  /** Unique to this run (see RUN_TAG), so the final check can find this player. */
+  readonly clientSeed: string;
   /**
    * The balance the server last reported, in cents. Bets are picked so that
    * it covers them. In the storm a player's balloons are played at the same
@@ -275,6 +299,7 @@ class Player {
 
   constructor(readonly number: number) {
     this.pick = generator(1000 + number);
+    this.clientSeed = `${RUN_TAG}-${String(number)}`;
   }
 
   /** Keeps the balance a successful answer carries. */
@@ -293,7 +318,16 @@ class Player {
     }
     this.cookie = token;
     this.noteBalance(first);
-    await send(this.cookie, 'PUT', '/api/fairness/client-seed', { clientSeed: `hammer-${String(this.number)}` }, newKey());
+    const seeded = await send(
+      this.cookie,
+      'PUT',
+      '/api/fairness/client-seed',
+      { clientSeed: this.clientSeed },
+      newKey(),
+    );
+    if (seeded.status !== 200) {
+      fail(`player ${String(this.number)} could not set a client seed (${String(seeded.status)})`);
+    }
   }
 
   private pump(round: RoundView, balloonIndex: number, drawIndex: number, patch: boolean, key: string) {
@@ -615,7 +649,10 @@ interface Target {
 async function target(): Promise<Target> {
   const url = option('url');
   if (url !== undefined) {
-    return { url: url.replace(/\/$/, ''), databasePath: option('db') ?? 'data/pump.db', child: null };
+    // checkOptions has made sure --db came with it.
+    const databasePath = option('db');
+    if (databasePath === undefined) throw new Error('--url needs --db');
+    return { url: url.replace(/\/$/, ''), databasePath: fullPath(databasePath), child: null };
   }
   const port = await freePort();
   const databasePath = join(mkdtempSync(join(tmpdir(), 'pump-hammer-')), 'hammer.db');
@@ -624,6 +661,81 @@ async function target(): Promise<Target> {
     stdio: 'ignore',
   });
   return { url: `http://127.0.0.1:${String(port)}`, databasePath, child };
+}
+
+// --- the final check ------------------------------------------------------
+
+/** What the final check read from the database, or why it read nothing. */
+type Books =
+  | { readonly ok: false; readonly why: string }
+  | {
+      readonly ok: true;
+      readonly report: ReconcileReport;
+      /** Every stored balance added up, in cents. */
+      readonly storedTotal: number;
+      /** Players whose stored balance is below zero. */
+      readonly negative: number;
+    };
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/**
+ * Why the database is not the one the server under test uses, or null if
+ * it is. It must hold each of this run's players exactly once, found by
+ * their client seeds (see RUN_TAG), and no other player with this run's tag.
+ */
+function notThisRun(db: DatabaseSync, path: string, players: readonly Player[]): string | null {
+  const prefix = `${RUN_TAG}-`;
+  let seeds: string[];
+  try {
+    seeds = db
+      .prepare('SELECT client_seed FROM players WHERE substr(client_seed, 1, :length) = :prefix')
+      .all({ length: prefix.length, prefix })
+      .map((row) => text(row, 'client_seed'));
+  } catch (error) {
+    return `Could not read the players in ${path}: ${messageOf(error)}.`;
+  }
+  const ours = new Set(players.map((player) => player.clientSeed));
+  const found = new Set(seeds.filter((seed) => ours.has(seed)));
+  if (found.size === ours.size && seeds.length === ours.size) return null;
+  if (found.size === 0) {
+    return `${path} holds none of this run's ${String(ours.size)} players, so it is not the database of the server that was hammered.`;
+  }
+  return (
+    `${path} should hold each of this run's ${String(ours.size)} players once, ` +
+    `but holds ${String(found.size)} of them in ${String(seeds.length)} rows.`
+  );
+}
+
+/**
+ * Reads the books from the database file, read-only. First it makes sure
+ * the file is the one the server under test uses (notThisRun). Another
+ * server's database, or an older one, says nothing about this run, so then
+ * nothing more is read.
+ */
+function readBooks(path: string, players: readonly Player[]): Books {
+  let db: DatabaseSync;
+  try {
+    db = new DatabaseSync(path, { readOnly: true });
+  } catch (error) {
+    return { ok: false, why: `Could not open the database ${path}: ${messageOf(error)}.` };
+  }
+  try {
+    const why = notThisRun(db, path, players);
+    if (why !== null) return { ok: false, why };
+    const report = reconcile(db);
+    // COALESCE: a sum over no rows is NULL, not 0.
+    const total = db.prepare('SELECT COALESCE(SUM(balance_cents), 0) AS total FROM players').get();
+    const negative = db.prepare('SELECT COUNT(*) AS n FROM players WHERE balance_cents < 0').get();
+    return {
+      ok: true,
+      report,
+      storedTotal: total ? int(total, 'total') : -1,
+      negative: negative ? int(negative, 'n') : -1,
+    };
+  } finally {
+    db.close();
+  }
 }
 
 // --- run ------------------------------------------------------------------
@@ -688,15 +800,10 @@ async function run(): Promise<number> {
     );
   }
 
-  // The final check reads the server's own database file, read-only.
-  const db = new DatabaseSync(server.databasePath, { readOnly: true });
-  const report = reconcile(db);
-  const storedBalances = db.prepare('SELECT SUM(balance_cents) AS total FROM players').get();
-  const negative = db.prepare('SELECT COUNT(*) AS n FROM players WHERE balance_cents < 0').get();
-  db.close();
-
+  // The final check reads the server's own database file, read-only, once
+  // it is sure the file is that server's (see readBooks).
+  const books = readBooks(server.databasePath, players);
   const seenTotal = balances.reduce<number>((sum, balance) => sum + (balance ?? 0), 0);
-  const storedTotal = storedBalances ? int(storedBalances, 'total') : -1;
   const before = failures.length;
 
   console.log('');
@@ -734,25 +841,41 @@ async function run(): Promise<number> {
     !failures.some((f) => f.includes('reveal was shown')),
     `${checks.rounds.toLocaleString('en-US')} rounds seen, ${revealsSeen.size.toLocaleString('en-US')} reveals on finished ones`,
   );
-  line('No balance is below zero', negative !== undefined && int(negative, 'n') === 0, '');
   line(
-    'Balances the players see equal the stored balances',
-    !server.child || seenTotal === storedTotal,
-    server.child ? `$${(storedTotal / 100).toLocaleString('en-US')} in total` : 'skipped: other players exist',
+    "The database holds exactly this run's players",
+    books.ok,
+    books.ok ? `${String(PLAYERS)} found by client seed` : 'so its books were not checked',
   );
-  line(
-    'The ledger reconciles',
-    report.problems.length === 0,
-    `${String(report.players)} players, ${report.ledgerRows.toLocaleString('en-US')} ledger rows, ` +
-      `${report.rounds.toLocaleString('en-US')} rounds`,
-  );
+  if (books.ok) {
+    line('No balance is below zero', books.negative === 0, '');
+    line(
+      'Balances the players see equal the stored balances',
+      !server.child || seenTotal === books.storedTotal,
+      server.child
+        ? `$${(books.storedTotal / 100).toLocaleString('en-US')} in total`
+        : 'skipped: other players exist',
+    );
+    line(
+      'The ledger reconciles',
+      books.report.problems.length === 0,
+      `${String(books.report.players)} players, ${books.report.ledgerRows.toLocaleString('en-US')} ledger rows, ` +
+        `${books.report.rounds.toLocaleString('en-US')} rounds`,
+    );
+  }
 
   const problems = [
+    // First, as nothing about the books can be said without it.
+    ...(books.ok
+      ? []
+      : [
+          books.why +
+            (server.child ? '' : ' Is --db the file that server was started with (its DATABASE_PATH)?'),
+        ]),
     ...failures,
-    ...report.problems,
+    ...(books.ok ? books.report.problems : []),
     ...(stormPeak >= 1000 ? [] : ['fewer than 1,000 requests were in flight at the same moment']),
-    ...(server.child && seenTotal !== storedTotal
-      ? [`players see ${String(seenTotal)} cents in total but the database holds ${String(storedTotal)}`]
+    ...(books.ok && server.child && seenTotal !== books.storedTotal
+      ? [`players see ${String(seenTotal)} cents in total but the database holds ${String(books.storedTotal)}`]
       : []),
   ];
   if (problems.length > 0) {

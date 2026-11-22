@@ -451,6 +451,11 @@ To try another RTP, change `RTP_BP` in `config.ts`, then run `npm test`,
 - Then it opens the database and reconciles it.
 - To aim it at a server you already run:
   `npm run hammer -- --url=http://localhost:3000 --db=data/pump.db`.
+  `--db` must come with `--url`: it is the file that server was started
+  with (a relative path starts in `apps/server`, where `data/pump.db` is
+  the server's default). Each run's players get client seeds no other run
+  has, and the check fails unless exactly those players are in that file,
+  so it can't pass about another server's database.
 
 ## The API
 
