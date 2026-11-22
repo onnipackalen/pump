@@ -55,7 +55,7 @@ deploy the same service again.
   `PUBLIC_WINS`, change it in `render.yaml`, push, sync the Blueprint on
   Render, then read the log: for public wins, the `public wins:` line.
 - Public wins are on: `render.yaml` sets `PUBLIC_WINS` to `"on"`, and the
-  Blueprint was synced on 2026-11-22.
+  Blueprint was synced on 2026-11-21.
 
 ## Where the wallets are
 
