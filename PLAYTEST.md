@@ -4,12 +4,9 @@
   again while ours was built, not only in the session below. I judged them
   critically: what they do well came over into ours, and I looked at their
   flaws to make sure ours didn't copy them.
-- **Some of their flaws:**
-  - SmartSoft's Balloon: to me its graphics were a bit over the top, and I
-    didn't like the colours. I felt this game needed calm, simple graphics,
-    more like Stake's.
-  - Stake marks the level with red dots on the pump. I didn't want red
-    dots, so ours shows a small colour instead.
+- **They weren't perfect.** For example, I found SmartSoft's Balloon's
+  graphics a bit over the top, and I didn't like its colours. I felt this
+  game needed calm, simple graphics, more like Stake's.
 - **The sit-down session:** Friday evening, 20 November, about 40 minutes
   in all.
 - **What:** Stake's Pump first, then two similar games: SmartSoft's
@@ -79,54 +76,6 @@ InOut: Chicken Road
    switch.
 
 I didn't copy Stake's look. I kept ours.
-
-## What I found playing ours
-
-Bugs:
-
-- Pump, Patch and Cash out were too easy to mix up, so Patch got its own
-  clear button.
-- On a phone you couldn't start a new round after one ended: the bet panel
-  popped up and squeezed the balloon. Now you scroll down to bet, and on an
-  upright phone the bet panel is a sheet you swipe up.
-- With three balloons, the last one's Pump button disappeared once the
-  other two had popped. Now each balloon keeps its own Pump.
-- Changing the number of balloons or the difficulty didn't show until the
-  next round. Now the screen changes at once and slides into place.
-- Auto-play's target was fiddly to change, so it got − and + buttons.
-
-Other changes I asked for:
-
-- **Less on the screen.** The first screen had hint sentences, a stats grid
-  under every balloon and side panels. I showed the chat Stake's screen and
-  asked for almost no sentences, big numbers, and settings always one tap
-  away.
-- **Ladders tuned for fun.** I asked whether the ladders were tuned for
-  enjoyment. They weren't: Easy popped 9% to 17% of the time on every pump
-  after the first, there were no round rungs like 2x, 5x or 10x, and a
-  $1,000 bet topped out at $62,000 on Hard. They were redesigned with round
-  rungs, and a rung at exactly 100x so the top bet can win the full cap.
-- **Only signs real games use.** Several made-up graphics were taken out:
-  a seal on top, a grid of dots for the odds, a ghost outline after a pop,
-  a cash-out tick and a tape sticker for the Patch. The Patch shows in
-  words instead.
-- **Bet at the top.** I had the bet panel's order reversed, so Bet comes
-  first.
-- **Phone and computer don't look the same.** The swipe-up sheet is for
-  phones only. A computer keeps the panel as a card beside the game.
-- **No snapping back.** After a round, the old pump was swapped for a fresh
-  one in a single frame. Now the new pump sets itself up with a short
-  animation.
-- **The air going up the hose.** I asked for the hose itself to swell as
-  the air goes up, not a dot on top of it. I spotted the first version
-  sticking out of the hose at the bend, picked the size of the swell, and
-  had the flashing removed while it waits.
-- **Tension on every level.** The balloon's strain now follows each
-  ladder's own range of pop chances, so Easy builds up too, not just
-  Expert.
-- **Three balloons on a phone.** This was the hardest fit. With two or three
-  balloons, each Pump button shows a small "next 1.23×" instead of a full
-  row of steps.
 
 ## Still to improve
 

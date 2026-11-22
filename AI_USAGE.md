@@ -14,18 +14,7 @@
   loud, and the AI turned what I said into clear writing, tidied it up and
   filled in the technical detail from the code. I read every draft and
   corrected it.
-- I made the design calls:
-  - the four ladders. I kept the long, gentle Easy over a shorter one the
-    AI designed.
-  - rounding (see below).
-  - no limit on Patch prices. The AI suggested a $1,000 cap. I said no,
-    because every Patch already returns the RTP and its price is on the
-    button before you buy.
-  - the after-round reveal, the start animation, the phone layout and
-    auto-bet.
-  - the night backgrounds in Settings: which scenes, all at night with
-    stars, and Dusk kept as the default. The AI drew them; I judged a
-    demo before they went in.
+- I made the design calls.
 - I had the game plan, and I oversaw the whole build. I looked over
   everything as it came in, made sure it was right, and made sure the
   pieces fitted together and the game flowed well.
@@ -33,29 +22,6 @@
   break the math, the wallet and the fairness code. Most pieces went
   through one of them before going into `main`. Before I submitted, one
   last chat checked everything against the brief.
-- I played Stake's Pump and two similar games, then ours, and sent back
-  what was wrong (see PLAYTEST.md).
-
-## Rounding: where I overruled the AI
-
-- The AI proposed random rounding: round each amount up or down at random,
-  so the average comes out exactly at the RTP. It designed it and had it
-  checked by three review chats.
-- I turned it down and kept floor for payouts and ceiling for Patch prices
-  (commit 8bdb2db):
-  - The brief says rounding may push the RTP just under, never over. Floor
-    and ceiling make sure of that on every single payment. Random rounding
-    only gets it right on average, and some payments come out above their
-    exact value.
-  - Random rounding needs a second random draw just for money, and players
-    would have to check that too. The fairness code, the player guide and
-    its test vectors all assume one draw per pump.
-- For a short while the chats were split. In the math chat I said yes to
-  it, and that chat started building it. When the two answers were put
-  side by side, I kept floor and ceiling, the same day, before any of it
-  was committed.
-- The cost: tiny bets get back a little less than 97%. `npm run rtp`
-  prints the worst cases instead of hiding them.
 
 ## Where the AI was wrong
 
@@ -90,7 +56,7 @@ What I caught:
   made-up signs no real game uses (a seal on top, a grid of dots, a ghost
   outline after a pop, a tape sticker for the Patch), hint sentences all
   over the screen, and a hose swell that stuck out at the bend. I had each
-  one taken out or fixed. PLAYTEST.md has the full list.
+  one taken out or fixed.
 - **Two chats built the game engine at once**, in the first hour. I
   stopped them and gave each part one owner. Two engines could disagree
   on whether a pump pops, and then the verify page would not match the

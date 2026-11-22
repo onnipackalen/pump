@@ -2,13 +2,13 @@
 
 Requirements live in docs/brief.pdf (not committed). This file records decisions already made. If you think one is wrong, stop and say so rather than working around it.
 
-## What reviewers weigh, in order
+## Priorities, in order
 1. The math is exactly right and provable.
 2. The wallet can never double-pay or drift from its ledger.
 3. Players can verify every round.
-4. Structure: a pure engine with a service layer around it. They read the engine first.
+4. Structure: a pure engine with a service layer around it.
 5. Feel, after correctness.
-They will change RTP to 94% and 99% and rerun everything, then send bugs for a 48-hour fix round. Nothing may hard-code 97.
+Everything must still pass with the RTP changed to 94% or 99%. Nothing may hard-code 97.
 
 ## Math (locked)
 - R is the RTP, one integer config value in basis points (RTP_BP = 9700). Everything derives from it.
